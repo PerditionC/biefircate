@@ -1,5 +1,8 @@
+ifeq "" "$(wildcard config.cache)"
+$(error you must configure this project first!)
+endif
+
 -include config.cache
-conf_Lolwutconf_dir ?= lolwutconf
 -include $(conf_Lolwutconf_dir)/lolwutconf.mk
 
 CFLAGS = -Os -Wall -mno-red-zone -fno-stack-protector -fshort-wchar
