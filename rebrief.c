@@ -3,6 +3,7 @@
 #include <efi.h>
 #include <efilib.h>
 
+extern EFI_HANDLE LibImageHandle;
 extern EFI_GUID gEfiLoadedImageProtocolGuid, LegacyBootProtocol;
 
 static void wait_and_exit(EFI_STATUS status)
@@ -18,17 +19,45 @@ static void error_with_status(IN CONST CHAR16 *msg, EFI_STATUS status)
 	wait_and_exit(status);
 }
 
-EFI_STATUS efi_main(EFI_HANDLE image_handle, EFI_SYSTEM_TABLE *system_table)
+static void error(IN CONST CHAR16 *msg)
+{
+	Print(u"error: %s\r\n", msg);
+	wait_and_exit(EFI_ABORTED);
+}
+
+static void process_memory_map(void)
+{
+	EFI_MEMORY_DESCRIPTOR *desc;
+	UINTN num_entries = 0, map_key, desc_sz;
+	UINT32 desc_ver;
+	desc = LibMemoryMap(&num_entries, &map_key, &desc_sz, &desc_ver);
+	if (!num_entries)
+		error(u"cannot get memory map!");
+	Output(u"memory map below 16 MiB:\r\n"
+		"  start    end       type attrs\r\n");
+	while (num_entries-- != 0) {
+		EFI_PHYSICAL_ADDRESS start, end;
+		start = desc->PhysicalStart;
+		if (start > 0xffffffUL)
+			continue;
+		end = start + 0x1000UL * desc->NumberOfPages - 1;
+		Print(u"  0x%06lx 0x%06lx%c %4u 0x%08lx\r\n", start,
+		    end > 0xffffffUL ? (UINT64)0xffffffUL : end,
+		    end > 0xffffffUL ? u'+' : u' ',
+		    (UINT32)desc->Type, desc->Attribute);
+		/* :-| */
+		desc = (EFI_MEMORY_DESCRIPTOR *)((char *)desc + desc_sz);
+	}
+}
+
+static EFI_BLOCK_IO_MEDIA *find_boot_media(void)
 {
 	EFI_STATUS status;
 	EFI_LOADED_IMAGE_PROTOCOL *li;
 	EFI_BLOCK_IO_PROTOCOL *bio;
 	EFI_BLOCK_IO_MEDIA *iom;
-	struct _EFI_LEGACY_BIOS_PROTOCOL *lb;
-	InitializeLib(image_handle, system_table);
-	Output(u"Hello world!\r\n");
-	status = BS->HandleProtocol(image_handle, &gEfiLoadedImageProtocolGuid,
-	    (void **)&li);
+	status = BS->HandleProtocol(LibImageHandle,
+	    &gEfiLoadedImageProtocolGuid, (void **)&li);
 	if (EFI_ERROR(status))
 		error_with_status(u"cannot get EFI_LOADED_IMAGE_PROTOCOL",
 		    status);
@@ -44,6 +73,18 @@ EFI_STATUS efi_main(EFI_HANDLE image_handle, EFI_SYSTEM_TABLE *system_table)
 	    iom->LogicalPartition ? u"yes" : u"no",
 	    iom->BlockSize,
 	    iom->IoAlign);
+	return iom;
+}
+
+EFI_STATUS efi_main(EFI_HANDLE image_handle, EFI_SYSTEM_TABLE *system_table)
+{
+	EFI_STATUS status;
+	EFI_BLOCK_IO_MEDIA *iom;
+	struct _EFI_LEGACY_BIOS_PROTOCOL *lb;
+	InitializeLib(image_handle, system_table);
+	Output(u"Hello world!\r\n");
+	process_memory_map();
+	iom = find_boot_media();
 	status = BS->LocateProtocol(&LegacyBootProtocol, NULL, (void **)&lb);
 	if (EFI_ERROR(status))
 		error_with_status(u"cannot get LEGACY_BOOT_PROTOCOL", status);
