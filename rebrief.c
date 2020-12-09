@@ -2,9 +2,16 @@
 
 #include <efi.h>
 #include <efilib.h>
+#include <legacyboot.h>
+
+typedef struct _EFI_LEGACY_BIOS_PROTOCOL EFI_LEGACY_BIOS_PROTOCOL;
 
 extern EFI_HANDLE LibImageHandle;
 extern EFI_GUID gEfiLoadedImageProtocolGuid, LegacyBootProtocol;
+
+static EFI_GUID gEfiLegacyBiosProtocolGuid =
+    { 0xdb9a1e3d, 0x45cb, 0x4abb,
+      { 0x85, 0x3b, 0xe5, 0x38, 0x7f, 0xdb, 0x2e, 0x2d } };
 
 static void wait_and_exit(EFI_STATUS status)
 {
@@ -80,12 +87,18 @@ EFI_STATUS efi_main(EFI_HANDLE image_handle, EFI_SYSTEM_TABLE *system_table)
 {
 	EFI_STATUS status;
 	EFI_BLOCK_IO_MEDIA *iom;
-	struct _EFI_LEGACY_BIOS_PROTOCOL *lb;
+	EFI_LEGACY_BIOS_PROTOCOL *lbios;
+	LEGACY_BOOT_INTERFACE *lbt;  /* ?!? */
 	InitializeLib(image_handle, system_table);
 	Output(u"Hello world!\r\n");
 	process_memory_map();
 	iom = find_boot_media();
-	status = BS->LocateProtocol(&LegacyBootProtocol, NULL, (void **)&lb);
+	status = BS->LocateProtocol(&gEfiLegacyBiosProtocolGuid, NULL,
+	    (void **)&lbios);
+	if (EFI_ERROR(&status))
+		error_with_status(u"cannot get EFI_LEGACY_BIOS_PROTOCOL",
+		    status);
+	status = BS->LocateProtocol(&LegacyBootProtocol, NULL, (void **)&lbt);
 	if (EFI_ERROR(status))
 		error_with_status(u"cannot get LEGACY_BOOT_PROTOCOL", status);
 	wait_and_exit(0);
