@@ -7,11 +7,13 @@
 typedef struct _EFI_LEGACY_BIOS_PROTOCOL EFI_LEGACY_BIOS_PROTOCOL;
 
 extern EFI_HANDLE LibImageHandle;
-extern EFI_GUID gEfiLoadedImageProtocolGuid, LegacyBootProtocol;
+extern EFI_GUID gEfiLoadedImageProtocolGuid, gEfiGlobalVariableGuid,
+		LegacyBootProtocol;
 
 static EFI_GUID gEfiLegacyBiosProtocolGuid =
     { 0xdb9a1e3d, 0x45cb, 0x4abb,
       { 0x85, 0x3b, 0xe5, 0x38, 0x7f, 0xdb, 0x2e, 0x2d } };
+static BOOLEAN secure_boot_p = FALSE;
 
 static void wait_and_exit(EFI_STATUS status)
 {
@@ -83,6 +85,17 @@ static EFI_BLOCK_IO_MEDIA *find_boot_media(void)
 	return iom;
 }
 
+static void test_if_secure_boot(void)
+{
+	UINT8 data = 0;
+	UINTN data_sz = sizeof(data);
+	EFI_STATUS status = RT->GetVariable(u"SecureBoot",
+	    &gEfiGlobalVariableGuid, NULL, &data_sz, &data);
+	if (!EFI_ERROR(status) && data)
+		secure_boot_p = TRUE;
+	Print(u"secure boot: %s\r\n", secure_boot_p ? u"yes" : u"no");
+}
+
 EFI_STATUS efi_main(EFI_HANDLE image_handle, EFI_SYSTEM_TABLE *system_table)
 {
 	EFI_STATUS status;
@@ -93,6 +106,7 @@ EFI_STATUS efi_main(EFI_HANDLE image_handle, EFI_SYSTEM_TABLE *system_table)
 	Output(u"Hello world!\r\n");
 	process_memory_map();
 	iom = find_boot_media();
+	test_if_secure_boot();
 	status = BS->LocateProtocol(&gEfiLegacyBiosProtocolGuid, NULL,
 	    (void **)&lbios);
 	if (EFI_ERROR(&status))
