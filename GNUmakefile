@@ -5,7 +5,7 @@ endif
 -include config.cache
 -include $(conf_Lolwutconf_dir)/lolwutconf.mk
 
-CFLAGS = -Os -Wall -mno-red-zone -fno-stack-protector -fshort-wchar
+CFLAGS = -Os -Wall -mno-red-zone -fno-stack-protector -fshort-wchar -MMD
 LDFLAGS := -L $(conf_Gnuefi_dir)/lib -T elf_x86_64_efi.lds -shared -Bsymbolic
 
 ifneq "" "$(SBSIGN_MOK)"
@@ -39,5 +39,7 @@ endif
 .PHONY: distclean
 
 clean:
-	$(RM) *.o *.so *.efi *~
+	$(RM) *.[od] *.so *.efi *~
 .PHONY: clean
+
+-include *.d

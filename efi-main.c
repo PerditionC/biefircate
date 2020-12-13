@@ -2,7 +2,6 @@
 
 #include <efi.h>
 #include <efilib.h>
-#include <legacyboot.h>
 
 typedef struct _EFI_LEGACY_BIOS_PROTOCOL EFI_LEGACY_BIOS_PROTOCOL;
 
@@ -11,6 +10,8 @@ extern EFI_GUID gEfiLoadedImageProtocolGuid, gEfiGlobalVariableGuid;
 
 static BOOLEAN secure_boot_p = FALSE;
 static EFI_HANDLE boot_media_handle;
+static UINT64 base_mem_start = 0, base_mem_end = 0;
+static char *trampolines_start = NULL;
 
 static void wait_and_exit(EFI_STATUS status)
 {
@@ -46,11 +47,23 @@ static void process_memory_map(void)
 		start = desc->PhysicalStart;
 		if (start > 0xffffffUL)
 			continue;
-		end = start + 0x1000UL * desc->NumberOfPages - 1;
+		end = start + desc->NumberOfPages * EFI_PAGE_SIZE;
 		Print(u"  0x%06lx 0x%06lx%c %4u 0x%016lx\r\n", start,
-		    end > 0xffffffUL ? (UINT64)0xffffffUL : end,
-		    end > 0xffffffUL ? u'+' : u' ',
+		    end > 0x1000000ULL ? (UINT64)0x1000000ULL - 1 : end - 1,
+		    end > 0x1000000ULL ? u'+' : u' ',
 		    (UINT32)desc->Type, desc->Attribute);
+		if (!base_mem_start &&
+		    desc->Type == EfiConventionalMemory &&
+		    start < 0xf0000ULL) {
+			if (start > EFI_PAGE_SIZE)
+				base_mem_start = start;
+			else
+				base_mem_start = EFI_PAGE_SIZE;
+			if (end < 0xf0000ULL)
+				base_mem_end = end;
+			else
+				base_mem_end = 0xf0000ULL;
+		}
 		/* :-| */
 		desc = (EFI_MEMORY_DESCRIPTOR *)((char *)desc + desc_sz);
 	}
@@ -79,11 +92,56 @@ static void test_if_secure_boot(void)
 	Print(u"secure boot: %s\r\n", secure_boot_p ? u"yes" : u"no");
 }
 
-static void process_config(void)
+static void init_trampoline(void)
 {
+	EFI_PHYSICAL_ADDRESS addr = base_mem_end - EFI_PAGE_SIZE;
+	EFI_STATUS status = BS->AllocatePages(AllocateAddress, EfiLoaderData,
+	    1, &addr);
+	if (EFI_ERROR(status))
+		error_with_status(u"cannot allocate trampoline memory",
+		    status);
+	Print(u"allocated trampoline @0x%lx\r\n", addr);
+	trampolines_start = (char *)addr;
+}
+
+static char *alloc_dos_mem(UINTN bytes)
+{
+	EFI_PHYSICAL_ADDRESS addr = base_mem_start;
+	UINTN pages = (bytes + EFI_PAGE_SIZE - 1) / EFI_PAGE_SIZE;
+	EFI_STATUS status = BS->AllocatePages(AllocateAddress, EfiLoaderData,
+	    pages, &addr);
+	if (EFI_ERROR(status))
+		error_with_status(u"cannot allocate DOS memory", status);
+	Print(u"allocated 0x%x pages of DOS memory @0x%lx\r\n", pages, addr);
+	return (char *)addr;
+}
+
+static char *alloc_dos_mem_with_psp(UINTN bytes)
+{
+	char *mem = alloc_dos_mem(bytes);
+	mem[0x0000] = 0xcd;
+	mem[0x0001] = 0x20;
+	mem[0x0050] = 0xcd;
+	mem[0x0051] = 0x21;
+	mem[0x0052] = 0xcb;
+	mem[0x0080] = 0x03;
+	mem[0x0081] = ' ';
+	mem[0x0082] = '/';
+	mem[0x0083] = 'P';
+	mem[0x0084] = '\r';
+	Print(u"filled in stub PSP @0x%lx\r\n", mem);
+	return mem;
+}
+
+static void load_command_com(void)
+{
+	const UINTN dos_mem_size = 0x10000UL;
+	UINTN read_size = dos_mem_size - 0x200UL;
 	EFI_SIMPLE_FILE_SYSTEM_PROTOCOL *fs;
-	EFI_FILE_PROTOCOL *vol, *conf;
-	EFI_STATUS status = BS->HandleProtocol(boot_media_handle,
+	EFI_FILE_PROTOCOL *vol, *prog;
+	EFI_STATUS status;
+	char *psp = alloc_dos_mem_with_psp(dos_mem_size);
+	status = BS->HandleProtocol(boot_media_handle,
 	    &gEfiSimpleFileSystemProtocolGuid, (void **)&fs);
 	if (EFI_ERROR(status))
 		error_with_status(u"cannot get "
@@ -91,13 +149,18 @@ static void process_config(void)
 	status = fs->OpenVolume(fs, &vol);
 	if (EFI_ERROR(status))
 		error_with_status(u"cannot get EFI_FILE_PROTOCOL", status);
-	status = vol->Open(vol, &conf, u"rfconfig.sys", EFI_FILE_MODE_READ, 0);
-	if (status == EFI_NOT_FOUND)
-		status = vol->Open(vol, &conf, u"config.sys",
-		    EFI_FILE_MODE_READ, 0);
+	status = vol->Open(vol, &prog, u"command.com", EFI_FILE_MODE_READ, 0);
+	if (EFI_ERROR(status)) {
+		vol->Close(vol);
+		error_with_status(u"cannot open command.com", status);
+	}
+	status = prog->Read(prog, &read_size, psp + 0x100);
+	prog->Close(prog);
+	vol->Close(vol);
 	if (EFI_ERROR(status))
-		error_with_status(u"cannot open either rfconfig.sys or "
-		    "config.sys", status);
+		error_with_status(u"cannot read command.com", status);
+	Print(u"read 0x%x byte%s from command.com\r\n", read_size,
+	    read_size == 1 ? u"" : u"s");
 }
 
 EFI_STATUS efi_main(EFI_HANDLE image_handle, EFI_SYSTEM_TABLE *system_table)
@@ -107,7 +170,8 @@ EFI_STATUS efi_main(EFI_HANDLE image_handle, EFI_SYSTEM_TABLE *system_table)
 	process_memory_map();
 	find_boot_media();
 	test_if_secure_boot();
-	process_config();
+	init_trampoline();
+	load_command_com();
 	wait_and_exit(0);
 	return 0;
 }
