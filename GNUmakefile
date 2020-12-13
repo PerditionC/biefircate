@@ -9,23 +9,23 @@ CFLAGS = -Os -Wall -mno-red-zone -fno-stack-protector -fshort-wchar
 LDFLAGS := -L $(conf_Gnuefi_dir)/lib -T elf_x86_64_efi.lds -shared -Bsymbolic
 
 ifneq "" "$(SBSIGN_MOK)"
-default: rebrief.signed.efi rebrief.efi
+default: loader.signed.efi loader.efi
 else
-default: rebrief.efi
+default: loader.efi
 endif
 .PHONY: default
 
 ifneq "" "$(SBSIGN_MOK)"
-rebrief.signed.efi: rebrief.efi
+loader.signed.efi: loader.efi
 	sbsign --key $(SBSIGN_MOK:=.key) --cert $(SBSIGN_MOK:=.crt) \
 	       --output $@ $<
 endif
 
-rebrief.efi: rebrief.so
+loader.efi: loader.so
 	$(OBJCOPY) -j .text -j .sdata -j .data -j .dynamic -j .dynsym \
 	    -j '.rel*' --target=efi-app-x86_64 $< $@
 
-rebrief.so: rebrief.o
+loader.so: efi-main.o
 	$(LD) $(LDFLAGS) -o $@ -l:crt0-efi-x86_64.o $^ $(LDLIBS)
 
 %.o: %.c
