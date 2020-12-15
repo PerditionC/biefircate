@@ -25,7 +25,7 @@ loader.efi: loader.so
 	$(OBJCOPY) -j .text -j .sdata -j .data -j .dynamic -j .dynsym \
 	    -j '.rel*' --target=efi-app-x86_64 $< $@
 
-loader.so: efi-main.o
+loader.so: efi-main.o rm86.o
 	$(LD) $(LDFLAGS) -o $@ -l:crt0-efi-x86_64.o $^ $(LDLIBS)
 
 %.o: %.c

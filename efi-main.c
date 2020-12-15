@@ -2,6 +2,8 @@
 
 #include <efi.h>
 #include <efilib.h>
+#include <string.h>
+#include "rm86.h"
 
 typedef struct _EFI_LEGACY_BIOS_PROTOCOL EFI_LEGACY_BIOS_PROTOCOL;
 
@@ -11,7 +13,6 @@ extern EFI_GUID gEfiLoadedImageProtocolGuid, gEfiGlobalVariableGuid;
 static BOOLEAN secure_boot_p = FALSE;
 static EFI_HANDLE boot_media_handle;
 static UINT64 base_mem_start = 0, base_mem_end = 0;
-static char *trampolines_start = NULL;
 
 static void wait_and_exit(EFI_STATUS status)
 {
@@ -92,16 +93,18 @@ static void test_if_secure_boot(void)
 	Print(u"secure boot: %s\r\n", secure_boot_p ? u"yes" : u"no");
 }
 
-static void init_trampoline(void)
+static void init_trampolines(void)
 {
+	extern const char rm_trampolines_init_start[],
+			  rm_trampolines_init_end[];
 	EFI_PHYSICAL_ADDRESS addr = base_mem_end - EFI_PAGE_SIZE;
 	EFI_STATUS status = BS->AllocatePages(AllocateAddress, EfiLoaderData,
 	    1, &addr);
 	if (EFI_ERROR(status))
 		error_with_status(u"cannot allocate trampoline memory",
 		    status);
-	Print(u"allocated trampoline @0x%lx\r\n", addr);
-	trampolines_start = (char *)addr;
+	Print(u"allocated real mode trampolines @0x%lx\r\n", addr);
+	rm86_set_trampolines_seg(addr >> 4);
 }
 
 static char *alloc_dos_mem(UINTN bytes)
@@ -140,6 +143,7 @@ static void load_command_com(void)
 	EFI_SIMPLE_FILE_SYSTEM_PROTOCOL *fs;
 	EFI_FILE_PROTOCOL *vol, *prog;
 	EFI_STATUS status;
+	rm86_regs_t *regs;
 	char *psp = alloc_dos_mem_with_psp(dos_mem_size);
 	status = BS->HandleProtocol(boot_media_handle,
 	    &gEfiSimpleFileSystemProtocolGuid, (void **)&fs);
@@ -161,6 +165,18 @@ static void load_command_com(void)
 		error_with_status(u"cannot read command.com", status);
 	Print(u"read 0x%x byte%s from command.com\r\n", read_size,
 	    read_size == 1 ? u"" : u"s");
+	psp[0xfffe] = psp[0xffff] = 0;
+	regs = rm86_regs();
+	memset(regs, 0, sizeof *regs);
+	regs->cs = regs->ss = (UINT32)psp >> 4;
+	regs->ip = 0x0100;
+	regs->esp = 0xfffe;
+}
+
+static void run_command_com(void)
+{
+	rm86();
+	Output(u"command.com finished\r\n");
 }
 
 EFI_STATUS efi_main(EFI_HANDLE image_handle, EFI_SYSTEM_TABLE *system_table)
@@ -170,8 +186,9 @@ EFI_STATUS efi_main(EFI_HANDLE image_handle, EFI_SYSTEM_TABLE *system_table)
 	process_memory_map();
 	find_boot_media();
 	test_if_secure_boot();
-	init_trampoline();
+	init_trampolines();
 	load_command_com();
+	run_command_com();
 	wait_and_exit(0);
 	return 0;
 }
