@@ -180,7 +180,7 @@ static void run_command_com(void)
 EFI_STATUS efi_main(EFI_HANDLE image_handle, EFI_SYSTEM_TABLE *system_table)
 {
 	InitializeLib(image_handle, system_table);
-	Output(u"Hello world!\r\n");
+	Output(u".:. biefircate " VERSION " .:.\r\n");
 	process_memory_map();
 	find_boot_media();
 	test_if_secure_boot();

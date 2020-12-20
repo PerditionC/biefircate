@@ -7,6 +7,7 @@ if test \! -e "$us"/lolwutconf/configure.inc; then
 fi
 . "$us"/lolwutconf/configure.inc
 conf_begin --host=x86_64-w64-mingw32 --host-exec=: ${1+"$@"}
-conf_mod app.build c
+conf_mod app.build c versioning
 conf_c_chk_macro __x86_64__
+conf_versioning_use_git_date
 conf_end

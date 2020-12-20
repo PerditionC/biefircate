@@ -33,6 +33,8 @@ loader.efi: efi-main.o rm86.o
 %.o: %.c $(LIBEFI)
 	$(CC) $(CFLAGS) $(CPPFLAGS) -c -o $@ $<
 
+efi-main.o : CPPFLAGS += -DVERSION='"$(conf_Pkg_ver)"'
+
 $(LIBEFI):
 	mkdir -p gnu-efi
 	$(MAKE) CROSS_COMPILE=x86_64-w64-mingw32- CFLAGS='$(CFLAGS)' \
