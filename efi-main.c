@@ -95,8 +95,6 @@ static void test_if_secure_boot(void)
 
 static void init_trampolines(void)
 {
-	extern const char rm_trampolines_init_start[],
-			  rm_trampolines_init_end[];
 	EFI_PHYSICAL_ADDRESS addr = base_mem_end - EFI_PAGE_SIZE;
 	EFI_STATUS status = BS->AllocatePages(AllocateAddress, EfiLoaderData,
 	    1, &addr);
@@ -168,7 +166,7 @@ static void load_command_com(void)
 	psp[0xfffe] = psp[0xffff] = 0;
 	regs = rm86_regs();
 	memset(regs, 0, sizeof *regs);
-	regs->cs = regs->ss = (UINT32)psp >> 4;
+	regs->cs = regs->ss = (UINT32)(UINT64)psp >> 4;
 	regs->ip = 0x0100;
 	regs->esp = 0xfffe;
 }

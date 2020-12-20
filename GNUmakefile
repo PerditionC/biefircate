@@ -5,8 +5,14 @@ endif
 -include config.cache
 -include $(conf_Lolwutconf_dir)/lolwutconf.mk
 
-CFLAGS = -Os -Wall -mno-red-zone -fno-stack-protector -fshort-wchar -MMD
-LDFLAGS := -L $(conf_Gnuefi_dir)/lib -T elf_x86_64_efi.lds -shared -Bsymbolic
+GNUEFISRCDIR := '$(abspath $(conf_Srcdir))'/gnu-efi
+CFLAGS = -pie -fPIC -ffreestanding -Os -Wall -mno-red-zone -fno-stack-protector -MMD
+CPPFLAGS = -I $(GNUEFISRCDIR)/inc -I $(GNUEFISRCDIR)/protocol \
+	   -I $(GNUEFISRCDIR)/inc/x86_64
+LDFLAGS = $(CFLAGS) -nostdlib -ffreestanding -Wl,--entry,efi_main \
+	  -Wl,--subsystem,10 -Wl,--strip-all -Wl,-Map=$(@:.efi=.map)
+LIBEFI = gnu-efi/x86_64/lib/libefi.a
+LDLIBS := $(LIBEFI) $(LDLIBS)
 
 ifneq "" "$(SBSIGN_MOK)"
 default: loader.signed.efi loader.efi
@@ -21,15 +27,18 @@ loader.signed.efi: loader.efi
 	       --output $@ $<
 endif
 
-loader.efi: loader.so
-	$(OBJCOPY) -j .text -j .sdata -j .data -j .dynamic -j .dynsym \
-	    -j '.rel*' --target=efi-app-x86_64 $< $@
+loader.efi: efi-main.o rm86.o
+	$(CC) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
-loader.so: efi-main.o rm86.o
-	$(LD) $(LDFLAGS) -o $@ -l:crt0-efi-x86_64.o $^ $(LDLIBS)
-
-%.o: %.c
+%.o: %.c $(LIBEFI)
 	$(CC) $(CFLAGS) $(CPPFLAGS) -c -o $@ $<
+
+$(LIBEFI):
+	mkdir -p gnu-efi
+	$(MAKE) CROSS_COMPILE=x86_64-w64-mingw32- CFLAGS='$(CFLAGS)' \
+	    -C gnu-efi \
+	    -f '$(abspath $(conf_Srcdir))'/gnu-efi/Makefile \
+	    lib inc
 
 distclean: clean
 	$(RM) config.cache
@@ -39,7 +48,12 @@ endif
 .PHONY: distclean
 
 clean:
-	$(RM) *.[od] *.so *.efi *~
+	$(RM) *.[od] *.so *.efi *.map *~
+ifeq "$(conf_Separate_build_dir)" "yes"
+	$(RM) -r gnu-efi
+else
+	$(MAKE) -C gnu-efi clean
+endif
 .PHONY: clean
 
 -include *.d

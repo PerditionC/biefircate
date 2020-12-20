@@ -5,9 +5,12 @@
  */
 	.globl	rm86_set_trampolines_seg
 rm86_set_trampolines_seg:
-	movw	%di, .Lrm_t_seg(%rip)	/* record the segment */
-	movzwq	%di, %rdi		/* record the absolute address */
-	movw	%di, %dx
+	pushq	%rsi
+	pushq	%rdi
+	movw	$.Lgo_to_lm-.LB, 4*0x20	/* install an int 0x20 handler */
+	movw	%cx, 4*0x20+2
+	movw	%cx, .Lrm_t_seg(%rip)	/* record the segment */
+	movzwq	%cx, %rdi		/* record the absolute address */
 	shlq	$4, %rdi
 	movl	%edi, .Lrm_t_addr(%rip)
 	movl	%edi, %eax
@@ -20,8 +23,8 @@ rm86_set_trampolines_seg:
 	addl	%eax, .Lpm16_gdt+0x10+2-.LE(%rdi)
 	addl	%eax, .Llm_temp_cr3-.LE(%rdi)
 	addl	%eax, .Llm_ip-.LE(%rdi)
-	movw	$.Lgo_to_lm-.LB, 4*0x20	/* install an int 0x20 handler */
-	movw	%dx, 4*0x20+2
+	popq	%rdi
+	popq	%rsi
 	retq
 
 /*
@@ -43,6 +46,8 @@ rm86_regs:
 rm86:
 	pushq	%rbx			/* save all call-saved registers */
 	pushq	%rbp
+	pushq	%rsi
+	pushq	%rdi
 	pushq	%r12
 	pushq	%r13
 	pushq	%r14
@@ -187,6 +192,8 @@ rm86:
 	popq	%r14
 	popq	%r13
 	popq	%r12
+	popq	%rdi
+	popq	%rsi
 	popq	%rbp
 	popq	%rbx
 	retq
