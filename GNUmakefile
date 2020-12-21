@@ -6,9 +6,13 @@ endif
 -include $(conf_Lolwutconf_dir)/lolwutconf.mk
 
 GNUEFISRCDIR := '$(abspath $(conf_Srcdir))'/gnu-efi
+ACPICASRCDIR := '$(abspath $(conf_Srcdir))'/acpica
 CFLAGS = -pie -fPIC -ffreestanding -Os -Wall -mno-red-zone -fno-stack-protector -MMD
-CPPFLAGS = -I $(GNUEFISRCDIR)/inc -I $(GNUEFISRCDIR)/protocol \
-	   -I $(GNUEFISRCDIR)/inc/x86_64
+CPPFLAGS = -I$(GNUEFISRCDIR)/inc \
+	   -I$(GNUEFISRCDIR)/protocol \
+	   -I$(GNUEFISRCDIR)/inc/x86_64 \
+	   -iquote $(ACPICASRCDIR)/source/include \
+	   -DGNU_EFI_USE_MS_ABI
 LDFLAGS = $(CFLAGS) -nostdlib -ffreestanding -Wl,--entry,efi_main \
 	  -Wl,--subsystem,10 -Wl,--strip-all -Wl,-Map=$(@:.efi=.map)
 LIBEFI = gnu-efi/x86_64/lib/libefi.a
@@ -27,7 +31,7 @@ loader.signed.efi: loader.efi
 	       --output $@ $<
 endif
 
-loader.efi: efi-main.o rm86.o
+loader.efi: efi-main.o acpi.o exit.o memcmp.o rm86.o
 	$(CC) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
 %.o: %.c $(LIBEFI)

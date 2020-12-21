@@ -1,11 +1,8 @@
-#define GNU_EFI_USE_MS_ABI
-
 #include <efi.h>
 #include <efilib.h>
 #include <string.h>
+#include "acpi.h"
 #include "rm86.h"
-
-typedef struct _EFI_LEGACY_BIOS_PROTOCOL EFI_LEGACY_BIOS_PROTOCOL;
 
 extern EFI_HANDLE LibImageHandle;
 extern EFI_GUID gEfiLoadedImageProtocolGuid, gEfiGlobalVariableGuid;
@@ -68,6 +65,34 @@ static void process_memory_map(void)
 		/* :-| */
 		desc = (EFI_MEMORY_DESCRIPTOR *)((char *)desc + desc_sz);
 	}
+}
+
+static void process_efi_conf_tables(void)
+{
+	static const EFI_GUID Acpi20TableGuid = ACPI_20_TABLE_GUID;
+	UINTN i, sct_n = ST->NumberOfTableEntries;
+	void *rsdp = NULL;
+	Output(u"system configuration tables:");
+	for (i = 0; i != sct_n; ++i) {
+		EFI_CONFIGURATION_TABLE *cft = &ST->ConfigurationTable[i];
+		EFI_GUID *vguid = &cft->VendorGuid;
+		if (i % 2 == 0)
+			Output(u"\r\n");
+		Print(u"  %08x-%04x-%04x-%02x%02x-"
+			 "%02x%02x%02x%02x%02x%02x",
+		    vguid->Data1, (UINT32)vguid->Data2, (UINT32)vguid->Data3,
+		    (UINT32)vguid->Data4[0], (UINT32)vguid->Data4[1],
+		    (UINT32)vguid->Data4[2], (UINT32)vguid->Data4[3],
+		    (UINT32)vguid->Data4[4], (UINT32)vguid->Data4[5],
+		    (UINT32)vguid->Data4[6], (UINT32)vguid->Data4[7]);
+		if (!rsdp &&
+		    memcmp(vguid, &Acpi20TableGuid, sizeof(EFI_GUID)) == 0)
+			rsdp = cft->VendorTable;
+	}
+	Output(u"\r\n");
+	if (!rsdp)
+		error(u"no ACPI v2 RSDP!");
+	process_acpi_v2_tables(rsdp);
 }
 
 static void find_boot_media(void)
@@ -182,6 +207,7 @@ EFI_STATUS efi_main(EFI_HANDLE image_handle, EFI_SYSTEM_TABLE *system_table)
 	InitializeLib(image_handle, system_table);
 	Output(u".:. biefircate " VERSION " .:.\r\n");
 	process_memory_map();
+	process_efi_conf_tables();
 	find_boot_media();
 	test_if_secure_boot();
 	init_trampolines();

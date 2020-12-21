@@ -4,3 +4,7 @@
 [submodule "gnu-efi"]
 	path = gnu-efi
 	url = https://git.code.sf.net/p/gnu-efi/code
+[submodule "acpica"]
+	path = acpica
+	url = https://github.com/acpica/acpica.git
+	shallow = true
