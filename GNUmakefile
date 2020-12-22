@@ -31,7 +31,7 @@ loader.signed.efi: loader.efi
 	       --output $@ $<
 endif
 
-loader.efi: efi-main.o acpi.o exit.o memcmp.o rm86.o
+loader.efi: efi-main.o acpi.o exit.o fb-con.o memcmp.o rm86.o
 	$(CC) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
 %.o: %.c $(LIBEFI)

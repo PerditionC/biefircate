@@ -45,7 +45,7 @@ void process_acpi_v2_tables(void *p)
 		error(u"ACPI RSDP has bogus signature");
 	Print(u"ACPI v2 RSDP @0x%lx:\r\n"
 	       "  OEM: %c%c%c%c%c%c  revision: %u  "
-		 "RSDT: @0x%x  XSDT: 0x%lx\r\n",
+		 "RSDT: @0x%x  XSDT: @0x%lx\r\n",
 	    (UINT64)rsdp,
 	    (CHAR16)(unsigned char)rsdp->OemId[0],
 	    (CHAR16)(unsigned char)rsdp->OemId[1],

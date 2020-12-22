@@ -5,7 +5,7 @@
 void wait_and_exit(EFI_STATUS status)
 {
 	Output(u"press a key to exit\r\n");
-	WaitForSingleEvent(ST->ConIn->WaitForKey, 0);
+	Pause();
 	Exit(status, 0, NULL);
 }
 
