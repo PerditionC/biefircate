@@ -2,12 +2,16 @@
 #define H_LOADER
 
 #include <inttypes.h>
+#include <uchar.h>
 
 /* acpi.h */
 extern void process_acpi_v2_tables(void *);
 
 /* fb-con.h */
 extern void init_fb_con(void);
+extern void exit_fb_con(void);
+extern int cwprintf(const char16_t *, ...);
+extern void cputws(const char16_t *);
 
 /* rm86.h */
 /*

@@ -4,3 +4,4 @@ config.cache
 *.efi
 *.map
 *~
+font-default.[ch]

@@ -1,11 +1,13 @@
 #include <efi.h>
 #include <efilib.h>
 #include "efi-stuff.h"
+#include "loader.h"
 
 void wait_and_exit(EFI_STATUS status)
 {
 	Output(u"press a key to exit\r\n");
 	Pause();
+	exit_fb_con();
 	Exit(status, 0, NULL);
 }
 

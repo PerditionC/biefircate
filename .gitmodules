@@ -8,3 +8,6 @@
 	path = acpica
 	url = https://github.com/acpica/acpica.git
 	shallow = true
+[submodule "spleen"]
+	path = spleen
+	url = https://github.com/fcambus/spleen.git

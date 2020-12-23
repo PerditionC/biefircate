@@ -27,7 +27,7 @@ void process_xsdt(void)
 	for (i = 0; i < n; ++i) {
 		const ACPI_TABLE_HEADER *tbl =
 		    (const ACPI_TABLE_HEADER *)acpi_xsdt->TableOffsetEntry[i];
-		if (i % 14 == 0)
+		if (i % 18 == 0)
 			Output(u"\r\n   ");
 		Print(u" %c%c%c%c", (CHAR16)(unsigned char)tbl->Signature[0],
 				    (CHAR16)(unsigned char)tbl->Signature[1],

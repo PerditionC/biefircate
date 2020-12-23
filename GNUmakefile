@@ -7,6 +7,7 @@ endif
 
 GNUEFISRCDIR := '$(abspath $(conf_Srcdir))'/gnu-efi
 ACPICASRCDIR := '$(abspath $(conf_Srcdir))'/acpica
+SPLEENSRCDIR := $(conf_Srcdir)/spleen
 CFLAGS = -pie -fPIC -ffreestanding -Os -Wall -mno-red-zone -fno-stack-protector -MMD
 CPPFLAGS = -I$(GNUEFISRCDIR)/inc \
 	   -I$(GNUEFISRCDIR)/protocol \
@@ -17,6 +18,7 @@ LDFLAGS = $(CFLAGS) -nostdlib -ffreestanding -Wl,--entry,efi_main \
 	  -Wl,--subsystem,10 -Wl,--strip-all -Wl,-Map=$(@:.efi=.map)
 LIBEFI = gnu-efi/x86_64/lib/libefi.a
 LDLIBS := $(LIBEFI) $(LDLIBS)
+BDF2CFLAGS = PUA=0 SP=0
 
 ifneq "" "$(SBSIGN_MOK)"
 default: loader.signed.efi loader.efi
@@ -31,13 +33,22 @@ loader.signed.efi: loader.efi
 	       --output $@ $<
 endif
 
-loader.efi: efi-main.o acpi.o exit.o fb-con.o memcmp.o rm86.o
+loader.efi: efi-main.o acpi.o exit.o fb-con.o font-default.o memcmp.o rm86.o
 	$(CC) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
-%.o: %.c $(LIBEFI)
+%.o: %.c $(LIBEFI) font-default.h
 	$(CC) $(CFLAGS) $(CPPFLAGS) -c -o $@ $<
 
-efi-main.o : CPPFLAGS += -DVERSION='"$(conf_Pkg_ver)"'
+font-default.c: $(SPLEENSRCDIR)/spleen-8x16.bdf bdf2c.awk
+	./bdf2c.awk $(BDF2CFLAGS) $< >$@.tmp
+	mv $@.tmp $@
+
+font-default.h: $(SPLEENSRCDIR)/spleen-8x16.bdf bdf2c.awk
+	./bdf2c.awk H=1 $(BDF2CFLAGS) $< >$@.tmp
+	mv $@.tmp $@
+
+efi-main.o fb-con.o : CPPFLAGS += -DPACKAGE_NAME='"$(conf_Pkg_name)"' \
+				  -DPACKAGE_VERSION='"$(conf_Pkg_ver)"'
 
 $(LIBEFI):
 	mkdir -p gnu-efi
@@ -54,7 +65,7 @@ endif
 .PHONY: distclean
 
 clean:
-	$(RM) *.[od] *.so *.efi *.map *~
+	$(RM) *.[od] *.so *.efi *.map font-default.c font-default.h *~
 ifeq "$(conf_Separate_build_dir)" "yes"
 	$(RM) -r gnu-efi
 else

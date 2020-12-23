@@ -1,6 +1,7 @@
 #include <efi.h>
 #include <efilib.h>
 #include <string.h>
+#include "efi-stuff.h"
 #include "loader.h"
 
 extern EFI_HANDLE LibImageHandle;
@@ -9,11 +10,6 @@ extern EFI_GUID gEfiLoadedImageProtocolGuid, gEfiGlobalVariableGuid;
 static BOOLEAN secure_boot_p = FALSE;
 static EFI_HANDLE boot_media_handle;
 static UINT64 base_mem_start = 0, base_mem_end = 0;
-
-static void splash(void)
-{
-	Output(u".:. biefircate " VERSION " .:.\r\n");
-}
 
 static void process_memory_map(void)
 {
@@ -190,9 +186,7 @@ static void run_command_com(void)
 EFI_STATUS efi_main(EFI_HANDLE image_handle, EFI_SYSTEM_TABLE *system_table)
 {
 	InitializeLib(image_handle, system_table);
-	splash();
 	init_fb_con();
-	splash();
 	process_memory_map();
 	process_efi_conf_tables();
 	find_boot_media();
