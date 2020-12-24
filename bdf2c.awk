@@ -17,13 +17,14 @@
 #
 # Usage:
 #
-#	bdf2c [H=1] [PUA=0] [SP=0] [N=(font-name)] \
+#	bdf2c [H=1] [PUA=0] [SP=0] [BRAILLE=0] [N=(font-name)] \
 #	      [(in.bdf)] [> {(out.c) | (out.h)}]
 #
 # Options:
 #	H=1		output a header file, not a C module file
 #	PUA=0		exclude Unicode Private Use Areas
 #	SP=0		exclude Unicode supplementary planes
+#	BRAILLE=0	exclude Braille Patterns
 #	N=(font-name)	set font name
 
 function error(msg)
@@ -32,37 +33,37 @@ function error(msg)
 	exit 1
 }
 
-function mergesort(ary, lo, hi, \
+function mergesort(src, dest, lo, hi, \
 		   mid, i, j, k, tmp)
 {
-	if (lo >= hi)
+	if (lo == hi) {
+		dest[lo] = src[lo]
 		return
+	}
 	mid = int((lo + hi) / 2)
-	mergesort(ary, lo, mid)
-	mergesort(ary, mid + 1, hi)
+	mergesort(src, tmp, lo, mid)
+	mergesort(src, tmp, mid + 1, hi)
 	i = lo
 	j = lo
 	k = mid + 1
 	while (i <= hi) {
 		if (j <= mid && k <= hi) {
-			if (ary[j] < ary[k]) {
-				tmp[i] = ary[j]
+			if (tmp[j] < tmp[k]) {
+				dest[i] = tmp[j]
 				j += 1
 			} else {
-				tmp[i] = ary[k]
+				dest[i] = tmp[k]
 				k += 1
 			}
 		} else if (j <= mid) {
-			tmp[i] = ary[j]
+			dest[i] = tmp[j]
 			j += 1
 		} else {
-			tmp[i] = ary[k]
+			dest[i] = tmp[k]
 			k += 1
 		}
 		i += 1
 	}
-	for (i = lo; i <= hi; i += 1)
-		ary[i] = tmp[i]
 }
 
 function new_char()
@@ -81,6 +82,9 @@ BEGIN {
 	if (SP == "")
 		SP = 1
 	SP += 0
+	if (BRAILLE == "")
+		BRAILLE = 1
+	BRAILLE += 0
 	err_msg = ""
 	n_codes = 0
 	max_height = 0
@@ -125,12 +129,20 @@ BEGIN {
 		error("code point undefined")
 	if (curr_bitmap == "")
 		error("bitmap undefined")
-	if (!SP && curr_code > 0xffff)
+	if (!SP && curr_code > 0xffff) {
+		new_char()
 		next
+	}
 	if (!PUA && ((curr_code >= 0x00e000 && curr_code <= 0x00f8ff) ||
 		     (curr_code >= 0x0f0000 && curr_code <= 0x0ffffd) ||
-		     (curr_code >= 0x100000 && curr_code <= 0x10fffd)))
+		     (curr_code >= 0x100000 && curr_code <= 0x10fffd))) {
+		new_char()
 		next
+	}
+	if (!BRAILLE && (curr_code >= 0x2800 && curr_code <= 0x28ff)) {
+		new_char()
+		next
+	}
 	if (code_seen[curr_code])
 		error("code point " curr_code " appears more than once")
 	n_codes += 1
@@ -152,7 +164,7 @@ END {
 		print "error: " err_msg >"/dev/stderr"
 		exit 1
 	}
-	mergesort(codes, 1, n_codes)
+	mergesort(codes, codes, 1, n_codes)
 	if (N == "")
 		N = "default"
 	print "/****** AUTOMATICALLY GENERATED ******/"
