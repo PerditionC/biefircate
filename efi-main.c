@@ -59,7 +59,8 @@ static void process_efi_conf_tables(void)
 		EFI_GUID *vguid = &cft->VendorGuid;
 		if (i % 2 == 0)
 			putwch(u'\n');
-		cwprintf(u"  %08x-%04x-%04x-%02x%02x-%02x%02x%02x%02x%02x%02x",
+		cwprintf
+		   (u" | %08x-%04x-%04x-%02x%02x-%02x%02x%02x%02x%02x%02x",
 		    vguid->Data1, (UINT32)vguid->Data2, (UINT32)vguid->Data3,
 		    (UINT32)vguid->Data4[0], (UINT32)vguid->Data4[1],
 		    (UINT32)vguid->Data4[2], (UINT32)vguid->Data4[3],

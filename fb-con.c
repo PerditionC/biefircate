@@ -52,17 +52,17 @@ static void splash(void)
 static void dump_mode_info(UINT32 mode_num,
 			   const EFI_GRAPHICS_OUTPUT_MODE_INFORMATION *info)
 {
-	Print(u"  mode 0x%x  %u", mode_num, info->HorizontalResolution);
+	Print(u"mode 0x%04x  %4u", mode_num, info->HorizontalResolution);
 	if (info->PixelsPerScanLine != info->HorizontalResolution)
-		Print(u"{%u}", info->PixelsPerScanLine);
-	Print(u"*%u  ", info->VerticalResolution);
+		Print(u"{%4u}", info->PixelsPerScanLine);
+	Print(u"*%4u  ", info->VerticalResolution);
 	switch (info->PixelFormat) {
 	    case PixelRedGreenBlueReserved8BitPerColor:
 		Output(u"RGBX8888");  break;
 	    case PixelBlueGreenRedReserved8BitPerColor:
 		Output(u"BGRX8888");  break;
 	    case PixelBitMask:
-		Print(u"RGBX %x/%x/%x/%x",
+		Print(u"RGBX:%x/%x/%x/%x",
 		      info->PixelInformation.RedMask,
 		      info->PixelInformation.GreenMask,
 		      info->PixelInformation.BlueMask,
@@ -71,7 +71,6 @@ static void dump_mode_info(UINT32 mode_num,
 	    default:
 		Output(u"BLT-only");
 	}
-	Print(u"\r\n");
 }
 
 static void wait_1_second(void)
@@ -263,7 +262,7 @@ static void putwch_default(char16_t ch)
 /* Initialize the frame buffer console. */
 void init_fb_con(void)
 {
-	UINT32 mode_num, max_mode_num, best_mode_num;
+	UINT32 mode_num, max_mode_num, best_mode_num, avail_mode_count = 0;
 	EFI_GRAPHICS_OUTPUT_MODE_INFORMATION best_info = { };
 	EFI_STATUS status;
 	UINT32 all_mask;
@@ -277,7 +276,7 @@ void init_fb_con(void)
 		    status);
 	orig_mode = gfxop->Mode->Mode;
 	Print(u"current UEFI graphics mode: 0x%x\r\n"
-	       "available framebuffer modes:\r\n", orig_mode);
+	       "available framebuffer modes:", orig_mode);
 	best_mode_num = max_mode_num = gfxop->Mode->MaxMode;
 	for (mode_num = 0; mode_num < max_mode_num; ++mode_num) {
 		EFI_GRAPHICS_OUTPUT_MODE_INFORMATION *info;
@@ -288,6 +287,10 @@ void init_fb_con(void)
 		if (info->HorizontalResolution < VID_MIN_PIX_WIDTH ||
 		    info->VerticalResolution < VID_MIN_PIX_HEIGHT)
 			continue;
+		if (avail_mode_count % 2 == 0)
+			Output(u"\r\n");
+		++avail_mode_count;
+		Output(u" | ");
 		dump_mode_info(mode_num, info);
 		switch (info->PixelFormat) {
 		    case PixelRedGreenBlueReserved8BitPerColor:
@@ -317,6 +320,7 @@ void init_fb_con(void)
 			continue;
 		}
 	}
+	Output(u"\r\n");
 	if (best_mode_num == max_mode_num)
 		error(u"no suitable graphics mode to switch to!");
 
@@ -377,8 +381,9 @@ void init_fb_con(void)
 
 	/* Start using our own console output functions to spew some stuff. */
 	cwprintf(u"now using frame buffer console @0x%lx, "
-		  "text %u*%u, pixels %u*%u\n",
-	    (UINT64)frame_buf, text_width, text_height, pix_width, pix_height);
+		  "text %u*%u, pixels %u*%u, %u octet%s/pixel\n",
+	    (UINT64)frame_buf, text_width, text_height, pix_width, pix_height,
+	    pixel_octets, pixel_octets == 1 ? u"" : u"s");
 }
 
 /* Undo the frame buffer console set up (in case of a loader error). */

@@ -187,7 +187,7 @@ END {
 		print "const wchar_t font_" N "_code_points[" n_codes "] = {"
 		for (i = 1; i <= n_codes; i += 1)
 			print "\t" codes[i] ","
-		print "};\n"
+		print "};"
 		print "const uint8_t font_" N "_data[" n_codes \
 						       "][" max_height "] = {"
 		for (i = 1; i <= n_codes; i += 1) {
@@ -195,6 +195,6 @@ END {
 			print "\t{"
 			print bitmap[curr_code], "\t},"
 		}
-		print "};\n"
+		print "};"
 	}
 }
