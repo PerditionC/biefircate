@@ -19,15 +19,15 @@ static void process_memory_map(void)
 	desc = LibMemoryMap(&num_entries, &map_key, &desc_sz, &desc_ver);
 	if (!num_entries)
 		error(u"cannot get memory map!");
-	Output(u"memory map below 16 MiB:\r\n"
-		"  start    end       type attrs\r\n");
+	cputws(u"memory map below 16 MiB:\n"
+		"  start    end       type attrs\n");
 	while (num_entries-- != 0) {
 		EFI_PHYSICAL_ADDRESS start, end;
 		start = desc->PhysicalStart;
 		if (start > 0xffffffUL)
 			continue;
 		end = start + desc->NumberOfPages * EFI_PAGE_SIZE;
-		Print(u"  0x%06lx 0x%06lx%c %4u 0x%016lx\r\n", start,
+		cwprintf(u"  0x%06lx 0x%06lx%c %4u 0x%016lx\n", start,
 		    end > 0x1000000ULL ? (UINT64)0x1000000ULL - 1 : end - 1,
 		    end > 0x1000000ULL ? u'+' : u' ',
 		    (UINT32)desc->Type, desc->Attribute);
@@ -53,14 +53,13 @@ static void process_efi_conf_tables(void)
 	static const EFI_GUID Acpi20TableGuid = ACPI_20_TABLE_GUID;
 	UINTN i, sct_n = ST->NumberOfTableEntries;
 	void *rsdp = NULL;
-	Output(u"system configuration tables:");
+	cputws(u"system configuration tables:");
 	for (i = 0; i != sct_n; ++i) {
 		EFI_CONFIGURATION_TABLE *cft = &ST->ConfigurationTable[i];
 		EFI_GUID *vguid = &cft->VendorGuid;
 		if (i % 2 == 0)
-			Output(u"\r\n");
-		Print(u"  %08x-%04x-%04x-%02x%02x-"
-			 "%02x%02x%02x%02x%02x%02x",
+			putwch(u'\n');
+		cwprintf(u"  %08x-%04x-%04x-%02x%02x-%02x%02x%02x%02x%02x%02x",
 		    vguid->Data1, (UINT32)vguid->Data2, (UINT32)vguid->Data3,
 		    (UINT32)vguid->Data4[0], (UINT32)vguid->Data4[1],
 		    (UINT32)vguid->Data4[2], (UINT32)vguid->Data4[3],
@@ -70,7 +69,7 @@ static void process_efi_conf_tables(void)
 		    memcmp(vguid, &Acpi20TableGuid, sizeof(EFI_GUID)) == 0)
 			rsdp = cft->VendorTable;
 	}
-	Output(u"\r\n");
+	putwch(u'\n');
 	if (!rsdp)
 		error(u"no ACPI v2 RSDP!");
 	process_acpi_v2_tables(rsdp);
@@ -96,7 +95,7 @@ static void test_if_secure_boot(void)
 	    &gEfiGlobalVariableGuid, NULL, &data_sz, &data);
 	if (!EFI_ERROR(status) && data)
 		secure_boot_p = TRUE;
-	Print(u"secure boot: %s\r\n", secure_boot_p ? u"yes" : u"no");
+	cwprintf(u"secure boot: %s\n", secure_boot_p ? u"yes" : u"no");
 }
 
 static void init_trampolines(void)
@@ -107,7 +106,7 @@ static void init_trampolines(void)
 	if (EFI_ERROR(status))
 		error_with_status(u"cannot allocate trampoline memory",
 		    status);
-	Print(u"allocated real mode trampolines @0x%lx\r\n", addr);
+	cwprintf(u"allocated real mode trampolines @0x%lx\n", addr);
 	rm86_set_trampolines_seg(addr >> 4);
 }
 
@@ -119,7 +118,7 @@ static char *alloc_dos_mem(UINTN bytes)
 	    pages, &addr);
 	if (EFI_ERROR(status))
 		error_with_status(u"cannot allocate DOS memory", status);
-	Print(u"allocated 0x%x pages of DOS memory @0x%lx\r\n", pages, addr);
+	cwprintf(u"allocated 0x%x pages of DOS memory @0x%lx\n", pages, addr);
 	return (char *)addr;
 }
 
@@ -136,7 +135,7 @@ static char *alloc_dos_mem_with_psp(UINTN bytes)
 	mem[0x0082] = '/';
 	mem[0x0083] = 'P';
 	mem[0x0084] = '\r';
-	Print(u"filled in stub PSP @0x%lx\r\n", mem);
+	cwprintf(u"filled in stub PSP @0x%lx\n", mem);
 	return mem;
 }
 
@@ -167,7 +166,7 @@ static void load_command_com(void)
 	vol->Close(vol);
 	if (EFI_ERROR(status))
 		error_with_status(u"cannot read command.com", status);
-	Print(u"read 0x%x byte%s from command.com\r\n", read_size,
+	cwprintf(u"read 0x%x byte%s from command.com\n", read_size,
 	    read_size == 1 ? u"" : u"s");
 	psp[0xfffe] = psp[0xffff] = 0;
 	regs = rm86_regs();
@@ -180,7 +179,7 @@ static void load_command_com(void)
 static void run_command_com(void)
 {
 	rm86();
-	Output(u"command.com finished\r\n");
+	cputws(u"command.com finished\n");
 }
 
 EFI_STATUS efi_main(EFI_HANDLE image_handle, EFI_SYSTEM_TABLE *system_table)

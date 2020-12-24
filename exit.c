@@ -3,10 +3,16 @@
 #include "efi-stuff.h"
 #include "loader.h"
 
+/*
+ * Note: the frame buffer console might not have been set up when these
+ * routines are called, so do not use cwprintf(...) etc. here.
+ */
+
 void wait_and_exit(EFI_STATUS status)
 {
-	Output(u"press a key to exit\r\n");
+	Output(u"press a key to exit");
 	Pause();
+	Output(u"\r\n");
 	exit_fb_con();
 	Exit(status, 0, NULL);
 }

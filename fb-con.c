@@ -17,6 +17,9 @@
 #define VID_MIN_PIX_HEIGHT	(VID_MIN_TEXT_HEIGHT * FONT_DEFAULT_HEIGHT)
 
 extern EFI_GUID gEfiGraphicsOutputProtocolGuid;
+extern void *_memset_pat2(volatile void *, uint16_t, size_t),
+	    *_memset_pat3(volatile void *, uint32_t, size_t),
+	    *_memset_pat4(volatile void *, uint32_t, size_t);
 
 typedef struct __attribute__((packed)) {
 	uint8_t a8_0, a8_1, a8_2;
@@ -122,6 +125,38 @@ static const uint8_t *find_glyph(char16_t ch)
 	return font_default_data[lo];
 }
 
+static void fb_con_move_rows(UINT32 src_start_row, UINT32 n_rows,
+			     UINT32 dest_start_row)
+{
+	size_t row_octets = (size_t)pix_width * FONT_DEFAULT_HEIGHT
+			    * pixel_octets;
+	memmove((void *)&frame_buf->a8[dest_start_row * row_octets],
+		(const void *)&frame_buf->a8[src_start_row * row_octets],
+		n_rows * row_octets);
+}
+
+static void fb_con_blank_rows(UINT32 start_row, UINT32 n_rows)
+{
+	size_t row_pixels = (size_t)pix_width * FONT_DEFAULT_HEIGHT;
+	switch (pixel_octets) {
+	    case 1:
+		memset((void *)&frame_buf->a8[start_row * row_pixels],
+		       (uint8_t)curr_bg, n_rows * row_pixels);
+		break;
+	    case 2:
+		_memset_pat2(&frame_buf->a16[start_row * row_pixels],
+			     (uint16_t)curr_bg, n_rows * row_pixels * 2);
+		break;
+	    case 3:
+		_memset_pat3(&frame_buf->a24[start_row * row_pixels],
+			     (uint32_t)curr_bg, n_rows * row_pixels * 3);
+		break;
+	    default:
+		_memset_pat4(&frame_buf->a32[start_row * row_pixels],
+			     curr_bg, n_rows * row_pixels * 4);
+	}
+}
+
 static void fb_con_nl(void)
 {
 	curr_col = 0;
@@ -129,6 +164,8 @@ static void fb_con_nl(void)
 		++curr_row;
 		return;
 	}
+	fb_con_move_rows(1, text_height - 1, 0);
+	fb_con_blank_rows(text_height - 1, 1);
 }
 
 __attribute__((optimize("unroll-loops")))
@@ -221,20 +258,6 @@ static void putwch_default(char16_t ch)
 	++curr_col;
 	if (curr_col >= text_width)
 		fb_con_nl();
-}
-
-static void putwch(char16_t ch)
-{
-	switch (ch) {
-	    case u'\r':
-		curr_col = 0;
-		break;
-	    case u'\n':
-		fb_con_nl();
-		break;
-	    default:
-		putwch_default(ch);
-	}
 }
 
 /* Initialize the frame buffer console. */
@@ -351,6 +374,11 @@ void init_fb_con(void)
 	/* Hook up our frame buffer console output routine. */
 	replace_con_out();
 	splash();
+
+	/* Start using our own console output functions to spew some stuff. */
+	cwprintf(u"now using frame buffer console @0x%lx, "
+		  "text %u*%u, pixels %u*%u\n",
+	    (UINT64)frame_buf, text_width, text_height, pix_width, pix_height);
 }
 
 /* Undo the frame buffer console set up (in case of a loader error). */
@@ -376,6 +404,27 @@ int cwprintf(const char16_t *fmt, ...)
 	res = (int)VPrint(fmt, ap);
 	va_end(ap);
 	return res;
+}
+
+/*
+ * Output a character to the frame buffer console.
+ *
+ * This should only be called _after_ the frame buffer console is
+ * initialized!  Before that happens, code should stick to using Output(.)
+ * or ST->ConOut->OutputString(, ).
+ */
+void putwch(char16_t ch)
+{
+	switch (ch) {
+	    case u'\r':
+		curr_col = 0;
+		break;
+	    case u'\n':
+		fb_con_nl();
+		break;
+	    default:
+		putwch_default(ch);
+	}
 }
 
 /*
