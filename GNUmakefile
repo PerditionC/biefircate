@@ -14,7 +14,7 @@ CPPFLAGS = -I$(GNUEFISRCDIR)/inc \
 	   -I$(GNUEFISRCDIR)/inc/x86_64 \
 	   -iquote $(ACPICASRCDIR)/source/include \
 	   -DGNU_EFI_USE_MS_ABI
-LDFLAGS = $(CFLAGS) -nostdlib -ffreestanding -Wl,--entry,efi_main \
+LDFLAGS = $(CFLAGS) -nostdlib -ffreestanding -Wl,--entry,_start \
 	  -Wl,--subsystem,10 -Wl,--strip-all -Wl,-Map=$(@:.efi=.map) \
 	  -Wl,--wrap=memcpy -Wl,--wrap=memset
 LIBEFI = gnu-efi/x86_64/lib/libefi.a
@@ -34,8 +34,8 @@ loader.signed.efi: loader.efi
 	       --output $@ $<
 endif
 
-loader.efi: efi-main.o acpi.o exit.o fb-con.o font-default.o mem-map.o \
-    memcmp.o memmove.o memset.o stage1.o stage2.o x64.o
+loader.efi: start.o efi-main.o acpi.o exit.o fb-con.o font-default.o \
+    lm86-rm86.o mem-map.o memcmp.o memmove.o memset.o stage1.o stage2.o
 	$(CC) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
 %.o: %.c $(LIBEFI) font-default.h

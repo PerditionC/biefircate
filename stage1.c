@@ -9,9 +9,8 @@ extern EFI_GUID gEfiLoadedImageProtocolGuid, gEfiGlobalVariableGuid;
 
 static BOOLEAN secure_boot_p = FALSE;
 static EFI_HANDLE boot_media_handle;
-static UINT64 base_mem_start = 0, base_mem_end = 0;
 
-static void process_efi_conf_tables(void **p_rsdp)
+static void process_efi_conf_tables(const void **p_rsdp)
 {
 	static const EFI_GUID Acpi20TableGuid = ACPI_20_TABLE_GUID;
 	UINTN i, sct_n = ST->NumberOfTableEntries;
