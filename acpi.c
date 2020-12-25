@@ -15,7 +15,7 @@
 
 static const ACPI_TABLE_XSDT *acpi_xsdt = NULL;
 
-void process_xsdt(void)
+static void process_xsdt(void)
 {
 	const char xsdt_sig[4] = "XSDT";
 	UINT32 n, i;
@@ -39,7 +39,7 @@ void process_xsdt(void)
 	putwch(u'\n');
 }
 
-void process_acpi_v2_tables(void *p)
+void acpi_init(const void *p)
 {
 	const char rsdp_sig[8] = "RSD PTR ";
 	const ACPI_TABLE_RSDP *rsdp = (const ACPI_TABLE_RSDP *)p;

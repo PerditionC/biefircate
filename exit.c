@@ -13,7 +13,7 @@ void wait_and_exit(EFI_STATUS status)
 	Output(u"press a key to exit");
 	Pause();
 	Output(u"\r\n");
-	exit_fb_con();
+	fb_con_exit();
 	Exit(status, 0, NULL);
 }
 

@@ -94,21 +94,6 @@ static EFI_STATUS EFIAPI proto_output_string
 	return 0;
 }
 
-/*
- * Replace ST->ConOut (or parts of it) with our own implementation.  Remember
- * to back up the old ST->ConOut so that we can restore it if this loader
- * fails.
- */
-static void replace_con_out(void)
-{
-	if (ST->ConOut) {
-		orig_txop = ST->ConOut;
-		our_txop = *ST->ConOut;
-	}
-	our_txop.OutputString = proto_output_string;
-	ST->ConOut = &our_txop;
-}
-
 static const uint8_t *find_glyph(char16_t ch)
 {
 	char16_t lo = 0, hi = FONT_DEFAULT_GLYPHS;
@@ -260,7 +245,7 @@ static void putwch_default(char16_t ch)
 }
 
 /* Initialize the frame buffer console. */
-void init_fb_con(void)
+void fb_con_init(void)
 {
 	UINT32 mode_num, max_mode_num, best_mode_num, avail_mode_count = 0;
 	EFI_GRAPHICS_OUTPUT_MODE_INFORMATION best_info = { };
@@ -376,7 +361,7 @@ void init_fb_con(void)
 		  (((uint64_t)blue_mask  * 2 / 3) & blue_mask);
 
 	/* Hook up our frame buffer console output routine. */
-	replace_con_out();
+	fb_con_instate();
 	splash();
 
 	/* Start using our own console output functions to spew some stuff. */
@@ -386,8 +371,23 @@ void init_fb_con(void)
 	    pixel_octets, pixel_octets == 1 ? u"" : u"s");
 }
 
+/*
+ * Replace ST->ConOut (or parts of it) with our own implementation.  Remember
+ * to back up the old ST->ConOut so that we can restore it if this loader
+ * fails.
+ */
+void fb_con_instate(void)
+{
+	if (ST->ConOut && ST->ConOut != &our_txop) {
+		orig_txop = ST->ConOut;
+		our_txop = *ST->ConOut;
+	}
+	our_txop.OutputString = proto_output_string;
+	ST->ConOut = &our_txop;
+}
+
 /* Undo the frame buffer console set up (in case of a loader error). */
-void exit_fb_con(void)
+void fb_con_exit(void)
 {
 	if (orig_txop) {
 		EFI_SIMPLE_TEXT_OUT_PROTOCOL *txop = orig_txop;

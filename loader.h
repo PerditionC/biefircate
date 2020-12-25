@@ -4,22 +4,18 @@
 #include <inttypes.h>
 #include <uchar.h>
 
-/* acpi.h */
-extern void process_acpi_v2_tables(void *);
+/* acpi.c */
+extern void acpi_init(const void *);
 
-/* fb-con.h */
-extern void init_fb_con(void);
-extern void exit_fb_con(void);
+/* fb-con.c */
+extern void fb_con_init(void);
+extern void fb_con_instate(void);
+extern void fb_con_exit(void);
 extern int cwprintf(const char16_t *, ...);
 extern void putwch(char16_t);
 extern void cputws(const char16_t *);
 
-/* rm86.h */
-/*
- * Interface for switching between 16-bit real mode & 64-bit long mode. 
- * Modelled after Linux's vm86(...) interface as well as Open Watcom's
- * _DPMISimulateRealModeInterrupt(...).
- */
+/* x64.S */
 typedef struct __attribute__((packed)) {
 	uint32_t edi, esi, ebp, reserved1, ebx, edx, ecx, eax;
 	uint16_t es, ds, fs, gs;
@@ -27,8 +23,14 @@ typedef struct __attribute__((packed)) {
 	uint16_t ss, ip, cs;
 } rm86_regs_t;
 
-extern void rm86_set_trampolines_seg(uint16_t seg);
+extern void lm86_rm86_init(uint16_t);
 extern rm86_regs_t *rm86_regs(void);
 extern void rm86(void);
+
+/* stage1.c */
+void stage1(const void **);
+
+/* stage2.c */
+void stage2(const void *);
 
 #endif

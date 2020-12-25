@@ -34,8 +34,8 @@ loader.signed.efi: loader.efi
 	       --output $@ $<
 endif
 
-loader.efi: efi-main.o acpi.o exit.o fb-con.o font-default.o memcmp.o \
-    memmove.o memset.o rm86.o
+loader.efi: efi-main.o acpi.o exit.o fb-con.o font-default.o mem-map.o \
+    memcmp.o memmove.o memset.o stage1.o stage2.o x64.o
 	$(CC) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
 %.o: %.c $(LIBEFI) font-default.h
