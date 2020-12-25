@@ -3,7 +3,7 @@
 #include <stddef.h>
 #include <string.h>
 #include "efi-stuff.h"
-#include "loader.h"
+#include "truckload.h"
 
 /* ACPICA needs these... */
 #define ACPI_USE_SYSTEM_INTTYPES

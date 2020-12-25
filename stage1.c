@@ -2,7 +2,7 @@
 #include <efilib.h>
 #include <string.h>
 #include "efi-stuff.h"
-#include "loader.h"
+#include "truckload.h"
 
 extern EFI_HANDLE LibImageHandle;
 extern EFI_GUID gEfiLoadedImageProtocolGuid, gEfiGlobalVariableGuid;

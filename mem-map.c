@@ -1,7 +1,7 @@
 #include <efi.h>
 #include <efilib.h>
 #include "efi-stuff.h"
-#include "loader.h"
+#include "truckload.h"
 
 extern EFI_HANDLE LibImageHandle;
 
@@ -80,6 +80,15 @@ void mem_map_init(UINTN *mem_map_key)
 
 void stage1_done(UINTN mem_map_key)
 {
+	/*
+	 * FIXME: the Red Hat shim (https://github.com/rhboot/shim) says
+	 * "System is compromised" & shuts down the system when we try to
+	 * call .ExitBootServices(, ) here.
+	 *
+	 * Meanwhile, PreLoader (https://blog.hansenpartnership.com/linux-
+	 * foundation-secure-boot-system-released/) seems to have no problem.
+	 * And PreLoader is smaller too...
+	 */
 	EFI_STATUS status = BS->ExitBootServices(LibImageHandle, mem_map_key);
 	UINT64 reserved_base_mem;
 	if (EFI_ERROR(status))

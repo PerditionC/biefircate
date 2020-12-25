@@ -22,19 +22,19 @@ LDLIBS := $(LIBEFI) $(LDLIBS)
 BDF2CFLAGS = PUA=0 SP=0 BRAILLE=0
 
 ifneq "" "$(SBSIGN_MOK)"
-default: loader.signed.efi loader.efi
+default: truckload.signed.efi truckload.efi
 else
-default: loader.efi
+default: truckload.efi
 endif
 .PHONY: default
 
 ifneq "" "$(SBSIGN_MOK)"
-loader.signed.efi: loader.efi
+truckload.signed.efi: truckload.efi
 	sbsign --key $(SBSIGN_MOK:=.key) --cert $(SBSIGN_MOK:=.crt) \
 	       --output $@ $<
 endif
 
-loader.efi: start.o efi-main.o acpi.o exit.o fb-con.o font-default.o \
+truckload.efi: start.o efi-main.o acpi.o exit.o fb-con.o font-default.o \
     lm86-rm86.o mem-map.o memcmp.o memmove.o memset.o stage1.o stage2.o
 	$(CC) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 

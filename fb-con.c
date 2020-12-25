@@ -4,7 +4,7 @@
 #include <stdarg.h>
 #include <string.h>
 #include "efi-stuff.h"
-#include "loader.h"
+#include "truckload.h"
 #include "font-default.h"
 
 #if FONT_DEFAULT_WIDTH != 8

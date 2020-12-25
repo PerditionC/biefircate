@@ -1,7 +1,7 @@
 #include <efi.h>
 #include <efilib.h>
 #include "efi-stuff.h"
-#include "loader.h"
+#include "truckload.h"
 
 /*
  * Note: the frame buffer console might not have been set up when these
