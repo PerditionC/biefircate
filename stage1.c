@@ -68,6 +68,9 @@ void stage1(const void **p_rsdp)
 	/* Start the frame buffer console early. */
 	fb_con_init();
 
+	/* Initialize our internal dynamic memory heap. */
+	mem_heap_init();
+
 	/* Use UEFI boot services to figure out our environment. */
 	process_efi_conf_tables(p_rsdp);
 	find_boot_media();

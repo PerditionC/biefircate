@@ -38,8 +38,8 @@ truckload.signed.efi: truckload.efi
 endif
 
 truckload.efi: start.o efi-main.o acpi.o exit.o fb-con.o font-default.o \
-    lm86-rm86.o mem-map.o memcmp.o memmove.o memset.o stage1.o stage2.o \
-    $(LIBEFI) $(LIBACPICA)
+    lm86-rm86.o mem-heap.o mem-map.o memcmp.o memmove.o memset.o \
+    stage1.o stage2.o $(LIBEFI) $(LIBACPICA)
 	$(CC) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
 %.o: %.c $(LIBEFI) font-default.h

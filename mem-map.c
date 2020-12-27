@@ -64,17 +64,27 @@ void mem_map_init(UINTN *mem_map_key)
 	EFI_MEMORY_DESCRIPTOR *desc;
 	UINTN num_entries = 0, desc_sz;
 	UINT32 desc_ver;
-	UINT64 addr1 = (UINT64)&desc_ver, addr2, addr3;
-	UINT32 ty1 = EfiMaxMemoryType, ty2 = EfiMaxMemoryType,
-	       ty3 = EfiMaxMemoryType;
+	UINT64 addr1, addr2;
+	UINT32 ty1 = EfiMaxMemoryType, ty2 = EfiMaxMemoryType;
+
+	/*
+	 * Retrieve the memory map.  Designate the memory map's memory as
+	 * UEFI boot services data so that we can jettison it after we are
+	 * done with boot services.
+	 */
+	EFI_MEMORY_TYPE save_pool_alloc_type = PoolAllocationType;
+	PoolAllocationType = EfiBootServicesData;
+	desc = LibMemoryMap(&num_entries, mem_map_key, &desc_sz, &desc_ver);
+	PoolAllocationType = save_pool_alloc_type;
+	if (!num_entries || !desc_sz)
+		error(u"cannot get memory map!");
+
+	/* We got the memory map.  Dump it. */
+	addr1 = (UINT64)&desc_ver;
 	__asm volatile("movq %%cr3, %0" : "=r" (addr2));
 	addr2 &= 0x000ffffffffff000ULL;
-	desc = LibMemoryMap(&num_entries, mem_map_key, &desc_sz, &desc_ver);
-	if (!num_entries)
-		error(u"cannot get mem. map!");
-	addr3 = (UINT64)desc;
 	cputws(u"mem. map below 16 MiB:\n"
-		"  start    end       type attrs\n");
+		"  start     end       type attrs\n");
 	while (num_entries-- != 0) {
 		EFI_PHYSICAL_ADDRESS start = desc->PhysicalStart,
 		    end = start + desc->NumberOfPages * EFI_PAGE_SIZE;
@@ -83,10 +93,8 @@ void mem_map_init(UINTN *mem_map_key)
 			ty1 = type;
 		if (start <= addr2 && addr2 < end)
 			ty2 = type;
-		if (start <= addr3 && addr3 < end)
-			ty3 = type;
 		if (start < 0xffffffULL)
-			cwprintf(u"  0x%06lx 0x%06lx%c %4u 0x%016lx\n", start,
+			cwprintf(u"  @0x%06lx @0x%06lx%c%4u 0x%016lx\n", start,
 			    end > 0x1000000ULL ? (UINT64)0x1000000ULL - 1
 					       : end - 1,
 			    end > 0x1000000ULL ? u'+' : u' ', type,
@@ -104,14 +112,15 @@ void mem_map_init(UINTN *mem_map_key)
 		/* :-| */
 		desc = (EFI_MEMORY_DESCRIPTOR *)((char *)desc + desc_sz);
 	}
+
 	if (mem20_end)
-		cwprintf(u"available base mem. spans 0x%lx--0x%lx\n",
+		cwprintf(u"available base mem. spans @0x%lx--@0x%lx\n",
 		    mem20_start, mem20_end - 1);
 	if (mem32_end)
-		cwprintf(u"available 32-bit ext. mem. spans 0x%lx--0x%lx\n",
+		cwprintf(u"available 32-bit ext. mem. spans @0x%lx--@0x%lx\n",
 		    mem32_start, mem32_end - 1);
 	if (mem64_end)
-		cwprintf(u"available 64-bit ext. mem. spans 0x%lx--0x%lx\n",
+		cwprintf(u"available 64-bit ext. mem. spans @0x%lx--@0x%lx\n",
 		    mem64_start, mem64_end - 1);
 	if (ty1 != EfiMaxMemoryType)
 		cwprintf(u"loader stack mem. (@0x%lx) is type %u\n",
@@ -119,9 +128,6 @@ void mem_map_init(UINTN *mem_map_key)
 	if (ty2 != EfiMaxMemoryType)
 		cwprintf(u"page dir. mem. (@0x%lx) is type %u\n",
 		    addr2, ty2);
-	if (ty3 != EfiMaxMemoryType)
-		cwprintf(u"mem. map mem. (@0x%lx) is type %u\n",
-		    addr3, ty3);
 }
 
 void stage1_done(UINTN mem_map_key)
