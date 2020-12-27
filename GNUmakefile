@@ -5,20 +5,23 @@ endif
 -include config.cache
 -include $(conf_Lolwutconf_dir)/lolwutconf.mk
 
-GNUEFISRCDIR := '$(abspath $(conf_Srcdir))'/gnu-efi
-ACPICASRCDIR := '$(abspath $(conf_Srcdir))'/acpica
-SPLEENSRCDIR := $(conf_Srcdir)/spleen
-CFLAGS = -pie -fPIC -ffreestanding -Os -Wall -mno-red-zone -fno-stack-protector -MMD
-CPPFLAGS = -I$(GNUEFISRCDIR)/inc \
-	   -I$(GNUEFISRCDIR)/protocol \
-	   -I$(GNUEFISRCDIR)/inc/x86_64 \
-	   -iquote $(ACPICASRCDIR)/source/include \
-	   -DGNU_EFI_USE_MS_ABI
+GNUEFISRCDIR = $(conf_Srcdir)/gnu-efi
+ACPICASRCDIR = $(conf_Srcdir)/acpica
+SPLEENSRCDIR = $(conf_Srcdir)/spleen
+CFLAGS = -pie -fPIC -ffreestanding -Os -Wall -mno-red-zone \
+    -fno-stack-protector -MMD
+# The MinGW toolchain defines the macro WIN32 & friends, & this confuses
+# ACPICA.  Undefine the WIN32 macro.
+CPPFLAGS = -I'$(abspath $(GNUEFISRCDIR))'/inc \
+	   -I'$(abspath $(GNUEFISRCDIR))'/protocol \
+	   -I'$(abspath $(GNUEFISRCDIR))'/inc/x86_64 \
+	   -iquote '$(abspath $(ACPICASRCDIR))'/source/include \
+	   -DGNU_EFI_USE_MS_ABI -UWIN32
 LDFLAGS = $(CFLAGS) -nostdlib -ffreestanding -Wl,--entry,_start \
 	  -Wl,--subsystem,10 -Wl,--strip-all -Wl,-Map=$(@:.efi=.map) \
 	  -Wl,--wrap=memcpy -Wl,--wrap=memset
 LIBEFI = gnu-efi/x86_64/lib/libefi.a
-LDLIBS := $(LIBEFI) $(LDLIBS)
+LIBACPICA = libacpica.a
 BDF2CFLAGS = PUA=0 SP=0 BRAILLE=0
 
 ifneq "" "$(SBSIGN_MOK)"
@@ -35,10 +38,12 @@ truckload.signed.efi: truckload.efi
 endif
 
 truckload.efi: start.o efi-main.o acpi.o exit.o fb-con.o font-default.o \
-    lm86-rm86.o mem-map.o memcmp.o memmove.o memset.o stage1.o stage2.o
+    lm86-rm86.o mem-map.o memcmp.o memmove.o memset.o stage1.o stage2.o \
+    $(LIBEFI) $(LIBACPICA)
 	$(CC) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
 %.o: %.c $(LIBEFI) font-default.h
+	mkdir -p $(@D)
 	$(CC) $(CFLAGS) $(CPPFLAGS) -c -o $@ $<
 
 font-default.c: $(SPLEENSRCDIR)/spleen-8x16.bdf bdf2c.awk
@@ -59,6 +64,21 @@ $(LIBEFI):
 	    -f '$(abspath $(conf_Srcdir))'/gnu-efi/Makefile \
 	    lib inc
 
+ACPICAOBJS := $(patsubst $(ACPICASRCDIR)/%.c,acpica/%.o, \
+		  $(wildcard $(ACPICASRCDIR)/source/components/dispatcher/*.c \
+			     $(ACPICASRCDIR)/source/components/events/*.c \
+			     $(ACPICASRCDIR)/source/components/executer/*.c \
+			     $(ACPICASRCDIR)/source/components/hardware/*.c \
+			     $(ACPICASRCDIR)/source/components/namespace/*.c \
+			     $(ACPICASRCDIR)/source/components/parser/*.c \
+			     $(ACPICASRCDIR)/source/components/tables/*.c \
+			     $(ACPICASRCDIR)/source/components/utilities/*.c))
+
+$(LIBACPICA): $(ACPICAOBJS)
+	$(RM) $@
+	$(AR) cqs $@.tmp $^
+	mv $@.tmp $@
+
 distclean: clean
 	$(RM) config.cache
 ifeq "$(conf_Separate_build_dir)" "yes"
@@ -67,11 +87,12 @@ endif
 .PHONY: distclean
 
 clean:
-	$(RM) *.[od] *.so *.efi *.map font-default.c font-default.h *~
+	$(RM) *.[oda] *.so *.efi *.map font-default.c font-default.h *~
 ifeq "$(conf_Separate_build_dir)" "yes"
-	$(RM) -r gnu-efi
+	$(RM) -r gnu-efi acpica
 else
 	$(MAKE) -C gnu-efi clean
+	$(RM) $(ACPICAOBJS)
 endif
 .PHONY: clean
 

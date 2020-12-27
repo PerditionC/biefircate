@@ -9,9 +9,14 @@
 #define ACPI_USE_SYSTEM_INTTYPES
 #define ACPI_MACHINE_WIDTH	__INTPTR_WIDTH__
 #define ACPI_SYSTEM_XFACE
+#define ACPI_INIT_FUNCTION
+#define ACPI_INTERNAL_VAR_XFACE
+#define ACPI_INLINE		inline
 
 #include "actypes.h"
 #include "actbl.h"
+#include "acrestyp.h"
+#include "acpixf.h"
 
 static const ACPI_TABLE_XSDT *acpi_xsdt = NULL;
 

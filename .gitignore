@@ -1,5 +1,5 @@
 config.cache
-*.[od]
+*.[oda]
 *.so
 *.efi
 *.map
