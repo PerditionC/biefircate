@@ -12,18 +12,22 @@
  * for more details.
  */
 
-#include <efi.h>
-#include <efilib.h>
-#include <string.h>
-#include "efi-stuff.h"
-#include "truckload.h"
-
-INIT_TEXT EFI_STATUS efi_main(EFI_HANDLE image_handle,
-			      EFI_SYSTEM_TABLE *system_table)
+SECTIONS
 {
-	const void *rsdp;
-	InitializeLib(image_handle, system_table);
-	stage1(&rsdp);
-	stage2(rsdp);
-	__builtin_unreachable();
+	/* Initialization text. */
+	.text.i :
+	{
+		*(.text.i .text.i.*)
+	}
 }
+INSERT AFTER .text;
+
+SECTIONS
+{
+	/* Initialization data. */
+	.data.i :
+	{
+		*(.data.i .data.i.*)
+	}
+}
+INSERT AFTER .data;

@@ -12,18 +12,21 @@
  * for more details.
  */
 
-#include <efi.h>
-#include <efilib.h>
-#include <string.h>
-#include "efi-stuff.h"
+/* Definitions for working with ACPICA header files. */
+
+#ifndef H_ACPICA_STUFF
+#define H_ACPICA_STUFF
+
 #include "truckload.h"
 
-INIT_TEXT EFI_STATUS efi_main(EFI_HANDLE image_handle,
-			      EFI_SYSTEM_TABLE *system_table)
-{
-	const void *rsdp;
-	InitializeLib(image_handle, system_table);
-	stage1(&rsdp);
-	stage2(rsdp);
-	__builtin_unreachable();
-}
+/* ACPICA needs these... */
+#define ACPI_USE_SYSTEM_INTTYPES
+#define ACPI_SYSTEM_XFACE
+#define ACPI_INTERNAL_VAR_XFACE
+#define ACPI_INIT_FUNCTION	INIT_TEXT
+#define ACPI_USE_LOCAL_CACHE
+
+#include "platform/acgcc.h"
+#include "platform/acwin64.h"
+
+#endif

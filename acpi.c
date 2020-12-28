@@ -4,23 +4,20 @@
 #include <string.h>
 #include "efi-stuff.h"
 #include "truckload.h"
+#include "acpica-stuff.h"
 
-/* ACPICA needs these... */
-#define ACPI_USE_SYSTEM_INTTYPES
-#define ACPI_MACHINE_WIDTH	__INTPTR_WIDTH__
-#define ACPI_SYSTEM_XFACE
-#define ACPI_INIT_FUNCTION
-#define ACPI_INTERNAL_VAR_XFACE
-#define ACPI_INLINE		inline
-
+/* ACPICA header files. */
 #include "actypes.h"
 #include "actbl.h"
 #include "acrestyp.h"
 #include "acpixf.h"
 
+/* Used by ACPICA (via acpica-osl.c). */
+const ACPI_TABLE_RSDP *acpi_rsdp = NULL;
+
 static const ACPI_TABLE_XSDT *acpi_xsdt = NULL;
 
-static void process_xsdt(void)
+static INIT_TEXT void process_xsdt(void)
 {
 	const char xsdt_sig[4] = "XSDT";
 	UINT32 n, i;
@@ -42,9 +39,10 @@ static void process_xsdt(void)
 		    (CHAR16)(unsigned char)tbl->Signature[3]);
 	}
 	putwch(u'\n');
+	AcpiInitializeTables(NULL, 0, TRUE);
 }
 
-void acpi_init(const void *p)
+INIT_TEXT void acpi_init(const void *p)
 {
 	const char rsdp_sig[8] = "RSD PTR ";
 	const ACPI_TABLE_RSDP *rsdp = (const ACPI_TABLE_RSDP *)p;
@@ -63,6 +61,7 @@ void acpi_init(const void *p)
 	    (UINT32)rsdp->Revision,
 	    (UINT32)rsdp->RsdtPhysicalAddress,
 	    (UINT64)rsdp->XsdtPhysicalAddress);
+	acpi_rsdp = rsdp;
 	acpi_xsdt = (const ACPI_TABLE_XSDT *)rsdp->XsdtPhysicalAddress;
 	process_xsdt();
 }

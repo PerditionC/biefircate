@@ -245,7 +245,7 @@ static void putwch_default(char16_t ch)
 }
 
 /* Initialize the frame buffer console. */
-void fb_con_init(void)
+INIT_TEXT void fb_con_init(void)
 {
 	UINT32 mode_num, max_mode_num, best_mode_num, avail_mode_count = 0;
 	EFI_GRAPHICS_OUTPUT_MODE_INFORMATION best_info = { };

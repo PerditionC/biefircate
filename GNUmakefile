@@ -37,10 +37,10 @@ truckload.signed.efi: truckload.efi
 	       --output $@ $<
 endif
 
-truckload.efi: start.o efi-main.o acpi.o exit.o fb-con.o font-default.o \
-    lm86-rm86.o mem-heap.o mem-map.o memcmp.o memmove.o memset.o \
-    stage1.o stage2.o $(LIBEFI) $(LIBACPICA)
-	$(CC) $(LDFLAGS) -o $@ $^ $(LDLIBS)
+truckload.efi: start.o efi-main.o acpi.o acpica-osl.o exit.o fb-con.o \
+    font-default.o lm86-rm86.o mem-heap.o mem-map.o memcmp.o memmove.o \
+    memset.o stage1.o stage2.o $(LIBEFI) $(LIBACPICA) truckload.ld
+	$(CC) $(LDFLAGS) -o $@ $(^:%.ld=-T %.ld) $(LDLIBS)
 
 %.o: %.c $(LIBEFI) font-default.h
 	mkdir -p $(@D)
@@ -78,6 +78,8 @@ $(LIBACPICA): $(ACPICAOBJS)
 	$(RM) $@
 	$(AR) cqs $@.tmp $^
 	mv $@.tmp $@
+
+$(ACPICAOBJS) : CPPFLAGS += -DACPI_USE_LOCAL_CACHE
 
 distclean: clean
 	$(RM) config.cache

@@ -5,11 +5,14 @@
 #include <stdlib.h>
 #include <uchar.h>
 
+#define INIT_TEXT	__attribute__((section(".text.i")))
+#define INIT_DATA	__attribute__((section(".data.i")))
+
 /* acpi.c */
-extern void acpi_init(const void *);
+extern INIT_TEXT void acpi_init(const void *);
 
 /* fb-con.c */
-extern void fb_con_init(void);
+extern INIT_TEXT void fb_con_init(void);
 extern void fb_con_instate(void);
 extern void fb_con_exit(void);
 extern int cwprintf(const char16_t *, ...);
@@ -19,12 +22,13 @@ extern void cputws(const char16_t *);
 /* mem-heap.c */
 extern void *mem_heap_alloc(size_t);
 extern void mem_heap_free(void *);
+extern void *mem_heap_realloc(void *, size_t);
 
 /* stage1.c */
-extern void stage1(const void **);
+extern INIT_TEXT void stage1(const void **);
 
 /* stage2.c */
-extern void stage2(const void *);
+extern INIT_TEXT void stage2(const void *);
 
 /* x64.S */
 typedef struct __attribute__((packed)) {
@@ -34,7 +38,7 @@ typedef struct __attribute__((packed)) {
 	uint16_t ss, ip, cs;
 } rm86_regs_t;
 
-extern void lm86_rm86_init(uint16_t);
+extern INIT_TEXT void lm86_rm86_init(uint16_t);
 extern rm86_regs_t *rm86_regs(void);
 extern void rm86(void);
 

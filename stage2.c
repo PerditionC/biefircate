@@ -4,7 +4,7 @@
 #include "efi-stuff.h"
 #include "truckload.h"
 
-void stage2(const void *rsdp)
+INIT_TEXT void stage2(const void *rsdp)
 {
 	acpi_init(rsdp);
 	cputws(u"umm...");
