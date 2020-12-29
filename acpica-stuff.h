@@ -26,6 +26,9 @@
 #define ACPI_INIT_FUNCTION	INIT_TEXT
 #define ACPI_USE_LOCAL_CACHE
 
+/* Also include inline functions. */
+#include "acpica-osl-inl.h"
+
 #include "platform/acgcc.h"
 #include "platform/acwin64.h"
 

@@ -79,7 +79,9 @@ $(LIBACPICA): $(ACPICAOBJS)
 	$(AR) cqs $@.tmp $^
 	mv $@.tmp $@
 
-$(ACPICAOBJS) : CPPFLAGS += -DACPI_USE_LOCAL_CACHE
+$(ACPICAOBJS) : %.o: %.c acpica-osl-inl.h
+$(ACPICAOBJS) : CPPFLAGS += -DACPI_USE_LOCAL_CACHE \
+			    -include $(conf_Srcdir)/acpica-osl-inl.h
 
 distclean: clean
 	$(RM) config.cache
