@@ -45,4 +45,21 @@
 #define ACPI_USE_ALTERNATE_PROTOTYPE_AcpiOsSignalSemaphore
 #define AcpiOsSignalSemaphore(handle, units) AE_OK
 
+#define ACPI_USE_ALTERNATE_PROTOTYPE_AcpiOsCreateLock
+#define AcpiOsCreateLock(p_out_handle) \
+	AcpiOsCreateSemaphore(1, 1, (p_out_handle))
+
+#define ACPI_USE_ALTERNATE_PROTOTYPE_AcpiOsDeleteLock
+#define AcpiOsDeleteLock(handle)	((void)AcpiOsDeleteSemaphore(handle))
+
+#define ACPI_USE_ALTERNATE_PROTOTYPE_AcpiOsAcquireLock
+#define AcpiOsAcquireLock(handle) \
+	((void)AcpiOsWaitSemaphore((handle), 1, 0xffff), \
+	 (ACPI_CPU_FLAGS)0)
+
+#define ACPI_USE_ALTERNATE_PROTOTYPE_AcpiOsReleaseLock
+#define AcpiOsReleaseLock(handle, flags) \
+	((void)(flags), \
+	 (void)AcpiOsSignalSemaphore((handle), 1))
+
 #endif
