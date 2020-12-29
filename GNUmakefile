@@ -38,8 +38,9 @@ truckload.signed.efi: truckload.efi
 endif
 
 truckload.efi: start.o efi-main.o acpi.o acpica-osl.o exit.o fb-con.o \
-    font-default.o lm86-rm86.o mem-heap.o mem-map.o memcmp.o memmove.o \
-    memset.o stage1.o stage2.o $(LIBEFI) $(LIBACPICA) truckload.ld
+    font-default.o lm86-rm86.o mem-heap.o mem-map.o stage1.o stage2.o \
+    $(LIBEFI) $(LIBACPICA) crt/memcmp.o crt/memmove.o crt/memset.o \
+    truckload.ld
 	$(CC) $(LDFLAGS) -o $@ $(^:%.ld=-T %.ld) $(LDLIBS)
 
 %.o: %.c $(LIBEFI) font-default.h
@@ -91,7 +92,8 @@ endif
 .PHONY: distclean
 
 clean:
-	$(RM) *.[oda] *.so *.efi *.map font-default.c font-default.h *~
+	$(RM) *.[oda] crt/*.o *.so *.efi *.map \
+	    font-default.c font-default.h *~
 ifeq "$(conf_Separate_build_dir)" "yes"
 	$(RM) -r gnu-efi acpica
 else
