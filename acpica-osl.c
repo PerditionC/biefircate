@@ -95,6 +95,52 @@ void AcpiOsUnmapMemory(void *addr, ACPI_SIZE size)
 	/* nothing to do */
 }
 
+ACPI_STATUS AcpiOsReadMemory(ACPI_PHYSICAL_ADDRESS address,
+			     UINT64 *value, UINT32 width)
+{
+	if (!value)
+		return AE_BAD_PARAMETER;
+	switch (width) {
+	    case 8:
+		*value = *(volatile uint8_t *)address;
+		break;
+	    case 16:
+		*value = *(volatile uint16_t *)address;
+		break;
+	    case 32:
+		*value = *(volatile uint32_t *)address;
+		break;
+	    case 64:
+		*value = *(volatile uint64_t *)address;
+		break;
+	    default:
+		return AE_BAD_PARAMETER;
+	}
+	return AE_OK;
+}
+
+ACPI_STATUS AcpiOsWriteMemory(ACPI_PHYSICAL_ADDRESS address,
+			      UINT64 value, UINT32 width)
+{
+	switch (width) {
+	    case 8:
+		*(volatile uint8_t *)address = (uint8_t)value;
+		break;
+	    case 16:
+		*(volatile uint16_t *)address = (uint16_t)value;
+		break;
+	    case 32:
+		*(volatile uint32_t *)address = (uint32_t)value;
+		break;
+	    case 64:
+		*(volatile uint64_t *)address = value;
+		break;
+	    default:
+		return AE_BAD_PARAMETER;
+	}
+	return AE_OK;
+}
+
 void ACPI_INTERNAL_VAR_XFACE AcpiOsPrintf(const char *fmt, ...)
 {
 }

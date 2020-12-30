@@ -28,22 +28,30 @@
  * early point, things will break.
  */
 
+#define ACPI_USE_ALTERNATE_PROTOTYPE_AcpiOsGetThreadId
+#define AcpiOsGetThreadId()	((ACPI_THREAD_ID)1)
+
 #define ACPI_USE_ALTERNATE_PROTOTYPE_AcpiOsCreateSemaphore
 #define AcpiOsCreateSemaphore(max_units, ini_units, p_out_handle) \
 	({ \
 		ACPI_HANDLE *__p = (p_out_handle); \
+		(void)(max_units); \
+		(void)(ini_units); \
 		!__p ? AE_BAD_PARAMETER \
 		     : (*__p = (ACPI_HANDLE)1, AE_OK); \
 	})
 
 #define ACPI_USE_ALTERNATE_PROTOTYPE_AcpiOsDeleteSemaphore
-#define AcpiOsDeleteSemaphore(handle)	AE_OK
+#define AcpiOsDeleteSemaphore(handle) \
+	((void)(handle), AE_OK)
 
 #define ACPI_USE_ALTERNATE_PROTOTYPE_AcpiOsWaitSemaphore
-#define AcpiOsWaitSemaphore(handle, units, timeout) AE_OK
+#define AcpiOsWaitSemaphore(handle, units, timeout) \
+	((void)(handle), (void)(units), (void)(timeout), AE_OK)
 
 #define ACPI_USE_ALTERNATE_PROTOTYPE_AcpiOsSignalSemaphore
-#define AcpiOsSignalSemaphore(handle, units) AE_OK
+#define AcpiOsSignalSemaphore(handle, units) \
+	((void)(handle), (void)(units), AE_OK)
 
 #define ACPI_USE_ALTERNATE_PROTOTYPE_AcpiOsCreateLock
 #define AcpiOsCreateLock(p_out_handle) \

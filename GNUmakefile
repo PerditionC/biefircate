@@ -8,15 +8,20 @@ endif
 GNUEFISRCDIR = $(conf_Srcdir)/gnu-efi
 ACPICASRCDIR = $(conf_Srcdir)/acpica
 SPLEENSRCDIR = $(conf_Srcdir)/spleen
-CFLAGS = -pie -fPIC -ffreestanding -Os -Wall -mno-red-zone \
-    -fno-stack-protector -MMD
+#
 # The MinGW toolchain defines the macro WIN32 & friends, & this confuses
 # ACPICA.  Undefine the WIN32 macro.
+#
+# Also pre-define _CRTIMP to expand to nothing, so that <_mingw.h> does not
+# try to put __attribute__((dllimport)) on <ctype.h> function declarations.
+#
 CPPFLAGS = -I'$(abspath $(GNUEFISRCDIR))'/inc \
 	   -I'$(abspath $(GNUEFISRCDIR))'/protocol \
 	   -I'$(abspath $(GNUEFISRCDIR))'/inc/x86_64 \
 	   -iquote '$(abspath $(ACPICASRCDIR))'/source/include \
-	   -DGNU_EFI_USE_MS_ABI -UWIN32
+	   -DGNU_EFI_USE_MS_ABI -UWIN32 -D_CRTIMP=
+CFLAGS = -pie -fPIC -ffreestanding -Os -Wall -mno-red-zone \
+    -fno-stack-protector -MMD
 LDFLAGS = $(CFLAGS) -nostdlib -ffreestanding -Wl,--entry,_start \
 	  -Wl,--subsystem,10 -Wl,--strip-all -Wl,-Map=$(@:.efi=.map) \
 	  -Wl,--wrap=memcpy -Wl,--wrap=memset
@@ -39,8 +44,10 @@ endif
 
 truckload.efi: start.o efi-main.o acpi.o acpica-osl.o exit.o fb-con.o \
     font-default.o lm86-rm86.o mem-heap.o mem-map.o stage1.o stage2.o \
-    $(LIBEFI) $(LIBACPICA) crt/memcmp.o crt/memmove.o crt/memset.o \
-    crt/strlen.o truckload.ld
+    $(LIBEFI) $(LIBACPICA) \
+    crt/ctype.o crt/memcmp.o crt/memmove.o crt/memset.o \
+    crt/strcat.o crt/strcpy.o crt/strlen.o crt/strncmp.o crt/strncpy.o \
+    truckload.ld
 	$(CC) $(LDFLAGS) -o $@ $(^:%.ld=-T %.ld) $(LDLIBS)
 
 %.o: %.c $(LIBEFI) font-default.h
