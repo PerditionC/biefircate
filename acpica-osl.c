@@ -85,6 +85,23 @@ void AcpiOsFree(void *p)
 	return mem_heap_free(p);
 }
 
+void AcpiOsSleep(UINT64 ms)
+{
+	/* FIXME */
+	error(u"AcpiOsSleep");
+}
+
+void AcpiOsStall(UINT32 us)
+{
+	/* FIXME */
+	error(u"AcpiOsStall");
+}
+
+void AcpiOsWaitEventsComplete(void)
+{
+	/* nothing to do */
+}
+
 void *AcpiOsMapMemory(ACPI_PHYSICAL_ADDRESS addr, ACPI_SIZE size)
 {
 	return (void *)addr;
@@ -93,6 +110,22 @@ void *AcpiOsMapMemory(ACPI_PHYSICAL_ADDRESS addr, ACPI_SIZE size)
 void AcpiOsUnmapMemory(void *addr, ACPI_SIZE size)
 {
 	/* nothing to do */
+}
+
+ACPI_STATUS AcpiOsInstallInterruptHandler(UINT32 int_lvl,
+    ACPI_OSD_HANDLER handler, void *context)
+{
+	/* FIXME */
+	error(u"AcpiOsInstallInterruptHandler");
+	return AE_OK;
+}
+
+ACPI_STATUS AcpiOsRemoveInterruptHandler(UINT32 int_num,
+    ACPI_OSD_HANDLER handler)
+{
+	/* FIXME */
+	error(u"AcpiOsRemoveInterruptHandler");
+	return AE_OK;
 }
 
 ACPI_STATUS AcpiOsReadMemory(ACPI_PHYSICAL_ADDRESS address,
@@ -141,10 +174,101 @@ ACPI_STATUS AcpiOsWriteMemory(ACPI_PHYSICAL_ADDRESS address,
 	return AE_OK;
 }
 
+ACPI_STATUS AcpiOsReadPort(ACPI_IO_ADDRESS port, UINT32 *value, UINT32 width)
+{
+	if (!value || port > 0xffffULL)
+		return AE_BAD_PARAMETER;
+	switch (width) {
+	    case 8:
+		{
+			uint8_t v;
+			__asm volatile("in %1, %0" : "=a" (v)
+						   : "d" ((uint16_t)port));
+			*value = v;
+		}
+		break;
+	    case 16:
+		{
+			uint16_t v;
+			__asm volatile("in %1, %0" : "=a" (v)
+						   : "d" ((uint16_t)port));
+			*value = v;
+		}
+		break;
+	    case 32:
+		__asm volatile("in %1, %0" : "=a" (*value)
+					   : "d" ((uint16_t)port));
+		break;
+	    default:
+		return AE_BAD_PARAMETER;
+	}
+	return AE_OK;
+}
+
+ACPI_STATUS AcpiOsWritePort(ACPI_IO_ADDRESS port, UINT32 value, UINT32 width)
+{
+	if (!value || port > 0xffffULL)
+		return AE_BAD_PARAMETER;
+	switch (width) {
+	    case 8:
+		__asm volatile("out %0, %1" : /* no output operands */
+					    : "a" ((uint8_t)value),
+					      "d" ((uint16_t)port));
+		break;
+	    case 16:
+		__asm volatile("out %0, %1" : /* no output operands */
+					    : "a" (value),
+					      "d" ((uint16_t)port));
+		break;
+	    case 32:
+		__asm volatile("out %0, %1" : /* no output operands */
+					    : "a" (value),
+					      "d" ((uint16_t)port));
+		break;
+	    default:
+		return AE_BAD_PARAMETER;
+	}
+	return AE_OK;
+}
+
+ACPI_STATUS AcpiOsReadPciConfiguration(ACPI_PCI_ID *pci_id, UINT32 reg_num,
+    UINT64 *value, UINT32 width)
+{
+	/* FIXME */
+	error(u"AcpiOsReadPciConfiguration");
+	return AE_OK;
+}
+
+ACPI_STATUS AcpiOsWritePciConfiguration(ACPI_PCI_ID *pci_id, UINT32 reg_num,
+    UINT64 value, UINT32 width)
+{
+	/* FIXME */
+	error(u"AcpiOsWritePciConfiguration");
+	return AE_OK;
+}
+
 void ACPI_INTERNAL_VAR_XFACE AcpiOsPrintf(const char *fmt, ...)
 {
+	/* FIXME */
+	error(u"AcpiOsPrintf");
 }
 
 void AcpiOsVprintf(const char *fmt, va_list ap)
 {
+	/* FIXME */
+	error(u"AcpiOsVprintf");
+}
+
+UINT64 AcpiOsGetTimer(void)
+{
+	/* FIXME */
+	error(u"AcpiOsGetTimer");
+	return 0;
+}
+
+ACPI_STATUS AcpiOsSignal(UINT32 function, void *info)
+{
+	/* FIXME */
+	error(u"AcpiOsSignal");
+	return AE_OK;
 }

@@ -31,6 +31,14 @@
 #define ACPI_USE_ALTERNATE_PROTOTYPE_AcpiOsGetThreadId
 #define AcpiOsGetThreadId()	((ACPI_THREAD_ID)1)
 
+#define ACPI_USE_ALTERNATE_PROTOTYPE_AcpiOsExecute
+#define AcpiOsExecute(type, function, context) \
+	({ \
+		(void)(type); \
+		(function)(context); \
+		AE_OK; \
+	})
+
 #define ACPI_USE_ALTERNATE_PROTOTYPE_AcpiOsCreateSemaphore
 #define AcpiOsCreateSemaphore(max_units, ini_units, p_out_handle) \
 	({ \
