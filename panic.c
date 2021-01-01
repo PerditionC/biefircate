@@ -12,20 +12,25 @@
  * for more details.
  */
 
-#ifndef H_EFI_STUFF
-#define H_EFI_STUFF
-
-#include <efi.h>
+#include <inttypes.h>
+#include <stdarg.h>
+#include "efi-stuff.h"
 #include "truckload.h"
 
-/* mem-heap.c */
-extern void mem_heap_init(void);
+NORETURN void panic(const char *fmt, ...)
+{
+	extern const char _start[];
+	char *ra = __builtin_return_address(0);
+	va_list ap;
+	cputs("\npanic: ");
+	va_start(ap, fmt);
+	vcprintf(fmt, ap);
+	va_end(ap);
+	cprintf("\n[caller @%p (= @_start+%#tx)]", ra, (char *)ra - _start);
+	freeze();
+}
 
-/* mem-map.c */
-extern void mem_map_init(UINTN *);
-extern void stage1_done(UINTN);
-
-/* panic.c */
-extern NORETURN INIT_TEXT void panic_efi(const char *, EFI_STATUS);
-
-#endif
+NORETURN INIT_TEXT void panic_efi(const char *msg, EFI_STATUS status)
+{
+	panic("%s: EFI_STATUS %#" PRIx64, (uint64_t)status);
+}

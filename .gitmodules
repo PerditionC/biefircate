@@ -11,3 +11,6 @@
 [submodule "spleen"]
 	path = spleen
 	url = https://github.com/fcambus/spleen.git
+[submodule "nanoprintf"]
+	path = nanoprintf
+	url = https://github.com/charlesnicholson/nanoprintf.git

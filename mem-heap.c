@@ -59,8 +59,8 @@ static metadata_t metadata[HEAP_QUANTA + 1];
 
 static void mem_alloc_fail(size_t size)
 {
-	cwprintf(u"failed to allocate 0x%lx-byte block on heap\n", size);
-	error(u"not enough heap memory!");
+	panic("%s: failed to allocate %#zx-byte block on heap",
+	    __func__, size);
 }
 
 static void check_chunk_and_get_metadata(void *p, metadata_t *ip,
@@ -69,22 +69,16 @@ static void check_chunk_and_get_metadata(void *p, metadata_t *ip,
 	EFI_PHYSICAL_ADDRESS a = (EFI_PHYSICAL_ADDRESS)p;
 	metadata_t i, d;
 	if (a < heap_start || a >= heap_start + HEAP_BYTES ||
-	    a % ALLOC_QUANTUM != 0) {
-		cwprintf(u"bogus heap block address @0x%lx\n", a);
-		error(u"heap corrupt!");
-	}
+	    a % ALLOC_QUANTUM != 0)
+		panic("%s: bogus heap block address @%p", __func__, p);
 	i = (a - heap_start) / ALLOC_QUANTUM;
 	d = metadata[i];
-	if (d >= 0) {
-		cwprintf(u"bogus heap block address @0x%lx, "
-		    "metadata says %d\n", a, (INT32)d);
-		error(u"heap corrupt!");
-	}
-	if (metadata[HEAP_QUANTA] != 0) {
-		cwprintf(u"heap metadata sentinel destroyed: %d\n",
-		    (INT32)metadata[HEAP_QUANTA]);
-		error(u"heap corrupt!");
-	}
+	if (d >= 0)
+		panic("%s: bogus heap block address @%p, "
+		      "metadata says %d", __func__, a, (int)d);
+	if (metadata[HEAP_QUANTA] != 0)
+		panic("%s: heap metadata sentinel destroyed: %d",
+		    __func__, (int)metadata[HEAP_QUANTA]);
 	*ip = i;
 	*dp = d;
 }
@@ -105,10 +99,9 @@ void mem_heap_init(void)
 	EFI_STATUS status = BS->AllocatePages(AllocateAnyPages, EfiLoaderData,
 	    HEAP_PAGES, &heap_start);
 	if (EFI_ERROR(status))
-		error_with_status(u"cannot reserve memory for internal heap",
-		    status);
-	cwprintf(u"using @0x%lx--@0x%lx for internal heap\n",
-	    heap_start, heap_start + HEAP_BYTES - 1);
+		panic_efi("cannot reserve memory for internal heap", status);
+	cprintf("using @%p--@%p for internal heap\n",
+	    (void *)heap_start, (void *)(heap_start + HEAP_BYTES - 1));
 	memset(metadata, 0, sizeof metadata);
 	metadata[0] = HEAP_QUANTA;
 }
@@ -131,15 +124,16 @@ void *mem_heap_alloc(size_t size)
 			}
 			metadata[i] = -q;
 			return (void *)(heap_start +
-					   (size_t)i * EFI_PAGE_SIZE);
+					   (size_t)i * ALLOC_QUANTUM);
 		}
 		if (d > 0)
 			i += d;
 		else if (d < 0)
 			i -= d;
 		else {
-			cwprintf(u"heap metadata element %u is 0?", (UINT32)i);
-			error(u"heap corrupt!");
+			cprintf("heap metadata element %u is 0?",
+			    (unsigned)i);
+			panic("heap corrupt!");
 		}
 	}
 	mem_alloc_fail(size);

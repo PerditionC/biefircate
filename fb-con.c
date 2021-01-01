@@ -1,7 +1,23 @@
+/*
+ * Copyright (c) 2020--2021 TK Chia
+ *
+ * This file is free software; you can redistribute it and/or modify it under
+ * the terms of the GNU General Public License as published by the Free
+ * Software Foundation; either version 2 of the License, or (at your option)
+ * any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
+ * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+ * for more details.
+ */
+
 #include <efi.h>
 #include <efilib.h>
 #include <inttypes.h>
 #include <stdarg.h>
+#include <stdbool.h>
+#include <stdlib.h>
 #include <string.h>
 #include "efi-stuff.h"
 #include "truckload.h"
@@ -32,21 +48,20 @@ typedef volatile union {
 	uint32_t a32[1];
 } fb_t;
 
-static EFI_STATUS proto_output_string(IN EFI_SIMPLE_TEXT_OUT_PROTOCOL *,
-				      IN CHAR16 *);
-
-static EFI_SIMPLE_TEXT_OUT_PROTOCOL our_txop, *orig_txop = NULL;
 static EFI_GRAPHICS_OUTPUT_PROTOCOL *gfxop;
 static UINT32 orig_mode;
-static UINT32 text_width, text_height, pix_width, pix_height,
+static UINT32 text_width, text_height, pix_width, pix_vis_width, pix_height,
 	      red_mask, green_mask, blue_mask, curr_bg = 0, curr_fg = 0,
-	      pixel_octets;
+	      pixel_octets = 0;
 static fb_t *frame_buf;
 static unsigned curr_row = 0, curr_col = 0;
 
-static void splash(void)
+static void splash(bool use_fb_p)
 {
-	Output(u".:. " PACKAGE_NAME " " PACKAGE_VERSION " .:.\r\n");
+	if (use_fb_p)
+		cputws(u".:. " PACKAGE_NAME " " PACKAGE_VERSION " .:.\r\n");
+	else
+		Output(u".:. " PACKAGE_NAME " " PACKAGE_VERSION " .:.\r\n");
 }
 
 static void dump_mode_info(UINT32 mode_num,
@@ -85,13 +100,6 @@ static void wait_1_second(void)
 	if (EFI_ERROR(status))
 		return;
 	BS->WaitForEvent(1, &timer_event, &index);
-}
-
-static EFI_STATUS EFIAPI proto_output_string
-    (IN EFI_SIMPLE_TEXT_OUT_PROTOCOL *this, IN CHAR16 *string)
-{
-	cputws(string);
-	return 0;
 }
 
 static const uint8_t *find_glyph(char16_t ch)
@@ -244,6 +252,12 @@ static void putwch_default(char16_t ch)
 		fb_con_nl();
 }
 
+static void early_panic(IN CONST CHAR16 *msg, EFI_STATUS status)
+{
+	Print(u"\r\npanic: %s: 0x%lx", msg, (UINT16)status);
+	freeze();
+}
+
 /* Initialize the frame buffer console. */
 INIT_TEXT void fb_con_init(void)
 {
@@ -253,11 +267,11 @@ INIT_TEXT void fb_con_init(void)
 	UINT32 all_mask;
 
 	/* Find a good graphics mode to switch to. */
-	splash();
+	splash(false);
 	status = BS->LocateProtocol(&gEfiGraphicsOutputProtocolGuid,
 	    NULL, (void **)&gfxop);
 	if (EFI_ERROR(status))
-		error_with_status(u"cannot get EFI_GRAPHICS_OUTPUT_PROTOCOL",
+		early_panic(u"cannot get EFI_GRAPHICS_OUTPUT_PROTOCOL",
 		    status);
 	orig_mode = gfxop->Mode->Mode;
 	Print(u"current UEFI graphics mode: 0x%x\r\n"
@@ -307,7 +321,7 @@ INIT_TEXT void fb_con_init(void)
 	}
 	Output(u"\r\n");
 	if (best_mode_num == max_mode_num)
-		error(u"no suitable graphics mode to switch to!");
+		early_panic(u"no suitable graphics mode to switch to!", 0);
 
 	/* Switch to the new graphics mode. */
 	Print(u"switching to mode 0x%x in 3", best_mode_num);
@@ -317,13 +331,12 @@ INIT_TEXT void fb_con_init(void)
 	Output(u" 1");
 	wait_1_second();
 	status = gfxop->SetMode(gfxop, best_mode_num);
-	if (EFI_ERROR(status)) {
-		Output(u"\r\n");
-		error_with_status(u"cannot set graphics mode", status);
-	}
+	if (EFI_ERROR(status))
+		early_panic(u"cannot set graphics mode", status);
 
 	/* Set things up for frame buffer console output. */
 	pix_width = best_info.PixelsPerScanLine;
+	pix_vis_width = best_info.HorizontalResolution;
 	pix_height = best_info.VerticalResolution;
 	text_width = pix_width / FONT_DEFAULT_WIDTH;
 	text_height = pix_height / FONT_DEFAULT_HEIGHT;
@@ -360,55 +373,31 @@ INIT_TEXT void fb_con_init(void)
 		  (((uint64_t)green_mask * 2 / 3) & green_mask) |
 		  (((uint64_t)blue_mask  * 2 / 3) & blue_mask);
 
-	/* Hook up our frame buffer console output routine. */
-	fb_con_instate();
-	splash();
-
 	/* Start using our own console output functions to spew some stuff. */
-	cwprintf(u"now using frame buffer console @0x%lx, "
-		  "text %u*%u, pixels %u*%u, %u octet%s/pixel\n",
-	    (UINT64)frame_buf, text_width, text_height, pix_width, pix_height,
-	    pixel_octets, pixel_octets == 1 ? u"" : u"s");
+	splash(true);
+	cprintf("now using frame buffer console @%p, "
+		"text %" PRIu32 "*%" PRIu32 ", pixels %" PRIu32,
+	    frame_buf, text_width, text_height, pix_width);
+	if (pix_vis_width != pix_width)
+		cprintf("{%" PRIu32 "}", pix_vis_width);
+	cprintf("*%" PRIu32 ", %" PRIu32 " octet%s/pixel\n",
+	    pix_height, pixel_octets, pixel_octets == 1 ? "" : "s");
 }
 
-/*
- * Replace ST->ConOut (or parts of it) with our own implementation.  Remember
- * to back up the old ST->ConOut so that we can restore it if this loader
- * fails.
- */
-void fb_con_instate(void)
+/* Say whether the frame buffer console has been set up. */
+INIT_TEXT bool fb_con_up_p(void)
 {
-	if (ST->ConOut && ST->ConOut != &our_txop) {
-		orig_txop = ST->ConOut;
-		our_txop = *ST->ConOut;
-	}
-	our_txop.OutputString = proto_output_string;
-	ST->ConOut = &our_txop;
+	return pixel_octets != 0;
 }
 
 /* Undo the frame buffer console set up (in case of a loader error). */
-void fb_con_exit(void)
+INIT_TEXT void fb_con_exit(void)
 {
-	if (orig_txop) {
-		EFI_SIMPLE_TEXT_OUT_PROTOCOL *txop = orig_txop;
-		ST->ConOut = txop;
+	if (pixel_octets && BS) {
+		pixel_octets = 0;
 		gfxop->SetMode(gfxop, orig_mode);
-		txop->Reset(txop, TRUE);
+		ST->ConOut->Reset(ST->ConOut, TRUE);
 	}
-}
-
-/*
- * Do formatted output to the frame buffer console.  As a quick hack, reuse
- * the GNU EFI code to do this...
- */
-int cwprintf(const char16_t *fmt, ...)
-{
-	va_list ap;
-	int res;
-	va_start(ap, fmt);
-	res = (int)VPrint(fmt, ap);
-	va_end(ap);
-	return res;
 }
 
 /*
@@ -444,4 +433,25 @@ void cputws(const char16_t *str)
 	char16_t ch;
 	while ((ch = *str++) != 0)
 		putwch(ch);
+}
+
+void cnputs(const char *str, size_t n)
+{
+	int nc;
+	wchar_t ch;
+	while (n != 0) {
+		nc = mbtowc(&ch, str, n);
+		if (nc <= 0) {
+			ch = 0xfffd;
+			nc = 1;
+		}
+		n -= nc;
+		str += nc;
+		putwch(ch);
+	}
+}
+
+void cputs(const char *str)
+{
+	cnputs(str, strlen(str));
 }

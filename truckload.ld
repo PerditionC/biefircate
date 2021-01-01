@@ -15,7 +15,7 @@
 SECTIONS
 {
 	/* Initialization text. */
-	.text.i :
+	.text.i : ALIGN(__section_alignment__)
 	{
 		*(.text.i .text.i.*)
 	}
@@ -25,7 +25,7 @@ INSERT AFTER .text;
 SECTIONS
 {
 	/* Initialization data. */
-	.data.i :
+	.data.i : ALIGN(__section_alignment__)
 	{
 		*(.data.i .data.i.*)
 	}

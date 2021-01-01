@@ -1,3 +1,17 @@
+/*
+ * Copyright (c) 2020--2021 TK Chia
+ *
+ * This file is free software; you can redistribute it and/or modify it under
+ * the terms of the GNU General Public License as published by the Free
+ * Software Foundation; either version 2 of the License, or (at your option)
+ * any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
+ * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+ * for more details.
+ */
+
 #include <efi.h>
 #include <efilib.h>
 #include "efi-stuff.h"
@@ -77,14 +91,14 @@ void mem_map_init(UINTN *mem_map_key)
 	desc = LibMemoryMap(&num_entries, mem_map_key, &desc_sz, &desc_ver);
 	PoolAllocationType = save_pool_alloc_type;
 	if (!num_entries || !desc_sz)
-		error(u"cannot get memory map!");
+		panic("cannot get memory map!");
 
 	/* We got the memory map.  Dump it. */
 	addr1 = (UINT64)&desc_ver;
 	__asm volatile("movq %%cr3, %0" : "=r" (addr2));
 	addr2 &= 0x000ffffffffff000ULL;
-	cputws(u"mem. map below 16 MiB:\n"
-		"  start     end       type attrs\n");
+	cputs("mem. map below 16 MiB:\n"
+	      "  start     end       type attrs\n");
 	while (num_entries-- != 0) {
 		EFI_PHYSICAL_ADDRESS start = desc->PhysicalStart,
 		    end = start + desc->NumberOfPages * EFI_PAGE_SIZE;
@@ -94,10 +108,13 @@ void mem_map_init(UINTN *mem_map_key)
 		if (start <= addr2 && addr2 < end)
 			ty2 = type;
 		if (start < 0xffffffULL)
-			cwprintf(u"  @0x%06lx @0x%06lx%c%4u 0x%016lx\n", start,
+			cprintf("  @0x%06" PRIx64 " @0x%06" PRIx64 "%c"
+				"%4u 0x%016" PRIx64 "\n",
+			    start,
 			    end > 0x1000000ULL ? (UINT64)0x1000000ULL - 1
 					       : end - 1,
-			    end > 0x1000000ULL ? u'+' : u' ', type,
+			    end > 0x1000000ULL ? '+' : ' ',
+			    type,
 			    desc->Attribute);
 		switch (type) {
 		    default:
@@ -114,20 +131,20 @@ void mem_map_init(UINTN *mem_map_key)
 	}
 
 	if (mem20_end)
-		cwprintf(u"available base mem. spans @0x%lx--@0x%lx\n",
-		    mem20_start, mem20_end - 1);
+		cprintf("available base mem. spans @%p--@%p\n",
+		    (char *)mem20_start, (char *)mem20_end - 1);
 	if (mem32_end)
-		cwprintf(u"available 32-bit ext. mem. spans @0x%lx--@0x%lx\n",
-		    mem32_start, mem32_end - 1);
+		cprintf("available 32-bit ext. mem. spans @%p--@%p\n",
+		    (char *)mem32_start, (char *)mem32_end - 1);
 	if (mem64_end)
-		cwprintf(u"available 64-bit ext. mem. spans @0x%lx--@0x%lx\n",
-		    mem64_start, mem64_end - 1);
+		cprintf("available 64-bit ext. mem. spans @%p--@%p\n",
+		    (char *)mem64_start, (char *)mem64_end - 1);
 	if (ty1 != EfiMaxMemoryType)
-		cwprintf(u"loader stack mem. (@0x%lx) is type %u\n",
-		    addr1, ty1);
+		cprintf("loader stack mem. (@%p) is type %u\n",
+		    (void *)addr1, ty1);
 	if (ty2 != EfiMaxMemoryType)
-		cwprintf(u"page dir. mem. (@0x%lx) is type %u\n",
-		    addr2, ty2);
+		cprintf("page dir. mem. (@%p) is type %u\n",
+		    (void *)addr2, ty2);
 }
 
 void stage1_done(UINTN mem_map_key)
@@ -144,8 +161,8 @@ void stage1_done(UINTN mem_map_key)
 	EFI_STATUS status = BS->ExitBootServices(LibImageHandle, mem_map_key);
 	UINT64 reserved_base_mem;
 	if (EFI_ERROR(status))
-		error_with_status(u"cannot exit UEFI boot services", status);
-	fb_con_instate();
+		panic("cannot exit UEFI boot services", status);
+	BS = NULL;
 	reserved_base_mem = carve_out_base_mem(1);
 	lm86_rm86_init((uint16_t)(reserved_base_mem >> 4));
 }

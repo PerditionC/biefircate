@@ -88,13 +88,13 @@ void AcpiOsFree(void *p)
 void AcpiOsSleep(UINT64 ms)
 {
 	/* FIXME */
-	error(u"AcpiOsSleep");
+	panic("AcpiOsSleep");
 }
 
 void AcpiOsStall(UINT32 us)
 {
 	/* FIXME */
-	error(u"AcpiOsStall");
+	panic("AcpiOsStall");
 }
 
 void AcpiOsWaitEventsComplete(void)
@@ -116,7 +116,7 @@ ACPI_STATUS AcpiOsInstallInterruptHandler(UINT32 int_lvl,
     ACPI_OSD_HANDLER handler, void *context)
 {
 	/* FIXME */
-	error(u"AcpiOsInstallInterruptHandler");
+	panic("AcpiOsInstallInterruptHandler");
 	return AE_OK;
 }
 
@@ -124,7 +124,7 @@ ACPI_STATUS AcpiOsRemoveInterruptHandler(UINT32 int_num,
     ACPI_OSD_HANDLER handler)
 {
 	/* FIXME */
-	error(u"AcpiOsRemoveInterruptHandler");
+	panic("AcpiOsRemoveInterruptHandler");
 	return AE_OK;
 }
 
@@ -235,7 +235,7 @@ ACPI_STATUS AcpiOsReadPciConfiguration(ACPI_PCI_ID *pci_id, UINT32 reg_num,
     UINT64 *value, UINT32 width)
 {
 	/* FIXME */
-	error(u"AcpiOsReadPciConfiguration");
+	panic("AcpiOsReadPciConfiguration");
 	return AE_OK;
 }
 
@@ -243,32 +243,33 @@ ACPI_STATUS AcpiOsWritePciConfiguration(ACPI_PCI_ID *pci_id, UINT32 reg_num,
     UINT64 value, UINT32 width)
 {
 	/* FIXME */
-	error(u"AcpiOsWritePciConfiguration");
+	panic("AcpiOsWritePciConfiguration");
 	return AE_OK;
 }
 
 void ACPI_INTERNAL_VAR_XFACE AcpiOsPrintf(const char *fmt, ...)
 {
-	/* FIXME */
-	error(u"AcpiOsPrintf");
+	va_list ap;
+	va_start(ap, fmt);
+	vcprintf(fmt, ap);
+	va_end(ap);
 }
 
 void AcpiOsVprintf(const char *fmt, va_list ap)
 {
-	/* FIXME */
-	error(u"AcpiOsVprintf");
+	vcprintf(fmt, ap);
 }
 
 UINT64 AcpiOsGetTimer(void)
 {
 	/* FIXME */
-	error(u"AcpiOsGetTimer");
+	panic("AcpiOsGetTimer");
 	return 0;
 }
 
 ACPI_STATUS AcpiOsSignal(UINT32 function, void *info)
 {
 	/* FIXME */
-	error(u"AcpiOsSignal");
+	panic("AcpiOsSignal");
 	return AE_OK;
 }

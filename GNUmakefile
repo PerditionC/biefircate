@@ -1,3 +1,15 @@
+# Copyright (c) 2020--2021 TK Chia
+#
+# This file is free software; you can redistribute it and/or modify it under
+# the terms of the GNU General Public License as published by the Free
+# Software Foundation; either version 2 of the License, or (at your option)
+# any later version.
+#
+# This program is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
+# or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+# for more details.
+
 ifeq "" "$(wildcard config.cache)"
 $(error you must configure this project first!)
 endif
@@ -15,11 +27,13 @@ SPLEENSRCDIR = $(conf_Srcdir)/spleen
 # Also pre-define _CRTIMP to expand to nothing, so that <_mingw.h> does not
 # try to put __attribute__((dllimport)) on <ctype.h> function declarations.
 #
+# And, predefine __USE_MINGW_ANSI_STDIO so that PRIx64 etc. are defined right.
+#
 CPPFLAGS = -I'$(abspath $(GNUEFISRCDIR))'/inc \
 	   -I'$(abspath $(GNUEFISRCDIR))'/protocol \
 	   -I'$(abspath $(GNUEFISRCDIR))'/inc/x86_64 \
 	   -iquote '$(abspath $(ACPICASRCDIR))'/source/include \
-	   -DGNU_EFI_USE_MS_ABI -UWIN32 -D_CRTIMP=
+	   -DGNU_EFI_USE_MS_ABI -UWIN32 -D_CRTIMP= -D__USE_MINGW_ANSI_STDIO
 CFLAGS = -pie -fPIC -ffreestanding -Os -Wall -mno-red-zone \
     -fno-stack-protector -MMD
 LDFLAGS = $(CFLAGS) -nostdlib -ffreestanding -Wl,--entry,_start \
@@ -42,10 +56,10 @@ truckload.signed.efi: truckload.efi
 	       --output $@ $<
 endif
 
-truckload.efi: start.o efi-main.o acpi.o acpica-osl.o exit.o fb-con.o \
-    font-default.o lm86-rm86.o mem-heap.o mem-map.o stage1.o stage2.o \
-    $(LIBEFI) $(LIBACPICA) \
-    crt/ctype.o crt/memcmp.o crt/memmove.o crt/memset.o \
+truckload.efi: start.o efi-main.o acpi.o acpica-osl.o fb-con.o \
+    fb-con-cprintf.o font-default.o lm86-rm86.o mem-heap.o mem-map.o \
+    panic.o stage1.o stage2.o $(LIBEFI) $(LIBACPICA) \
+    crt/ctype.o crt/mbtowc.o crt/memcmp.o crt/memmove.o crt/memset.o \
     crt/strcat.o crt/strcpy.o crt/strlen.o crt/strncmp.o crt/strncpy.o \
     truckload.ld
 	$(CC) $(LDFLAGS) -o $@ $(^:%.ld=-T %.ld) $(LDLIBS)
@@ -99,8 +113,8 @@ endif
 .PHONY: distclean
 
 clean:
-	$(RM) *.[oda] crt/*.o *.so *.efi *.map \
-	    font-default.c font-default.h *~
+	$(RM) *.[oda] crt/*.[oda] *.so *.efi *.map \
+	    font-default.c font-default.h *~ crt/*~
 ifeq "$(conf_Separate_build_dir)" "yes"
 	$(RM) -r gnu-efi acpica
 else
