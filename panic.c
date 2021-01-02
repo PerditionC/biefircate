@@ -19,14 +19,16 @@
 
 NORETURN void panic(const char *fmt, ...)
 {
-	extern const char _start[];
+	extern EFI_STATUS _start(EFI_HANDLE, EFI_SYSTEM_TABLE *);
 	char *ra = __builtin_return_address(0);
 	va_list ap;
-	cputs("\npanic: ");
+	textcolor(WHITE);
+	cputs("panic: ");
 	va_start(ap, fmt);
 	vcprintf(fmt, ap);
 	va_end(ap);
-	cprintf("\n[caller @%p (= @_start+%#tx)]", ra, (char *)ra - _start);
+	cprintf("\n[caller @%p (= @%p+%#tx)]",
+	    ra, _start, (char *)ra - (char *)_start);
 	freeze();
 }
 

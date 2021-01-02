@@ -25,6 +25,14 @@
 #define INIT_DATA	__attribute__((section(".data.i")))
 #define NORETURN	__attribute__((noreturn))
 
+enum COLORS
+{
+	BLACK, BLUE, GREEN, CYAN,
+	RED, MAGENTA, BROWN, LIGHTGRAY,
+	DARKGRAY, LIGHTBLUE, LIGHTGREEN, LIGHTCYAN,
+	LIGHTRED, LIGHTMAGENTA, YELLOW, WHITE
+};
+
 static inline NORETURN void freeze(void)
 {
 	__asm volatile("cli; "
@@ -45,6 +53,7 @@ extern void putwch(char16_t);
 extern void cputws(const char16_t *);
 extern void cnputs(const char *, size_t);
 extern void cputs(const char *);
+extern enum COLORS textcolor(enum COLORS);
 
 /* fb-con-cprintf.c */
 extern void vcprintf(const char *, va_list);

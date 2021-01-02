@@ -81,4 +81,10 @@ INIT_TEXT void acpi_init(const void *p)
 	status = AcpiLoadTables();
 	if (ACPI_FAILURE(status))
 		panic_acpi("AcpiLoadTables failed", status);
+	status = AcpiEnableSubsystem(ACPI_FULL_INITIALIZATION);
+	if (ACPI_FAILURE(status))
+		panic_acpi("AcpiEnableSubsystem failed", status);
+	status = AcpiInitializeObjects(ACPI_FULL_INITIALIZATION);
+	if (ACPI_FAILURE(status))
+		panic_acpi("AcpiInitializeObjects failed", status);
 }

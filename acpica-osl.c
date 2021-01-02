@@ -249,15 +249,19 @@ ACPI_STATUS AcpiOsWritePciConfiguration(ACPI_PCI_ID *pci_id, UINT32 reg_num,
 
 void ACPI_INTERNAL_VAR_XFACE AcpiOsPrintf(const char *fmt, ...)
 {
+	enum COLORS old_colour = textcolor(BROWN);
 	va_list ap;
 	va_start(ap, fmt);
 	vcprintf(fmt, ap);
 	va_end(ap);
+	textcolor(old_colour);
 }
 
 void AcpiOsVprintf(const char *fmt, va_list ap)
 {
+	enum COLORS old_colour = textcolor(BROWN);
 	vcprintf(fmt, ap);
+	textcolor(old_colour);
 }
 
 UINT64 AcpiOsGetTimer(void)

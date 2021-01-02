@@ -48,6 +48,24 @@ typedef volatile union {
 	uint32_t a32[1];
 } fb_t;
 
+static const struct { uint8_t b, g, r; } colour_mapping[] = {
+	[BLACK]		= { 0x00, 0x00, 0x00 },
+	[BLUE]		= { 0xaa, 0x00, 0x00 },
+	[GREEN]		= { 0x00, 0xaa, 0x00 },
+	[CYAN]		= { 0xaa, 0xaa, 0x00 },
+	[RED]		= { 0x00, 0x00, 0xaa },
+	[MAGENTA]	= { 0xaa, 0x00, 0xaa },
+	[BROWN]		= { 0x00, 0x55, 0xaa },
+	[LIGHTGRAY]	= { 0xaa, 0xaa, 0xaa },
+	[DARKGRAY]	= { 0x55, 0x55, 0x55 },
+	[LIGHTBLUE]	= { 0xff, 0x55, 0x55 },
+	[LIGHTGREEN]	= { 0x55, 0xff, 0x55 },
+	[LIGHTCYAN]	= { 0xff, 0xff, 0x55 },
+	[LIGHTRED]	= { 0x55, 0x55, 0xff },
+	[LIGHTMAGENTA]	= { 0xff, 0x55, 0xff },
+	[YELLOW]	= { 0x55, 0xff, 0xff },
+	[WHITE]		= { 0xff, 0xff, 0xff },
+};
 static EFI_GRAPHICS_OUTPUT_PROTOCOL *gfxop;
 static UINT32 orig_mode;
 static UINT32 text_width, text_height, pix_width, pix_vis_width, pix_height,
@@ -369,9 +387,7 @@ INIT_TEXT void fb_con_init(void)
 		else
 			pixel_octets = 4;
 	}
-	curr_fg = (((uint64_t)red_mask   * 2 / 3) & red_mask) |
-		  (((uint64_t)green_mask * 2 / 3) & green_mask) |
-		  (((uint64_t)blue_mask  * 2 / 3) & blue_mask);
+	textcolor(LIGHTGRAY);
 
 	/* Start using our own console output functions to spew some stuff. */
 	splash(true);
@@ -454,4 +470,19 @@ void cnputs(const char *str, size_t n)
 void cputs(const char *str)
 {
 	cnputs(str, strlen(str));
+}
+
+/* Set the foreground colour for text. */
+enum COLORS textcolor(enum COLORS colour)
+{
+	static enum COLORS save_colour = BLACK;
+	enum COLORS old_colour = save_colour;
+	save_colour = colour;
+	uint8_t red_share   = colour_mapping[colour].r;
+	uint8_t green_share = colour_mapping[colour].g;
+	uint8_t blue_share  = colour_mapping[colour].b;
+	curr_fg = (((uint64_t)red_mask   * red_share   / 0xff) & red_mask) |
+		  (((uint64_t)green_mask * green_share / 0xff) & green_mask) |
+		  (((uint64_t)blue_mask  * blue_share  / 0xff) & blue_mask);
+	return old_colour;
 }
