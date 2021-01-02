@@ -17,8 +17,7 @@
 	.globl	strcmp
 	.globl	strncmp
 strcmp:
-	stc
-	sbbq	%r8, %r8
+	orq	$-1, %r8
 strncmp:
 	pushq	%rsi			/* preserve %rsi & %rdi */
 	pushq	%rdi

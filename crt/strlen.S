@@ -18,8 +18,7 @@
 strlen:
 	pushq	%rdi			/* preserve %rdi */
 	movq	%rcx, %rdi		/* load registers for a scan */
-	stc
-	sbbq	%rcx, %rcx
+	orq	$-1, %rcx
 	xorb	%al, %al
 	repnz scasb			/* scan */
 	leaq	2(%rcx), %rax		/* compute string length from */

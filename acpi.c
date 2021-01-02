@@ -34,7 +34,8 @@ static const ACPI_TABLE_XSDT *acpi_xsdt = NULL;
 
 static NORETURN void panic_acpi(const char *msg, ACPI_STATUS status)
 {
-	panic("%s: ACPI_STATUS %#" PRIx32, msg, (uint32_t)status);
+	panic_with_caller(__builtin_return_address(0),
+	    "%s: ACPI_STATUS %#" PRIx32, msg, (uint32_t)status);
 }
 
 static INIT_TEXT void process_xsdt(void)

@@ -32,7 +32,7 @@
 #if EFI_PAGE_SIZE % ALLOC_QUANTUM != 0
 #   error "dynamic memory allocation quantum does not align with page size...?"
 #endif
-#define HEAP_PAGES		DIV_ROUND_UP(0x10000, EFI_PAGE_SIZE)
+#define HEAP_PAGES		DIV_ROUND_UP(0x40000, EFI_PAGE_SIZE)
 #define HEAP_BYTES		(HEAP_PAGES * EFI_PAGE_SIZE)
 #define HEAP_QUANTA		(HEAP_BYTES / ALLOC_QUANTUM)
 #if HEAP_BYTES / ALLOC_QUANTUM <= 0x7fULL

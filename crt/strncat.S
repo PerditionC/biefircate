@@ -15,22 +15,29 @@
 /* Naive implementation of strcat(, ). */
 
 	.globl	strcat
+	.globl	strncat
 strcat:
+	orq	$-1, %r8
+strncat:
 	pushq	%rsi			/* preserve %rsi & %rdi */
 	pushq	%rdi
+	pushq	%rcx
 	movq	%rcx, %rdi		/* load registers */
 	movq	%rdx, %rsi
-	stc				/* scan for end of dest. string */
-	sbbq	%rcx, %rcx
+	orq	$-1, %rcx		/* scan for end of dest. string */
 	xorb	%al, %al
 	repnz scasb
 	decq	%rdi
+	movq	%r8, %rcx
 0:					/* copy */
 	lodsb
 	stosb
 	testb	%al, %al
-	jnz	0b
-	xchgq	%rcx, %rax		/* return the destination pointer */
+	loopnz	0b
+	jz	1f
+	mov	%cl, (%rdi)		/* make sure dest. has null byte */
+1:
+	popq	%rax			/* return the destination pointer */
 	popq	%rdi			/* restore %rsi & %rdi */
 	popq	%rsi
 	retq

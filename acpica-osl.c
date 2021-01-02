@@ -88,13 +88,13 @@ void AcpiOsFree(void *p)
 void AcpiOsSleep(UINT64 ms)
 {
 	/* FIXME */
-	panic("AcpiOsSleep");
+	panic_with_caller(__builtin_return_address(0), "AcpiOsSleep");
 }
 
 void AcpiOsStall(UINT32 us)
 {
 	/* FIXME */
-	panic("AcpiOsStall");
+	panic_with_caller(__builtin_return_address(0), "AcpiOsStall");
 }
 
 void AcpiOsWaitEventsComplete(void)
@@ -116,7 +116,8 @@ ACPI_STATUS AcpiOsInstallInterruptHandler(UINT32 int_lvl,
     ACPI_OSD_HANDLER handler, void *context)
 {
 	/* FIXME */
-	panic("AcpiOsInstallInterruptHandler");
+	panic_with_caller(__builtin_return_address(0),
+	    "AcpiOsInstallInterruptHandler");
 	return AE_OK;
 }
 
@@ -124,7 +125,8 @@ ACPI_STATUS AcpiOsRemoveInterruptHandler(UINT32 int_num,
     ACPI_OSD_HANDLER handler)
 {
 	/* FIXME */
-	panic("AcpiOsRemoveInterruptHandler");
+	panic_with_caller(__builtin_return_address(0),
+	    "AcpiOsRemoveInterruptHandler");
 	return AE_OK;
 }
 
@@ -207,7 +209,7 @@ ACPI_STATUS AcpiOsReadPort(ACPI_IO_ADDRESS port, UINT32 *value, UINT32 width)
 
 ACPI_STATUS AcpiOsWritePort(ACPI_IO_ADDRESS port, UINT32 value, UINT32 width)
 {
-	if (!value || port > 0xffffULL)
+	if (port > 0xffffULL)
 		return AE_BAD_PARAMETER;
 	switch (width) {
 	    case 8:
@@ -235,7 +237,8 @@ ACPI_STATUS AcpiOsReadPciConfiguration(ACPI_PCI_ID *pci_id, UINT32 reg_num,
     UINT64 *value, UINT32 width)
 {
 	/* FIXME */
-	panic("AcpiOsReadPciConfiguration");
+	panic_with_caller(__builtin_return_address(0),
+	    "AcpiOsReadPciConfiguration");
 	return AE_OK;
 }
 
@@ -243,7 +246,8 @@ ACPI_STATUS AcpiOsWritePciConfiguration(ACPI_PCI_ID *pci_id, UINT32 reg_num,
     UINT64 value, UINT32 width)
 {
 	/* FIXME */
-	panic("AcpiOsWritePciConfiguration");
+	panic_with_caller(__builtin_return_address(0),
+	    "AcpiOsWritePciConfiguration");
 	return AE_OK;
 }
 
@@ -267,13 +271,13 @@ void AcpiOsVprintf(const char *fmt, va_list ap)
 UINT64 AcpiOsGetTimer(void)
 {
 	/* FIXME */
-	panic("AcpiOsGetTimer");
+	panic_with_caller(__builtin_return_address(0), "AcpiOsGetTimer");
 	return 0;
 }
 
 ACPI_STATUS AcpiOsSignal(UINT32 function, void *info)
 {
 	/* FIXME */
-	panic("AcpiOsSignal");
+	panic_with_caller(__builtin_return_address(0), "AcpiOsSignal");
 	return AE_OK;
 }

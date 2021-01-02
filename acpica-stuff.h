@@ -25,6 +25,7 @@
 #define ACPI_INTERNAL_VAR_XFACE
 #define ACPI_INIT_FUNCTION	INIT_TEXT
 #define ACPI_USE_LOCAL_CACHE
+#define ACPI_DEBUG_OUTPUT
 
 /* Also include inline functions. */
 #include "acpica-osl-inl.h"

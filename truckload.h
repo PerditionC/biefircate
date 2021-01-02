@@ -65,6 +65,8 @@ extern void mem_heap_free(void *);
 extern void *mem_heap_realloc(void *, size_t);
 
 /* panic.c */
+extern NORETURN void vpanic_with_caller(void *, const char *, va_list);
+extern NORETURN void panic_with_caller(void *, const char *, ...);
 extern NORETURN void panic(const char *, ...);
 
 /* stage1.c */

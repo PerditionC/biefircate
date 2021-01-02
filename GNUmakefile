@@ -60,7 +60,7 @@ truckload.efi: start.o efi-main.o acpi.o acpica-osl.o fb-con.o \
     fb-con-cprintf.o font-default.o lm86-rm86.o mem-heap.o mem-map.o \
     panic.o stage1.o stage2.o $(LIBEFI) $(LIBACPICA) \
     crt/ctype.o crt/mbtowc.o crt/memcmp.o crt/memmove.o crt/memset.o \
-    crt/strcat.o crt/strcpy.o crt/strlen.o crt/strncmp.o crt/strncpy.o \
+    crt/strcpy.o crt/strlen.o crt/strncat.o crt/strncmp.o crt/strncpy.o \
     truckload.ld
 	$(CC) $(LDFLAGS) -o $@ $(^:%.ld=-T %.ld) $(LDLIBS)
 
@@ -102,7 +102,7 @@ $(LIBACPICA): $(ACPICAOBJS)
 	mv $@.tmp $@
 
 $(ACPICAOBJS) : %.o: %.c acpica-osl-inl.h
-$(ACPICAOBJS) : CPPFLAGS += -DACPI_USE_LOCAL_CACHE \
+$(ACPICAOBJS) : CPPFLAGS += -DACPI_USE_LOCAL_CACHE -DACPI_DEBUG_OUTPUT \
 			    -include $(conf_Srcdir)/acpica-osl-inl.h
 
 distclean: clean

@@ -17,22 +17,34 @@
 #include "efi-stuff.h"
 #include "truckload.h"
 
-NORETURN void panic(const char *fmt, ...)
+NORETURN void vpanic_with_caller(void *caller, const char *fmt, va_list ap)
 {
 	extern EFI_STATUS _start(EFI_HANDLE, EFI_SYSTEM_TABLE *);
-	char *ra = __builtin_return_address(0);
-	va_list ap;
 	textcolor(WHITE);
 	cputs("panic: ");
-	va_start(ap, fmt);
 	vcprintf(fmt, ap);
 	va_end(ap);
-	cprintf("\n[caller @%p (= @%p+%#tx)]",
-	    ra, _start, (char *)ra - (char *)_start);
+	cprintf("\n[caller @%p = _start+%#tx]",
+	    caller, (char *)caller - (char *)_start);
 	freeze();
+}
+
+NORETURN void panic_with_caller(void *caller, const char *fmt, ...)
+{
+	va_list ap;
+	va_start(ap, fmt);
+	vpanic_with_caller(caller, fmt, ap);
+}
+
+NORETURN void panic(const char *fmt, ...)
+{
+	va_list ap;
+	va_start(ap, fmt);
+	vpanic_with_caller(__builtin_return_address(0), fmt, ap);
 }
 
 NORETURN INIT_TEXT void panic_efi(const char *msg, EFI_STATUS status)
 {
-	panic("%s: EFI_STATUS %#" PRIx64, (uint64_t)status);
+	panic_with_caller(__builtin_return_address(0),
+	    "%s: EFI_STATUS %#" PRIx64, msg, (uint64_t)status);
 }
