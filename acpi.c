@@ -38,9 +38,34 @@ static NORETURN void panic_acpi(const char *msg, ACPI_STATUS status)
 	    "%s: ACPI_STATUS %#" PRIx32, msg, (uint32_t)status);
 }
 
+static INIT_TEXT void process_fadt(const ACPI_TABLE_FADT *fadt)
+{
+	if (!fadt)
+		panic("no ACPI FADT?");
+	if (fadt->Header.Length < ACPI_FADT_V1_SIZE)
+		panic("ACPI FADT is too short: only %#" PRIx32 " bytes",
+		    fadt->Header.Length);
+	cprintf("ACPI FADT @%p:\n"
+		"  SCI int.: %#" PRIx16 "  SMI port: %#" PRIx32 "  "
+		  "ACPI enable/disable: 0x%02" PRIx8 "/0x%02" PRIx8 "  "
+		  "S4BIOS: 0x%02" PRIx8 "\n"
+		"  IA-PC boot flags: 0x%04" PRIx16 " { %s%s%s%s%s%s}\n",
+	    fadt, fadt->SciInterrupt,
+	    fadt->SmiCommand, fadt->AcpiEnable, fadt->AcpiDisable,
+	    fadt->S4BiosRequest,
+	    fadt->BootFlags,
+	    fadt->BootFlags & 0x0001 ? "legacy-devs " : "",
+	    fadt->BootFlags & 0x0002 ? "8042 " : "",
+	    fadt->BootFlags & 0x0004 ? "\u00ac""VGA " : "",
+	    fadt->BootFlags & 0x0008 ? "\u00ac""MSI " : "",
+	    fadt->BootFlags & 0x0010 ? "\u00ac""ASPM " : "",
+	    fadt->BootFlags & 0x0020 ? "\u00ac""CMOS-RTC " : "");
+}
+
 static INIT_TEXT void process_xsdt(void)
 {
-	const char xsdt_sig[4] = "XSDT";
+	const char xsdt_sig[4] = "XSDT", fadt_sig[4] = "FACP";
+	const ACPI_TABLE_FADT *fadt = NULL;
 	UINT32 n, i;
 	if (memcmp(acpi_xsdt->Header.Signature, xsdt_sig, sizeof xsdt_sig)
 	    != 0)
@@ -54,8 +79,11 @@ static INIT_TEXT void process_xsdt(void)
 		if (i % 18 == 0)
 			cputs("\n   ");
 		cprintf(" %4.4s", tbl->Signature);
+		if (memcmp(tbl->Signature, fadt_sig, sizeof fadt_sig) == 0)
+			fadt = (const ACPI_TABLE_FADT *)tbl;
 	}
 	putwch(u'\n');
+	process_fadt(fadt);
 }
 
 INIT_TEXT void acpi_init(const void *p)
