@@ -97,11 +97,11 @@ static INIT_TEXT void process_madt(const ACPI_TABLE_MADT *madt)
 			{
 				const ACPI_MADT_IO_APIC *ic =
 				    (const ACPI_MADT_IO_APIC *)stbl;
-				cprintf("  I/O APIC { APIC id.: %#" PRIx8 "  "
-						     "addr.: @%#" PRIx32 "  "
-						     "IRQ base: %#" PRIx32
-						     " }\n",
-				    ic->Id, ic->Address, ic->GlobalIrqBase);
+				cprintf("  IOAPIC { @%#" PRIx32 "  "
+						   "APIC id.: %#" PRIx8 "  "
+						   "IRQ base: %#" PRIx32
+						   " }\n",
+				    ic->Address, ic->Id, ic->GlobalIrqBase);
 			}
 			break;
 		    case ACPI_MADT_TYPE_INTERRUPT_OVERRIDE:
@@ -109,11 +109,10 @@ static INIT_TEXT void process_madt(const ACPI_TABLE_MADT *madt)
 				const ACPI_MADT_INTERRUPT_OVERRIDE *ic =
 				    (const ACPI_MADT_INTERRUPT_OVERRIDE *)stbl;
 				cprintf("  int. override { "
+					  "%#" PRIx8 " \u2192 %#" PRIx32 "  "
 					  "bus: %#" PRIx8 "  "
-					  "source IRQ: %#" PRIx8 "  "
-					  "global IRQ: %#" PRIx32 "  "
 					  "INTI: 0x%04" PRIx16 " }\n",
-				    ic->Bus, ic->SourceIrq, ic->GlobalIrq,
+				    ic->SourceIrq, ic->GlobalIrq, ic->Bus,
 				    ic->IntiFlags);
 			}
 			break;
@@ -142,8 +141,7 @@ static INIT_TEXT void process_madt(const ACPI_TABLE_MADT *madt)
 			{
 				const ACPI_MADT_LOCAL_APIC_OVERRIDE *ic =
 				  (const ACPI_MADT_LOCAL_APIC_OVERRIDE *)stbl;
-				cprintf("  LAPIC override { "
-					  "addr.: @%#" PRIx64 " }\n",
+				cprintf("  LAPIC override { @%#" PRIx64 " }\n",
 				    ic->Address);
 			}
 			break;
