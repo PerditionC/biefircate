@@ -54,18 +54,114 @@ static INIT_TEXT void process_fadt(const ACPI_TABLE_FADT *fadt)
 	    fadt->SmiCommand, fadt->AcpiEnable, fadt->AcpiDisable,
 	    fadt->S4BiosRequest,
 	    fadt->BootFlags,
-	    fadt->BootFlags & 0x0001 ? "legacy-devs " : "",
-	    fadt->BootFlags & 0x0002 ? "8042 " : "",
-	    fadt->BootFlags & 0x0004 ? "\u00ac""VGA " : "",
-	    fadt->BootFlags & 0x0008 ? "\u00ac""MSI " : "",
-	    fadt->BootFlags & 0x0010 ? "\u00ac""ASPM " : "",
-	    fadt->BootFlags & 0x0020 ? "\u00ac""CMOS-RTC " : "");
+	    fadt->BootFlags & ACPI_FADT_LEGACY_DEVICES ? "legacy-devs " : "",
+	    fadt->BootFlags & ACPI_FADT_8042 ? "i8042 " : "",
+	    fadt->BootFlags & ACPI_FADT_NO_VGA ? "\u00ac""VGA " : "",
+	    fadt->BootFlags & ACPI_FADT_NO_MSI ? "\u00ac""MSI " : "",
+	    fadt->BootFlags & ACPI_FADT_NO_ASPM ? "\u00ac""ASPM " : "",
+	    fadt->BootFlags & ACPI_FADT_NO_CMOS_RTC ? "\u00ac""CMOS-RTC "
+						    : "");
+}
+
+static INIT_TEXT void process_madt(const ACPI_TABLE_MADT *madt)
+{
+	UINT32 left;
+	const char *p;
+	if (!madt)
+		panic("no ACPI MADT?");
+	cprintf("ACPI MADT @%p:\n"
+		"  LAPIC: @%#" PRIx32 "  flags: 0x%08" PRIx32 " { %s}\n",
+	    madt, madt->Address, madt->Flags,
+	    madt->Flags & ACPI_MADT_PCAT_COMPAT ? "i8259 " : "");
+	left = madt->Header.Length - sizeof(*madt);
+	p = (const char *)(madt + 1);
+	while (left) {
+		const ACPI_SUBTABLE_HEADER *stbl = (ACPI_SUBTABLE_HEADER *)p;
+		switch (stbl->Type) {
+		    case ACPI_MADT_TYPE_LOCAL_APIC:
+			{
+				const ACPI_MADT_LOCAL_APIC *ic =
+				    (const ACPI_MADT_LOCAL_APIC *)stbl;
+				cprintf("  LAPIC { proc. uid.: %#" PRIx8 "  "
+						  "APIC id.: %#" PRIx8 "  "
+						  "flags: 0x%08" PRIx32
+						  " { %s%s} }\n",
+				    ic->ProcessorId, ic->Id,
+				    ic->LapicFlags,
+				    ic->LapicFlags & 1 ? "enabled " : "",
+				    ic->LapicFlags & 2 ? "online-capable "
+						       : "");
+			}
+			break;
+		    case ACPI_MADT_TYPE_IO_APIC:
+			{
+				const ACPI_MADT_IO_APIC *ic =
+				    (const ACPI_MADT_IO_APIC *)stbl;
+				cprintf("  I/O APIC { APIC id.: %#" PRIx8 "  "
+						     "addr.: @%#" PRIx32 "  "
+						     "IRQ base: %#" PRIx32
+						     " }\n",
+				    ic->Id, ic->Address, ic->GlobalIrqBase);
+			}
+			break;
+		    case ACPI_MADT_TYPE_INTERRUPT_OVERRIDE:
+			{
+				const ACPI_MADT_INTERRUPT_OVERRIDE *ic =
+				    (const ACPI_MADT_INTERRUPT_OVERRIDE *)stbl;
+				cprintf("  int. override { "
+					  "bus: %#" PRIx8 "  "
+					  "source IRQ: %#" PRIx8 "  "
+					  "global IRQ: %#" PRIx32 "  "
+					  "INTI: 0x%04" PRIx16 " }\n",
+				    ic->Bus, ic->SourceIrq, ic->GlobalIrq,
+				    ic->IntiFlags);
+			}
+			break;
+		    case ACPI_MADT_TYPE_NMI_SOURCE:
+			{
+				const ACPI_MADT_NMI_SOURCE *ic =
+				    (const ACPI_MADT_NMI_SOURCE *)stbl;
+				cprintf("  NMI source { "
+					  "INTI: 0x%04" PRIx16 "  "
+					  "global IRQ: %#" PRIx32 " }\n",
+				    ic->IntiFlags, ic->GlobalIrq);
+			}
+			break;
+		    case ACPI_MADT_TYPE_LOCAL_APIC_NMI:
+			{
+				const ACPI_MADT_LOCAL_APIC_NMI *ic =
+				    (const ACPI_MADT_LOCAL_APIC_NMI *)stbl;
+				cprintf("  LAPIC NMI { "
+					  "proc. id.: %#" PRIx8 "  "
+					  "INTI: 0x%04" PRIx16 "  "
+					  "LINT#: %#" PRIx8 " }\n",
+				    ic->ProcessorId, ic->IntiFlags, ic->Lint);
+			}
+			break;
+		    case ACPI_MADT_TYPE_LOCAL_APIC_OVERRIDE:
+			{
+				const ACPI_MADT_LOCAL_APIC_OVERRIDE *ic =
+				  (const ACPI_MADT_LOCAL_APIC_OVERRIDE *)stbl;
+				cprintf("  LAPIC override { "
+					  "addr.: @%#" PRIx64 " }\n",
+				    ic->Address);
+			}
+			break;
+		    default:
+			cprintf("  type %#" PRIx8 " int. ctrlr. struc. @%p\n",
+			    stbl->Type, stbl);
+		}
+		p += stbl->Length;
+		left -= stbl->Length;
+	}
 }
 
 static INIT_TEXT void process_xsdt(void)
 {
-	const char xsdt_sig[4] = "XSDT", fadt_sig[4] = "FACP";
+	const char xsdt_sig[4] = "XSDT", fadt_sig[4] = "FACP",
+		   madt_sig[4] = "APIC";
 	const ACPI_TABLE_FADT *fadt = NULL;
+	const ACPI_TABLE_MADT *madt = NULL;
 	UINT32 n, i;
 	if (memcmp(acpi_xsdt->Header.Signature, xsdt_sig, sizeof xsdt_sig)
 	    != 0)
@@ -79,11 +175,16 @@ static INIT_TEXT void process_xsdt(void)
 		if (i % 18 == 0)
 			cputs("\n   ");
 		cprintf(" %4.4s", tbl->Signature);
-		if (memcmp(tbl->Signature, fadt_sig, sizeof fadt_sig) == 0)
+		if (!fadt &&
+		    memcmp(tbl->Signature, fadt_sig, sizeof fadt_sig) == 0)
 			fadt = (const ACPI_TABLE_FADT *)tbl;
+		else if (!madt &&
+		     memcmp(tbl->Signature, madt_sig, sizeof madt_sig) == 0)
+			madt = (const ACPI_TABLE_MADT *)tbl;
 	}
 	putwch(u'\n');
 	process_fadt(fadt);
+	process_madt(madt);
 }
 
 INIT_TEXT void acpi_init(const void *p)

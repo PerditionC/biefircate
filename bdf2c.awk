@@ -1,5 +1,5 @@
 #!/usr/bin/awk -f
-# Copyright (c) 2020 TK Chia
+# Copyright (c) 2020--2021 TK Chia
 #
 # This file is free software; you can redistribute it and/or modify it under
 # the terms of the GNU General Public License as published by the Free
@@ -11,14 +11,14 @@
 # or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
 # for more details.
 
-# This is a simplistic program to convert a .bdf font file for an 8 * x font
-# into a C module source file (.c) or a C header file (.h).  The output goes
-# to stdout.
+# This is a simplistic program to convert one or more .bdf font files for an
+# 8 * x font into a C module source file (.c) or a C header file (.h).  The
+# output goes to stdout.
 #
 # Usage:
 #
 #	bdf2c [H=1] [PUA=0] [SP=0] [BRAILLE=0] [N=(font-name)] \
-#	      [(in.bdf)] [> {(out.c) | (out.h)}]
+#	      [(in.bdf) ...] [> {(out.c) | (out.h)}]
 #
 # Options:
 #	H=1		output a header file, not a C module file
@@ -154,7 +154,7 @@ BEGIN {
 }
 
 /^[ \t]*ENDFONT[ \t]*$/ {
-	exit
+	nextfile
 }
 
 END {

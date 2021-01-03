@@ -82,24 +82,28 @@ static void splash(bool use_fb_p)
 		Output(u".:. " PACKAGE_NAME " " PACKAGE_VERSION " .:.\r\n");
 }
 
+/* Messy hack to suppress some GCC type warnings. */
+#define APrint(fmt, ...) \
+	APrint((const unsigned char *)(fmt), __VA_ARGS__)
+
 static void dump_mode_info(UINT32 mode_num,
 			   const EFI_GRAPHICS_OUTPUT_MODE_INFORMATION *info)
 {
-	Print(u"mode 0x%04x  %4u", mode_num, info->HorizontalResolution);
+	APrint("mode 0x%04x  %4u", mode_num, info->HorizontalResolution);
 	if (info->PixelsPerScanLine != info->HorizontalResolution)
 		Print(u"{%4u}", info->PixelsPerScanLine);
-	Print(u"*%4u  ", info->VerticalResolution);
+	APrint("*%4u  ", info->VerticalResolution);
 	switch (info->PixelFormat) {
 	    case PixelRedGreenBlueReserved8BitPerColor:
 		Output(u"RGBX8888");  break;
 	    case PixelBlueGreenRedReserved8BitPerColor:
 		Output(u"BGRX8888");  break;
 	    case PixelBitMask:
-		Print(u"RGBX:%x/%x/%x/%x",
-		      info->PixelInformation.RedMask,
-		      info->PixelInformation.GreenMask,
-		      info->PixelInformation.BlueMask,
-		      info->PixelInformation.ReservedMask);
+		APrint("RGBX:%x/%x/%x/%x",
+		       info->PixelInformation.RedMask,
+		       info->PixelInformation.GreenMask,
+		       info->PixelInformation.BlueMask,
+		       info->PixelInformation.ReservedMask);
 		break;
 	    default:
 		Output(u"BLT-only");
@@ -272,7 +276,7 @@ static void putwch_default(char16_t ch)
 
 static void early_panic(IN CONST CHAR16 *msg, EFI_STATUS status)
 {
-	Print(u"\r\npanic: %s: 0x%lx", msg, (UINT16)status);
+	APrint("\r\npanic: %s: 0x%lx", msg, (UINT16)status);
 	freeze();
 }
 
@@ -292,7 +296,7 @@ INIT_TEXT void fb_con_init(void)
 		early_panic(u"cannot get EFI_GRAPHICS_OUTPUT_PROTOCOL",
 		    status);
 	orig_mode = gfxop->Mode->Mode;
-	Print(u"current UEFI graphics mode: 0x%x\r\n"
+	APrint("current UEFI graphics mode: 0x%x\r\n"
 	       "available framebuffer modes:", orig_mode);
 	best_mode_num = max_mode_num = gfxop->Mode->MaxMode;
 	for (mode_num = 0; mode_num < max_mode_num; ++mode_num) {
@@ -342,7 +346,7 @@ INIT_TEXT void fb_con_init(void)
 		early_panic(u"no suitable graphics mode to switch to!", 0);
 
 	/* Switch to the new graphics mode. */
-	Print(u"switching to mode 0x%x in 3", best_mode_num);
+	APrint("switching to mode 0x%x in 3", best_mode_num);
 	wait_1_second();
 	Output(u" 2");
 	wait_1_second();
