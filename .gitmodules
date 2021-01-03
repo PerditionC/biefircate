@@ -14,3 +14,6 @@
 [submodule "nanoprintf"]
 	path = nanoprintf
 	url = https://github.com/charlesnicholson/nanoprintf.git
+[submodule "bdf2c-in-awk"]
+	path = bdf2c-in-awk
+	url = https://gitlab.com/tkchia/bdf2c-in-awk.git

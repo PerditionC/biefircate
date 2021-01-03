@@ -20,6 +20,7 @@ endif
 GNUEFISRCDIR = $(conf_Srcdir)/gnu-efi
 ACPICASRCDIR = $(conf_Srcdir)/acpica
 SPLEENSRCDIR = $(conf_Srcdir)/spleen
+BDF2CSRCDIR = $(conf_Srcdir)/bdf2c-in-awk
 #
 # The MinGW toolchain defines the macro WIN32 & friends, & this confuses
 # ACPICA.  Undefine the WIN32 macro.
@@ -68,12 +69,12 @@ truckload.efi: start.o efi-main.o acpi.o acpica-osl.o fb-con.o \
 	mkdir -p $(@D)
 	$(CC) $(CFLAGS) $(CPPFLAGS) -c -o $@ $<
 
-font-default.c: $(SPLEENSRCDIR)/spleen-8x16.bdf bdf2c.awk
-	./bdf2c.awk $(BDF2CFLAGS) $< >$@.tmp
+font-default.c: $(SPLEENSRCDIR)/spleen-8x16.bdf $(BDF2CSRCDIR)/bdf2c.awk
+	$(BDF2CSRCDIR)/bdf2c.awk $(BDF2CFLAGS) $< >$@.tmp
 	mv $@.tmp $@
 
-font-default.h: $(SPLEENSRCDIR)/spleen-8x16.bdf bdf2c.awk
-	./bdf2c.awk H=1 $(BDF2CFLAGS) $< >$@.tmp
+font-default.h: $(SPLEENSRCDIR)/spleen-8x16.bdf $(BDF2CSRCDIR)/bdf2c.awk
+	$(BDF2CSRCDIR)/bdf2c.awk H=1 $(BDF2CFLAGS) $< >$@.tmp
 	mv $@.tmp $@
 
 efi-main.o fb-con.o : CPPFLAGS += -DPACKAGE_NAME='"$(conf_Pkg_name)"' \
