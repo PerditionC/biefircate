@@ -1,0 +1,21 @@
+From http://www.inp.nsk.su/~bolkhov/files/fonts/univga/ :
+
+> Copyright and acknowledgements
+> 
+> The UNI-VGA font can be distributed and modified freely, according to the
+> X license.
+> 
+> The Basic Latin block was taken almost unchanged from DosEmu's vga.bdf. 
+> All the other blocks (except noted) were created mainly from scratch by
+> me, Dmitry Bolkhovityanov.
+> 
+> Letters in the Hebrew block were taken unchanged from a public domain
+> hebrew console font.
+> 
+> Glyphs in Arabic, Arabic Presentation Forms-A, Arabic Presentation Forms-B
+> and U+262B Farsi symbol were kindly donated by Behdad Esfahbod.
+> 
+> Thanks to Birger Langkjer for idea, to Mark Leisher for his wonderful
+> XmBDFEd, and to many others for their support.
+
+> Copyright © 2001 by Dmitry Yu. Bolkhovityanov
