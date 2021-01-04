@@ -24,6 +24,7 @@
 #define INIT_TEXT	__attribute__((section(".text.i")))
 #define INIT_DATA	__attribute__((section(".data.i")))
 #define NORETURN	__attribute__((noreturn))
+#define PURE		__attribute__((pure))
 
 enum COLORS
 {
@@ -40,6 +41,13 @@ static inline NORETURN void freeze(void)
 		       "hlt; "
 		       "jmp 0b");
 	__builtin_unreachable();
+}
+
+static inline PURE uint16_t get_cs(void)
+{
+	uint16_t cs_val;
+	__asm volatile("movw %%cs, %0" : "=rm" (cs_val));
+	return cs_val;
 }
 
 /* acpi.c */
@@ -65,6 +73,8 @@ extern void mem_heap_free(void *);
 extern void *mem_heap_realloc(void *, size_t);
 
 /* panic.c */
+extern NORETURN void vpanic_with_far_caller(uint16_t, void *, const char *,
+    va_list);
 extern NORETURN void vpanic_with_caller(void *, const char *, va_list);
 extern NORETURN void panic_with_caller(void *, const char *, ...);
 extern NORETURN void panic(const char *, ...);

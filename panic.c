@@ -14,19 +14,29 @@
 
 #include <inttypes.h>
 #include <stdarg.h>
+#include <stdbool.h>
 #include "efi-stuff.h"
 #include "truckload.h"
 
-NORETURN void vpanic_with_caller(void *caller, const char *fmt, va_list ap)
+NORETURN void vpanic_with_far_caller(uint16_t caller_cs, void *caller,
+    const char *fmt, va_list ap)
 {
+	bool our_cs_p = (caller_cs == get_cs());
 	extern EFI_STATUS _start(EFI_HANDLE, EFI_SYSTEM_TABLE *);
 	textcolor(WHITE);
 	cputs("panic: ");
 	vcprintf(fmt, ap);
 	va_end(ap);
-	cprintf("\n[caller @%p = _start+%#tx]",
-	    caller, (char *)caller - (char *)_start);
+	cprintf(" [\u2190 @%#" PRIx16 ":%p", caller_cs, caller);
+	if (our_cs_p)
+		cprintf(" = _start+%#tx", (char *)caller - (char *)_start);
+	putwch(u']');
 	freeze();
+}
+
+NORETURN void vpanic_with_caller(void *caller, const char *fmt, va_list ap)
+{
+	vpanic_with_far_caller(get_cs(), caller, fmt, ap);
 }
 
 NORETURN void panic_with_caller(void *caller, const char *fmt, ...)
