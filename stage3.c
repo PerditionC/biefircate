@@ -12,17 +12,15 @@
  * for more details.
  */
 
+#include <efi.h>
+#include <efilib.h>
+#include <string.h>
+#include "efi-stuff.h"
 #include "truckload.h"
 
-INIT_TEXT static void set_up_trampolines()
+INIT_TEXT void stage3(const void *rsdp)
 {
-	void *reserved_base_mem = mem_map_reserve_page(0xf0000ULL);
-	cprintf("setting up long mode \u2194 real mode trampolines @%p\n",
-	    reserved_base_mem);
-	lm86_rm86_init(reserved_base_mem);
-}
-
-INIT_TEXT void stage2(void)
-{
-	set_up_trampolines();
+	acpi_init(rsdp);
+	cputs("umm...");
+	for (;;);
 }

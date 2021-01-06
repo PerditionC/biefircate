@@ -59,7 +59,7 @@ endif
 
 truckload.efi: start.o efi-main.o acpi.o acpica-osl.o fb-con.o \
     fb-con-cprintf.o font-default.o lm86-rm86.o mem-heap.o mem-map.o \
-    panic.o stage1.o stage2.o $(LIBEFI) $(LIBACPICA) \
+    panic.o stage1.o stage2.o stage3.o $(LIBEFI) $(LIBACPICA) \
     crt/ctype.o crt/mbtowc.o crt/memcmp.o crt/memmove.o crt/memset.o \
     crt/strcpy.o crt/strlen.o crt/strncat.o crt/strncmp.o crt/strncpy.o \
     truckload.ld

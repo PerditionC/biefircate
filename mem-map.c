@@ -14,68 +14,113 @@
 
 #include <efi.h>
 #include <efilib.h>
+#include <inttypes.h>
+#include <string.h>
 #include "efi-stuff.h"
 #include "truckload.h"
 
 extern EFI_HANDLE LibImageHandle;
 
-/*
- * Separately maintain
- *   * available physical pages which can be accessed from real mode (up to
- *     1 MiB)
- *   * remaining available physical pages which can be accessed from 32-bit
- *     protected mode (1 MiB--4 GiB)
- *   * remaining available physical pages which can be accessed from 32-bit
- *     protected mode (4 GiB on).
- */
-static UINT64 mem20_start = 0, mem20_end = 0,
-	      mem32_start = 0, mem32_end = 0,
-	      mem64_start = 0, mem64_end = 0;
+#define E820_AVAILABLE		0x00000001U
+#define E820_RESERVED		0x00000002U
+#define E820_ACPI_RECLAIM	0x00000003U
+#define E820_ACPI_NVS		0x00000004U
+#define E820_UNUSABLE		0x00000005U	/* per Intel EDK II */
 
-static UINT64 carve_out_base_mem(unsigned kib)
+/*
+ * Memory map address range descriptors much in the style of BIOS int 0x15,
+ * ax = 0xe820 (see Ralf Brown's Interrupt List).  For now, these
+ * descriptors are maintained in a linked list sorted in _decreasing_ order
+ * of memory address.
+ */
+
+typedef struct mem_range mem_range_t;
+
+struct mem_range {
+	struct mem_range *next;
+	uint64_t start, size;
+	uint32_t e820_type;
+};
+
+static mem_range_t *mem_ranges = NULL;
+
+static mem_range_t *do_record_mem_range(mem_range_t *prev, mem_range_t *next,
+    uint64_t start, uint64_t size, uint32_t e820_type)
 {
-	return mem20_end - 1024ULL;
+	if (prev && prev->e820_type == e820_type &&
+		    prev->start == start + size) {
+		/* Coalesce with *prev. */
+		prev->start = start;
+		prev->size += size;
+		return prev;
+	} else if (next && next->e820_type == e820_type &&
+		    next->start + next->size == start) {
+		/* Coalesce with *next. */
+		next->size += size;
+		return next;
+	} else {
+		/*
+		 * Cannot coalesce with an existing descriptor.  Insert a new
+		 * descriptor between (maybe) *prev & (maybe) *next.
+		 */
+		mem_range_t *curr = mem_heap_alloc(sizeof(mem_range_t));
+		*curr = (mem_range_t){ next, start, size, e820_type };
+		if (prev)
+			prev->next = curr;
+		else
+			mem_ranges = curr;
+		return curr;
+	}
 }
 
-static void record_mem_range(UINT64 start, UINT64 end)
+static void do_delete_mem_range(mem_range_t *prev, mem_range_t *curr)
 {
-	if (start < 0x100000ULL) {
-		if (end > 0x100000ULL) {
-			record_mem_range(start, 0x100000ULL);
-			record_mem_range(end, 0x100000ULL);
-		} else if (!mem20_end) {
-			mem20_start = start;
-			mem20_end = end;
-		} else if (start < mem20_start)
-			mem20_start = start;
-		  else if (end > mem20_end)
-			mem20_end = end;
-	} else if (start < 0x100000000ULL) {
-		if (end > 0x100000000ULL) {
-			record_mem_range(start, 0x100000000ULL);
-			record_mem_range(end, 0x100000000ULL);
-			return;
-		} else if (!mem32_end) {
-			mem32_start = start;
-			mem32_end = end;
-		} else if (start < mem32_start)
-			mem32_start = start;
-		  else if (end > mem32_end)
-			mem32_end = end;
-	} else {
-		if (!mem64_end) {
-			mem64_start = start;
-			mem64_end = end;
-		} else if (start < mem64_start)
-			mem64_start = start;
-		  else if (end > mem64_end)
-			mem64_end = end;
+	if (prev)
+		prev->next = curr->next;
+	else
+		mem_ranges = curr->next;
+	mem_heap_free(curr);
+}
+
+static void record_mem_range(uint64_t start, uint64_t end, UINT32 efi_type)
+{
+	uint32_t e820_type;
+	uint64_t size = end - start;
+	mem_range_t *prev, *next;
+	if (!size)
+		return;
+	switch (efi_type) {
+	    case EfiBootServicesCode:
+	    case EfiBootServicesData:
+	    case EfiRuntimeServicesCode:
+	    case EfiRuntimeServicesData:
+	    case EfiConventionalMemory:
+		e820_type = E820_AVAILABLE;
+		break;
+	    case EfiUnusableMemory:
+		e820_type = E820_UNUSABLE;
+		break;
+	    case EfiACPIReclaimMemory:
+		e820_type = E820_ACPI_RECLAIM;
+		break;
+	    case EfiACPIMemoryNVS:
+		e820_type = E820_ACPI_NVS;
+		break;
+	    default:
+		e820_type = E820_RESERVED;
 	}
+	prev = NULL;
+	next = mem_ranges;
+	while (next && next->start > start) {
+		prev = next;
+		next = next->next;
+	}
+	do_record_mem_range(prev, next, start, size, e820_type);
 }
 
 void mem_map_init(UINTN *mem_map_key)
 {
-	EFI_MEMORY_DESCRIPTOR *desc;
+	EFI_MEMORY_DESCRIPTOR *descs, *desc;
 	UINTN num_entries = 0, desc_sz;
 	UINT32 desc_ver;
 	UINT64 addr1, addr2;
@@ -88,17 +133,21 @@ void mem_map_init(UINTN *mem_map_key)
 	 */
 	EFI_MEMORY_TYPE save_pool_alloc_type = PoolAllocationType;
 	PoolAllocationType = EfiBootServicesData;
-	desc = LibMemoryMap(&num_entries, mem_map_key, &desc_sz, &desc_ver);
+	descs = LibMemoryMap(&num_entries, mem_map_key, &desc_sz, &desc_ver);
 	PoolAllocationType = save_pool_alloc_type;
 	if (!num_entries || !desc_sz)
 		panic("cannot get memory map!");
 
-	/* We got the memory map.  Dump it. */
+	/*
+	 * We got the memory map.  Dump it, & also compact it & convert it
+	 * into our internal format.
+	 */
 	addr1 = (UINT64)&desc_ver;
 	__asm volatile("movq %%cr3, %0" : "=r" (addr2));
 	addr2 &= 0x000ffffffffff000ULL;
 	cputs("mem. map below 16 MiB:\n"
 	      "  start     end       type attrs\n");
+	desc = descs;
 	while (num_entries-- != 0) {
 		EFI_PHYSICAL_ADDRESS start = desc->PhysicalStart,
 		    end = start + desc->NumberOfPages * EFI_PAGE_SIZE;
@@ -116,35 +165,66 @@ void mem_map_init(UINTN *mem_map_key)
 			    end > 0x1000000ULL ? '+' : ' ',
 			    type,
 			    desc->Attribute);
-		switch (type) {
-		    default:
-			break;
-		    case EfiBootServicesCode:
-		    case EfiBootServicesData:
-		    case EfiConventionalMemory:
-		    case EfiACPIReclaimMemory:
-		    case EfiACPIMemoryNVS:
-			record_mem_range(start, end);
-		}
+		record_mem_range(start, end, type);
 		/* :-| */
 		desc = (EFI_MEMORY_DESCRIPTOR *)((char *)desc + desc_sz);
 	}
 
-	if (mem20_end)
-		cprintf("available base mem. spans @%p--@%p\n",
-		    (char *)mem20_start, (char *)mem20_end - 1);
-	if (mem32_end)
-		cprintf("available 32-bit ext. mem. spans @%p--@%p\n",
-		    (char *)mem32_start, (char *)mem32_end - 1);
-	if (mem64_end)
-		cprintf("available 64-bit ext. mem. spans @%p--@%p\n",
-		    (char *)mem64_start, (char *)mem64_end - 1);
 	if (ty1 != EfiMaxMemoryType)
 		cprintf("loader stack mem. (@%p) is type %u\n",
 		    (void *)addr1, ty1);
 	if (ty2 != EfiMaxMemoryType)
 		cprintf("page dir. mem. (@%p) is type %u\n",
 		    (void *)addr2, ty2);
+}
+
+void *mem_map_reserve_page(uint64_t max_end_addr)
+{
+	uint64_t pg;
+	mem_range_t *prev = NULL, *curr = mem_ranges;
+	while (curr && (curr->start >= max_end_addr ||
+			curr->e820_type != E820_AVAILABLE))
+	{
+		prev = curr;
+		curr = curr->next;
+	}
+	if (!curr)
+		panic("failed to reserve a mem. pg. below @%#" PRIx64,
+		    max_end_addr);
+	/*
+	 * Carve out the page at the highest available address below
+	 * max_addr.  If there is a page at the beginning of the memory
+	 * range which is exactly at {max_end_addr - EFI_PAGE_SIZE}, or at
+	 * the end of the memory range & before max_end_addr, then things
+	 * are slightly easier.  Otherwise, we need to split the range into
+	 * 3 ranges.
+	 */
+	if (curr->start + curr->size <= max_end_addr) {
+		pg = curr->start + curr->size - EFI_PAGE_SIZE;
+		if (curr->size == EFI_PAGE_SIZE)
+			do_delete_mem_range(prev, curr);
+		else
+			curr->size -= EFI_PAGE_SIZE;
+		do_record_mem_range(prev, curr, pg, EFI_PAGE_SIZE,
+		    E820_RESERVED);
+	} else if (curr->start == max_end_addr - EFI_PAGE_SIZE) {
+		pg = curr->start;
+		curr->size -= EFI_PAGE_SIZE;
+		curr->start += EFI_PAGE_SIZE;
+		do_record_mem_range(curr, curr->next, pg, EFI_PAGE_SIZE,
+		    E820_RESERVED);
+		return (void *)pg;
+	} else {
+		uint64_t old_end = curr->start + curr->size;
+		pg = max_end_addr - EFI_PAGE_SIZE;
+		curr->size = pg - curr->start;
+		curr = do_record_mem_range(prev, curr,
+		    max_end_addr, old_end - max_end_addr, E820_AVAILABLE);
+		do_record_mem_range(prev, curr, pg, EFI_PAGE_SIZE,
+		    E820_RESERVED);
+	}
+	memset((void *)pg, 0, EFI_PAGE_SIZE);
+	return (void *)pg;
 }
 
 void stage1_done(UINTN mem_map_key)
@@ -159,10 +239,7 @@ void stage1_done(UINTN mem_map_key)
 	 * And PreLoader is smaller too...
 	 */
 	EFI_STATUS status = BS->ExitBootServices(LibImageHandle, mem_map_key);
-	UINT64 reserved_base_mem;
 	if (EFI_ERROR(status))
-		panic("cannot exit UEFI boot services", status);
+		panic_efi("cannot exit UEFI boot services", status);
 	BS = NULL;
-	reserved_base_mem = carve_out_base_mem(1);
-	lm86_rm86_init((uint16_t)(reserved_base_mem >> 4));
 }

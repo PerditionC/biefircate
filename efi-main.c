@@ -24,6 +24,7 @@ INIT_TEXT EFI_STATUS efi_main(EFI_HANDLE image_handle,
 	const void *rsdp;
 	InitializeLib(image_handle, system_table);
 	stage1(&rsdp);
-	stage2(rsdp);
+	stage2();
+	stage3(rsdp);
 	__builtin_unreachable();
 }

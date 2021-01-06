@@ -72,6 +72,9 @@ extern void *mem_heap_alloc(size_t);
 extern void mem_heap_free(void *);
 extern void *mem_heap_realloc(void *, size_t);
 
+/* mem-map.c */
+extern void *mem_map_reserve_page(uint64_t);
+
 /* panic.c */
 extern NORETURN void vpanic_with_far_caller(uint16_t, void *, const char *,
     va_list);
@@ -83,7 +86,10 @@ extern NORETURN void panic(const char *, ...);
 extern INIT_TEXT void stage1(const void **);
 
 /* stage2.c */
-extern INIT_TEXT void stage2(const void *);
+extern INIT_TEXT void stage2(void);
+
+/* stage3.c */
+extern INIT_TEXT void stage3(const void *);
 
 /* x64.S */
 typedef struct __attribute__((packed)) {
@@ -93,7 +99,7 @@ typedef struct __attribute__((packed)) {
 	uint16_t ss, ip, cs;
 } rm86_regs_t;
 
-extern INIT_TEXT void lm86_rm86_init(uint16_t);
+extern INIT_TEXT void lm86_rm86_init(void *);
 extern rm86_regs_t *rm86_regs(void);
 extern void rm86(void);
 

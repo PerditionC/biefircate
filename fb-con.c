@@ -110,20 +110,6 @@ static void dump_mode_info(UINT32 mode_num,
 	}
 }
 
-static void wait_1_second(void)
-{
-	EFI_EVENT timer_event;
-	UINTN index;
-	EFI_STATUS status =
-	    BS->CreateEvent(EVT_TIMER, 0, NULL, NULL, &timer_event);
-	if (EFI_ERROR(status))
-		return;
-	status = BS->SetTimer(timer_event, TimerRelative, 10000000ULL);
-	if (EFI_ERROR(status))
-		return;
-	BS->WaitForEvent(1, &timer_event, &index);
-}
-
 static const uint8_t *find_glyph(char16_t ch)
 {
 	char16_t lo = 0, hi = FONT_DEFAULT_GLYPHS;
@@ -347,11 +333,17 @@ INIT_TEXT void fb_con_init(void)
 
 	/* Switch to the new graphics mode. */
 	APrint("switching to mode 0x%x in 3", best_mode_num);
-	wait_1_second();
-	Output(u" 2");
-	wait_1_second();
-	Output(u" 1");
-	wait_1_second();
+	status = WaitForSingleEvent(ST->ConIn->WaitForKey, 10000000ULL);
+	if (EFI_ERROR(status)) {
+		Output(u" 2");
+		status = WaitForSingleEvent(ST->ConIn->WaitForKey,
+					    10000000ULL);
+		if (EFI_ERROR(status)) {
+			Output(u" 1");
+			WaitForSingleEvent(ST->ConIn->WaitForKey,
+					   10000000ULL);
+		}
+	}
 	status = gfxop->SetMode(gfxop, best_mode_num);
 	if (EFI_ERROR(status))
 		early_panic(u"cannot set graphics mode", status);

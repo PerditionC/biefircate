@@ -25,15 +25,16 @@
 lm86_rm86_init:
 	pushq	%rsi
 	pushq	%rdi
+	movl	%ecx, %eax		/* record the absolute address */
+	movl	%eax, %edi
+	movl	%edi, .Lrm_t_addr(%rip)
+	shrl	$4, %ecx
 	movw	$.Lgo_to_lm-.LB, 4*0x20	/* install an int 0x20 handler */
 	movw	%cx, 4*0x20+2
-	movw	%cx, .Lrm_t_seg(%rip)	/* record the segment */
-	movzwq	%cx, %rdi		/* record the absolute address */
-	shlq	$4, %rdi
-	movl	%edi, .Lrm_t_addr(%rip)
-	movl	%edi, %eax
+	movw	%cx, .Lrm_t_seg(%rip)	/* record the segment of the
+					   trampolines */
 	leaq	.LB(%rip), %rsi		/* copy the real mode trampolines */
-	movq	$(.LE-.LB)/8,%rcx	/* to base memory */
+	movq	$(.LE-.LB)/8, %rcx	/* to base memory */
 	rep movsq
 					/* fix up everything */
 	addl	%eax, .Lour_gdtr+2-.LE(%rdi)
