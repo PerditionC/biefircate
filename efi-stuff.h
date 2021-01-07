@@ -19,11 +19,11 @@
 #include "truckload.h"
 
 /* mem-heap.c */
-extern void mem_heap_init(void);
+extern INIT_TEXT void mem_heap_init(void);
 
 /* mem-map.c */
-extern void mem_map_init(UINTN *);
-extern void stage1_done(UINTN);
+extern INIT_TEXT void mem_map_init(UINTN *);
+extern INIT_TEXT void stage1_done(UINTN);
 
 /* panic.c */
 extern NORETURN INIT_TEXT void panic_efi(const char *, EFI_STATUS);

@@ -94,7 +94,7 @@ static metadata_t coalesce(metadata_t i)
 	return d;
 }
 
-void mem_heap_init(void)
+INIT_TEXT void mem_heap_init(void)
 {
 	EFI_STATUS status = BS->AllocatePages(AllocateAnyPages, EfiLoaderData,
 	    HEAP_PAGES, &heap_start);

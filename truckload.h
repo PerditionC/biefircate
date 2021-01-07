@@ -73,7 +73,7 @@ extern void mem_heap_free(void *);
 extern void *mem_heap_realloc(void *, size_t);
 
 /* mem-map.c */
-extern void *mem_map_reserve_page(uint64_t);
+extern INIT_TEXT void *mem_map_reserve_page(uint64_t);
 
 /* panic.c */
 extern NORETURN void vpanic_with_far_caller(uint16_t, void *, const char *,

@@ -30,22 +30,41 @@ extern EFI_HANDLE LibImageHandle;
 /*
  * Memory map address range descriptors much in the style of BIOS int 0x15,
  * ax = 0xe820 (see Ralf Brown's Interrupt List).  For now, these
- * descriptors are maintained in a linked list sorted in _decreasing_ order
+ * descriptors are maintained in a linked list sorted in _descending_ order
  * of memory address.
  */
 
-typedef struct mem_range mem_range_t;
+typedef struct mem_type mem_type_t;
 
-struct mem_range {
-	struct mem_range *next;
+struct mem_type {
+	struct mem_type *next;
 	uint64_t start, size;
 	uint32_t e820_type;
 };
 
-static mem_range_t *mem_ranges = NULL;
+/*
+ * Record of the cacheability of memory ranges.  Only memory ranges which
+ * are either write-through or simply uncacheable are listed here.
+ *
+ * This record is used during later initialization to build up the new
+ * runtime page tables for long mode.  This is also a linked list in
+ * descending order.
+ */
 
-static mem_range_t *do_record_mem_range(mem_range_t *prev, mem_range_t *next,
-    uint64_t start, uint64_t size, uint32_t e820_type)
+typedef struct mem_cacheability mem_cacheability_t;
+
+struct mem_cacheability {
+	struct mem_cacheability *next;
+	uint64_t start, size;
+	bool writethru_p;
+};
+
+static mem_type_t *mem_types = NULL;
+static INIT_DATA mem_cacheability_t *mem_cacheabilities = NULL,
+				    *mem_cacheability_cursor = NULL;
+
+static INIT_TEXT mem_type_t *do_record_mem_type(mem_type_t *prev,
+    mem_type_t *next, uint64_t start, uint64_t size, uint32_t e820_type)
 {
 	if (prev && prev->e820_type == e820_type &&
 		    prev->start == start + size) {
@@ -63,30 +82,31 @@ static mem_range_t *do_record_mem_range(mem_range_t *prev, mem_range_t *next,
 		 * Cannot coalesce with an existing descriptor.  Insert a new
 		 * descriptor between (maybe) *prev & (maybe) *next.
 		 */
-		mem_range_t *curr = mem_heap_alloc(sizeof(mem_range_t));
-		*curr = (mem_range_t){ next, start, size, e820_type };
+		mem_type_t *curr = mem_heap_alloc(sizeof(mem_type_t));
+		*curr = (mem_type_t){ next, start, size, e820_type };
 		if (prev)
 			prev->next = curr;
 		else
-			mem_ranges = curr;
+			mem_types = curr;
 		return curr;
 	}
 }
 
-static void do_delete_mem_range(mem_range_t *prev, mem_range_t *curr)
+static INIT_TEXT void do_delete_mem_type(mem_type_t *prev, mem_type_t *curr)
 {
 	if (prev)
 		prev->next = curr->next;
 	else
-		mem_ranges = curr->next;
+		mem_types = curr->next;
 	mem_heap_free(curr);
 }
 
-static void record_mem_range(uint64_t start, uint64_t end, UINT32 efi_type)
+static INIT_TEXT void record_mem_type(uint64_t start, uint64_t end,
+    UINT32 efi_type)
 {
 	uint32_t e820_type;
 	uint64_t size = end - start;
-	mem_range_t *prev, *next;
+	mem_type_t *prev, *next;
 	if (!size)
 		return;
 	switch (efi_type) {
@@ -110,21 +130,63 @@ static void record_mem_range(uint64_t start, uint64_t end, UINT32 efi_type)
 		e820_type = E820_RESERVED;
 	}
 	prev = NULL;
-	next = mem_ranges;
+	next = mem_types;
 	while (next && next->start > start) {
 		prev = next;
 		next = next->next;
 	}
-	do_record_mem_range(prev, next, start, size, e820_type);
+	do_record_mem_type(prev, next, start, size, e820_type);
 }
 
-void mem_map_init(UINTN *mem_map_key)
+static INIT_TEXT void do_record_mem_cacheability(mem_cacheability_t *prev,
+    mem_cacheability_t *next, uint64_t start, uint64_t size, bool writethru_p)
+{
+	if (prev && prev->writethru_p == writethru_p &&
+		    prev->start == start + size) {
+		/* Coalesce with *prev. */
+		prev->start = start;
+		prev->size += size;
+	} else if (next && next->writethru_p == writethru_p &&
+			   next->start + next->size == start) {
+		/* Coalesce with *next. */
+		next->size += size;
+	} else {
+		mem_cacheability_t *curr =
+		    mem_heap_alloc(sizeof(mem_cacheability_t));
+		*curr = (mem_cacheability_t){ next, start, size, writethru_p };
+		if (prev)
+			prev->next = curr;
+		else
+			mem_cacheabilities = curr;
+	}
+}
+
+static INIT_TEXT void record_mem_cacheability(uint64_t start, uint64_t end,
+    bool writeback_p, bool writethru_p)
+{
+	uint64_t size = end - start;
+	mem_cacheability_t *prev, *next;
+	if (!size)
+		return;
+	if (writeback_p && writethru_p)
+		return;
+	prev = NULL;
+	next = mem_cacheabilities;
+	while (next && next->start > start) {
+		prev = next;
+		next = next->next;
+	}
+	do_record_mem_cacheability(prev, next, start, size, writethru_p);
+}
+
+INIT_TEXT void mem_map_init(UINTN *mem_map_key)
 {
 	EFI_MEMORY_DESCRIPTOR *descs, *desc;
 	UINTN num_entries = 0, desc_sz;
 	UINT32 desc_ver;
 	UINT64 addr1, addr2;
 	UINT32 ty1 = EfiMaxMemoryType, ty2 = EfiMaxMemoryType;
+	mem_cacheability_t *mc;
 
 	/*
 	 * Retrieve the memory map.  Designate the memory map's memory as
@@ -140,7 +202,7 @@ void mem_map_init(UINTN *mem_map_key)
 
 	/*
 	 * We got the memory map.  Dump it, & also compact it & convert it
-	 * into our internal format.
+	 * into our internal formats.
 	 */
 	addr1 = (UINT64)&desc_ver;
 	__asm volatile("movq %%cr3, %0" : "=r" (addr2));
@@ -152,6 +214,7 @@ void mem_map_init(UINTN *mem_map_key)
 		EFI_PHYSICAL_ADDRESS start = desc->PhysicalStart,
 		    end = start + desc->NumberOfPages * EFI_PAGE_SIZE;
 		UINT32 type = desc->Type;
+		UINT64 attribute = desc->Attribute;
 		if (start <= addr1 && addr1 < end)
 			ty1 = type;
 		if (start <= addr2 && addr2 < end)
@@ -165,9 +228,30 @@ void mem_map_init(UINTN *mem_map_key)
 			    end > 0x1000000ULL ? '+' : ' ',
 			    type,
 			    desc->Attribute);
-		record_mem_range(start, end, type);
+		record_mem_type(start, end, type);
+		record_mem_cacheability(start, end,
+		    (attribute & EFI_MEMORY_WB) != 0,
+		    (attribute & EFI_MEMORY_WT) != 0);
 		/* :-| */
 		desc = (EFI_MEMORY_DESCRIPTOR *)((char *)desc + desc_sz);
+	}
+
+	/*
+	 * Also dump information on memory ranges which are only write-through
+	 * or uncacheable.
+	 */
+	mc = mem_cacheabilities;
+	if (!mc)
+		cputs("all mem. is cacheable as write-back!\n");
+	else {
+		cputs("write-thru. or uncacheable mem.:\n"
+		      "  start               end                 WT\n");
+		while (mc) {
+			cprintf("  @0x%016x @0x%016x %s\n",
+			    mc->start, mc->start + mc->size - 1,
+			    mc->writethru_p ? "yes" : "no");
+			mc = mc->next;
+		}
 	}
 
 	if (ty1 != EfiMaxMemoryType)
@@ -178,10 +262,10 @@ void mem_map_init(UINTN *mem_map_key)
 		    (void *)addr2, ty2);
 }
 
-void *mem_map_reserve_page(uint64_t max_end_addr)
+INIT_TEXT void *mem_map_reserve_page(uint64_t max_end_addr)
 {
 	uint64_t pg;
-	mem_range_t *prev = NULL, *curr = mem_ranges;
+	mem_type_t *prev = NULL, *curr = mem_types;
 	while (curr && (curr->start >= max_end_addr ||
 			curr->e820_type != E820_AVAILABLE))
 	{
@@ -202,32 +286,32 @@ void *mem_map_reserve_page(uint64_t max_end_addr)
 	if (curr->start + curr->size <= max_end_addr) {
 		pg = curr->start + curr->size - EFI_PAGE_SIZE;
 		if (curr->size == EFI_PAGE_SIZE)
-			do_delete_mem_range(prev, curr);
+			do_delete_mem_type(prev, curr);
 		else
 			curr->size -= EFI_PAGE_SIZE;
-		do_record_mem_range(prev, curr, pg, EFI_PAGE_SIZE,
+		do_record_mem_type(prev, curr, pg, EFI_PAGE_SIZE,
 		    E820_RESERVED);
 	} else if (curr->start == max_end_addr - EFI_PAGE_SIZE) {
 		pg = curr->start;
 		curr->size -= EFI_PAGE_SIZE;
 		curr->start += EFI_PAGE_SIZE;
-		do_record_mem_range(curr, curr->next, pg, EFI_PAGE_SIZE,
+		do_record_mem_type(curr, curr->next, pg, EFI_PAGE_SIZE,
 		    E820_RESERVED);
 		return (void *)pg;
 	} else {
 		uint64_t old_end = curr->start + curr->size;
 		pg = max_end_addr - EFI_PAGE_SIZE;
 		curr->size = pg - curr->start;
-		curr = do_record_mem_range(prev, curr,
+		curr = do_record_mem_type(prev, curr,
 		    max_end_addr, old_end - max_end_addr, E820_AVAILABLE);
-		do_record_mem_range(prev, curr, pg, EFI_PAGE_SIZE,
+		do_record_mem_type(prev, curr, pg, EFI_PAGE_SIZE,
 		    E820_RESERVED);
 	}
 	memset((void *)pg, 0, EFI_PAGE_SIZE);
 	return (void *)pg;
 }
 
-void stage1_done(UINTN mem_map_key)
+INIT_TEXT void stage1_done(UINTN mem_map_key)
 {
 	/*
 	 * FIXME: the Red Hat shim (https://github.com/rhboot/shim) says
