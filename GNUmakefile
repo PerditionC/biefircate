@@ -69,6 +69,11 @@ truckload.efi: start.o efi-main.o acpi.o acpica-osl.o fb-con.o \
 	mkdir -p $(@D)
 	$(CC) $(CFLAGS) $(CPPFLAGS) -c -o $@ $<
 
+# For debugging.
+%.s: %.c $(LIBEFI) font-default.h
+	mkdir -p $(@D)
+	$(CC) $(CFLAGS) $(CPPFLAGS) -S -o $@ $<
+
 font-default.c: $(UNIVGASRCDIR)/u_vga16.bdf $(BDF2CSRCDIR)/bdf2c.awk
 	$(BDF2CSRCDIR)/bdf2c.awk $(BDF2CFLAGS) $< >$@.tmp
 	mv $@.tmp $@
@@ -114,7 +119,7 @@ endif
 .PHONY: distclean
 
 clean:
-	$(RM) *.[oda] crt/*.[oda] *.so *.efi *.map \
+	$(RM) *.[soda] crt/*.[soda] *.so *.efi *.map \
 	    font-default.c font-default.h *~ crt/*~
 ifeq "$(conf_Separate_build_dir)" "yes"
 	$(RM) -r gnu-efi acpica

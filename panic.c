@@ -34,6 +34,14 @@ NORETURN void vpanic_with_far_caller(uint16_t caller_cs, void *caller,
 	freeze();
 }
 
+NORETURN void panic_with_far_caller(uint16_t caller_cs, void *caller,
+    const char *fmt, ...)
+{
+	va_list ap;
+	va_start(ap, fmt);
+	vpanic_with_far_caller(caller_cs, caller, fmt, ap);
+}
+
 NORETURN void vpanic_with_caller(void *caller, const char *fmt, va_list ap)
 {
 	vpanic_with_far_caller(get_cs(), caller, fmt, ap);

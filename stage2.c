@@ -149,7 +149,7 @@ static INIT_TEXT uint64_t *set_up_page_tables(void)
 	uint64_t start, end, all_end;
 	bool writeback_p, writethru_p;
 	size_t pdp_pgs = 0, pd_pgs = 0, pt_pgs = 0;
-	cprintf("setting up new page tables for long mode\n");
+	cputs("setting up new page tables for long mode\n");
 	all_end = mem_map_all_end();
 	all_end = (all_end + LARGE_PAGE_SIZE - 1) & -LARGE_PAGE_SIZE;
 	pml4 = (uint64_t *)mem_map_reserve_page(0x100000000ULL);
@@ -177,10 +177,7 @@ INIT_TEXT void stage2(void)
 	uint64_t *pml4 = set_up_page_tables();
 	mem_map_free_bs();
 	reserved_base_mem = mem_map_reserve_page(0xf0000ULL);
-	cprintf("installing LM \u2194 RM trampolines @%p, GDT, & "
-		"page tables\n",
-	    reserved_base_mem);
+	cprintf("installing LM \u2194 RM trampolines @%p; starting new "
+		"LM env.\n", reserved_base_mem);
 	lm86_rm86_init(reserved_base_mem, pml4);
-	cprintf("OK so far");
-	for (;;);
 }

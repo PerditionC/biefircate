@@ -385,18 +385,21 @@ INIT_TEXT uint64_t mem_map_all_end(void)
 INIT_TEXT void mem_map_free_bs(void)
 {
 	mem_type_t *prevprev = NULL, *prev = NULL, *curr = mem_types;
-	cputs("freeing UEFI boot services memory\n");
+	size_t total = 0;
+	cputs("freeing UEFI boot services memory... ");
 	while (curr) {
 		if (curr->e820_type == E820_BS_DATA) {
 			uint64_t start = curr->start, size = curr->size;
 			curr = do_delete_mem_type(prev, curr);
 			do_record_mem_type(prevprev, prev, curr,
 			    start, size, E820_AVAILABLE);
+			total += size;
 		}
 		prevprev = prev;
 		prev = curr;
 		curr = curr->next;
 	}
+	cprintf("freed %#zx bytes\n", total);
 }
 
 /*

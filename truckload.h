@@ -85,6 +85,8 @@ extern INIT_TEXT void mem_map_get_cacheability(uint64_t, uint64_t *,
 /* panic.c */
 extern NORETURN void vpanic_with_far_caller(uint16_t, void *, const char *,
     va_list);
+extern NORETURN void panic_with_far_caller(uint16_t, void *,
+    const char *, ...);
 extern NORETURN void vpanic_with_caller(void *, const char *, va_list);
 extern NORETURN void panic_with_caller(void *, const char *, ...);
 extern NORETURN void panic(const char *, ...);
@@ -106,7 +108,8 @@ typedef struct __attribute__((packed)) {
 	uint16_t ss, ip, cs;
 } rm86_regs_t;
 
-extern INIT_TEXT void lm86_rm86_init(void *, uint64_t *);
+extern INIT_TEXT void lm86_rm86_init(void *reserved_base_mem,
+    uint64_t *pml4);
 extern rm86_regs_t *rm86_regs(void);
 extern void rm86(void);
 

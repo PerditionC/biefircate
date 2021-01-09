@@ -61,9 +61,41 @@ lm86_rm86_init:
 	movw	%ax, %ss
 	movw	%ax, %fs
 	movw	%ax, %gs
+	lidt	.Lour_idtr-.LE(%rdi)	/* switch to our IDT */
+	leaq	.Lour_idt(%rip), %rdi	/* fill up the IDT & also generate
+					   code for default intr. handlers */
+	leaq	.Ldefault_isrs(%rip), %rdx
+	movb	$0, %cl
+.Lfill_idt_and_isrs:
+	movl	$SEL_LM_TEXT<<16, %eax
+	movw	%dx, %ax
+	stosl
+	movl	%edx, %eax
+	movw	$0x8e00, %ax
+	stosl
+	movq	%rdx, %rax
+	shrq	$32, %rax
+	stosq
+	movl	$0x02eb006a, %eax	/*	pushq	$0x00		*/
+	movb	%cl, %ah		/*	jmp	0f		*/
+	movl	%eax, (%rdx)		/* 	pushq	$0x01		*/
+	addq	$4, %rdx		/* 0:	jmp	1f		*/
+	incb	%cl			/* 	pushq	$0x02		*/
+	jnz	.Lfill_idt_and_isrs	/* 1:	jmp	2f		*/
+					/*	...			*/
+					/*	pushq	$-1		*/
+	movb	$0xe9, -2(%rdx)		/*	jmp .Ldefault_isr_dispatch */
+	leaq	.Ldefault_isr_dispatch-3(%rip), %rax
+	subl	%edx, %eax
+	movl	%eax, -1(%rdx)
 	popq	%rdi
 	popq	%rsi
 	retq
+
+.Ldefault_isr_dispatch:
+	cli
+0:	hlt
+	jmp	0b
 
 /*
  * Return the address of the rm86_regs_t structure containing register
@@ -185,7 +217,9 @@ rm86:
 .Llm_ip = . - 6
 
 	.code64
-.Lback_in_lm:				/* restore %rsp */
+.Lback_in_lm:
+	lidt	.Lour_idtr(%rip)	/* load our IDT */
+					/* restore %rsp */
 	movabsq $0xaaaaaaaaaaaaaaaa, %rsp
 .Llm_rsp = . - 8
 	movw	$SEL_LM_DATA, %bx
@@ -210,6 +244,9 @@ rm86:
 .Lour_gdtr:
 	.hword	.Lour_gdt_end-.Lour_gdt-1
 	.quad	.Lour_gdt-.LB
+.Lour_idtr:
+	.hword	0x100*0x10-1
+	.quad	.Lour_idt
 .Lrm_idtr:
 	.hword	4*0x100-1
 	.long	0
@@ -230,5 +267,12 @@ SEL_LM_DATA = . - .Lour_gdt
 					   this _must_ be 8-byte aligned */
 .Lrm_regs = .
 
+	.section .rdata, "dr"
+
+.Ldefault_isr_msg:
+	.asciz	"stray interrupt %#x!"
+
 	.lcomm	.Lrm_t_addr, 4
 	.lcomm	.Lrm_t_seg, 2
+	.lcomm	.Ldefault_isrs, 0x100*4-2+5
+	.lcomm	.Lour_idt, 0x100*0x10, 0x10
