@@ -396,20 +396,11 @@ INIT_TEXT void fb_con_init(void)
 	    pix_height, pixel_octets, pixel_octets == 1 ? "" : "s");
 }
 
-/* Say whether the frame buffer console has been set up. */
-INIT_TEXT bool fb_con_up_p(void)
+/* Return the address after the end of the frame buffer console memory. */
+INIT_TEXT uint64_t fb_con_mem_end(void)
 {
-	return pixel_octets != 0;
-}
-
-/* Undo the frame buffer console set up (in case of a loader error). */
-INIT_TEXT void fb_con_exit(void)
-{
-	if (pixel_octets && BS) {
-		pixel_octets = 0;
-		gfxop->SetMode(gfxop, orig_mode);
-		ST->ConOut->Reset(ST->ConOut, TRUE);
-	}
+	return (uint64_t)frame_buf +
+	    (size_t)pix_width * pix_height * pixel_octets;
 }
 
 /*

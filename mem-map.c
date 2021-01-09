@@ -26,6 +26,11 @@ extern EFI_HANDLE LibImageHandle;
 #define E820_ACPI_RECLAIM	0x00000003U
 #define E820_ACPI_NVS		0x00000004U
 #define E820_UNUSABLE		0x00000005U	/* per Intel EDK II */
+#define E820_BS_DATA		0xb5b5d474U	/* temporary marker for boot
+						   services data; will be
+						   turned into E820_AVAILABLE
+						   once we set up our own
+						   page tables */
 
 /*
  * Memory map address range descriptors much in the style of BIOS int 0x15,
@@ -60,18 +65,30 @@ struct mem_cacheability {
 };
 
 static mem_type_t *mem_types = NULL;
-static INIT_DATA mem_cacheability_t *mem_cacheabilities = NULL,
-				    *mem_cacheability_cursor = NULL;
+static INIT_DATA mem_cacheability_t *mem_cacheabilities = NULL;
 
-static INIT_TEXT mem_type_t *do_record_mem_type(mem_type_t *prev,
-    mem_type_t *next, uint64_t start, uint64_t size, uint32_t e820_type)
+static INIT_TEXT mem_type_t *do_record_mem_type(mem_type_t *prevprev,
+    mem_type_t *prev, mem_type_t *next, uint64_t start, uint64_t size,
+    uint32_t e820_type)
 {
 	if (prev && prev->e820_type == e820_type &&
 		    prev->start == start + size) {
-		/* Coalesce with *prev. */
-		prev->start = start;
-		prev->size += size;
-		return prev;
+		if (next && next->e820_type == e820_type &&
+		    next->start + next->size == start) {
+			/* Coalesce with both *prev & *next. */
+			next->size += size + prev->size;
+			if (prevprev)
+				prevprev->next = next;
+			else
+				mem_types = next;
+			mem_heap_free(prev);
+			return next;
+		} else {
+			/* Coalesce with *prev. */
+			prev->start = start;
+			prev->size += size;
+			return prev;
+		}
 	} else if (next && next->e820_type == e820_type &&
 		    next->start + next->size == start) {
 		/* Coalesce with *next. */
@@ -92,13 +109,16 @@ static INIT_TEXT mem_type_t *do_record_mem_type(mem_type_t *prev,
 	}
 }
 
-static INIT_TEXT void do_delete_mem_type(mem_type_t *prev, mem_type_t *curr)
+static INIT_TEXT mem_type_t *do_delete_mem_type(mem_type_t *prev,
+    mem_type_t *curr)
 {
+	mem_type_t *next = curr->next;
 	if (prev)
-		prev->next = curr->next;
+		prev->next = next;
 	else
-		mem_types = curr->next;
+		mem_types = next;
 	mem_heap_free(curr);
+	return next;
 }
 
 static INIT_TEXT void record_mem_type(uint64_t start, uint64_t end,
@@ -106,12 +126,11 @@ static INIT_TEXT void record_mem_type(uint64_t start, uint64_t end,
 {
 	uint32_t e820_type;
 	uint64_t size = end - start;
-	mem_type_t *prev, *next;
+	mem_type_t *prevprev, *prev, *next;
 	if (!size)
 		return;
 	switch (efi_type) {
 	    case EfiBootServicesCode:
-	    case EfiBootServicesData:
 	    case EfiRuntimeServicesCode:
 	    case EfiRuntimeServicesData:
 	    case EfiConventionalMemory:
@@ -126,26 +145,42 @@ static INIT_TEXT void record_mem_type(uint64_t start, uint64_t end,
 	    case EfiACPIMemoryNVS:
 		e820_type = E820_ACPI_NVS;
 		break;
+	    case EfiBootServicesData:
+		e820_type = E820_BS_DATA;
+		break;
 	    default:
 		e820_type = E820_RESERVED;
 	}
-	prev = NULL;
+	prevprev = prev = NULL;
 	next = mem_types;
 	while (next && next->start > start) {
+		prevprev = prev;
 		prev = next;
 		next = next->next;
 	}
-	do_record_mem_type(prev, next, start, size, e820_type);
+	do_record_mem_type(prevprev, prev, next, start, size, e820_type);
 }
 
-static INIT_TEXT void do_record_mem_cacheability(mem_cacheability_t *prev,
-    mem_cacheability_t *next, uint64_t start, uint64_t size, bool writethru_p)
+static INIT_TEXT void do_record_mem_cacheability(mem_cacheability_t *prevprev,
+    mem_cacheability_t *prev, mem_cacheability_t *next,
+    uint64_t start, uint64_t size, bool writethru_p)
 {
 	if (prev && prev->writethru_p == writethru_p &&
 		    prev->start == start + size) {
-		/* Coalesce with *prev. */
-		prev->start = start;
-		prev->size += size;
+		if (next && next->writethru_p == writethru_p &&
+			    next->start + next->size == start) {
+			/* Coalesce with both *prev & *next. */
+			next->size += size + prev->size;
+			if (prevprev)
+				prevprev->next = next;
+			else
+				mem_cacheabilities = next;
+			mem_heap_free(prev);
+		} else {
+			/* Coalesce with *prev. */
+			prev->start = start;
+			prev->size += size;
+		}
 	} else if (next && next->writethru_p == writethru_p &&
 			   next->start + next->size == start) {
 		/* Coalesce with *next. */
@@ -165,18 +200,20 @@ static INIT_TEXT void record_mem_cacheability(uint64_t start, uint64_t end,
     bool writeback_p, bool writethru_p)
 {
 	uint64_t size = end - start;
-	mem_cacheability_t *prev, *next;
+	mem_cacheability_t *prevprev, *prev, *next;
 	if (!size)
 		return;
 	if (writeback_p && writethru_p)
 		return;
-	prev = NULL;
+	prevprev = prev = NULL;
 	next = mem_cacheabilities;
 	while (next && next->start > start) {
+		prevprev = prev;
 		prev = next;
 		next = next->next;
 	}
-	do_record_mem_cacheability(prev, next, start, size, writethru_p);
+	do_record_mem_cacheability(prevprev, prev, next,
+	    start, size, writethru_p);
 }
 
 INIT_TEXT void mem_map_init(UINTN *mem_map_key)
@@ -228,10 +265,21 @@ INIT_TEXT void mem_map_init(UINTN *mem_map_key)
 			    end > 0x1000000ULL ? '+' : ' ',
 			    type,
 			    desc->Attribute);
-		record_mem_type(start, end, type);
-		record_mem_cacheability(start, end,
-		    (attribute & EFI_MEMORY_WB) != 0,
-		    (attribute & EFI_MEMORY_WT) != 0);
+		if (start >= 0x00007ffffffff000ULL) {
+			cprintf("warning: ignoring mem. @%p--@%p above "
+				"47-bit addr. space", start, end);
+		} else {
+			if (end > 0x00007ffffffff000ULL) {
+				cprintf("warning: ignoring mem. @%p--@%p "
+					"above 47-bit addr. space",
+				    (void *)0x000ffffffffff000ULL, end);
+				end = 0x00007ffffffff000ULL;
+			}
+			record_mem_type(start, end, type);
+			record_mem_cacheability(start, end,
+			    (attribute & EFI_MEMORY_WB) != 0,
+			    (attribute & EFI_MEMORY_WT) != 0);
+		}
 		/* :-| */
 		desc = (EFI_MEMORY_DESCRIPTOR *)((char *)desc + desc_sz);
 	}
@@ -245,11 +293,11 @@ INIT_TEXT void mem_map_init(UINTN *mem_map_key)
 		cputs("all mem. is cacheable as write-back!\n");
 	else {
 		cputs("write-thru. or uncacheable mem.:\n"
-		      "  start               end                 WT\n");
+		      "  start               end                 w-t.?\n");
 		while (mc) {
-			cprintf("  @0x%016x @0x%016x %s\n",
+			cprintf("  @0x%016x @0x%016x %c\n",
 			    mc->start, mc->start + mc->size - 1,
-			    mc->writethru_p ? "yes" : "no");
+			    mc->writethru_p ? 'y' : 'n');
 			mc = mc->next;
 		}
 	}
@@ -265,10 +313,12 @@ INIT_TEXT void mem_map_init(UINTN *mem_map_key)
 INIT_TEXT void *mem_map_reserve_page(uint64_t max_end_addr)
 {
 	uint64_t pg;
-	mem_type_t *prev = NULL, *curr = mem_types;
+	mem_type_t *prevprev = NULL, *prev = NULL, *curr = mem_types;
+	max_end_addr &= -PAGE_SIZE;
 	while (curr && (curr->start >= max_end_addr ||
 			curr->e820_type != E820_AVAILABLE))
 	{
+		prevprev = prev;
 		prev = curr;
 		curr = curr->next;
 	}
@@ -278,37 +328,111 @@ INIT_TEXT void *mem_map_reserve_page(uint64_t max_end_addr)
 	/*
 	 * Carve out the page at the highest available address below
 	 * max_addr.  If there is a page at the beginning of the memory
-	 * range which is exactly at {max_end_addr - EFI_PAGE_SIZE}, or at
-	 * the end of the memory range & before max_end_addr, then things
-	 * are slightly easier.  Otherwise, we need to split the range into
-	 * 3 ranges.
+	 * range which is exactly at {max_end_addr - PAGE_SIZE}, or at the
+	 * end of the memory range & before max_end_addr, then things are
+	 * slightly easier.  Otherwise, we need to split the range into 3
+	 * ranges.
 	 */
 	if (curr->start + curr->size <= max_end_addr) {
-		pg = curr->start + curr->size - EFI_PAGE_SIZE;
+		pg = curr->start + curr->size - PAGE_SIZE;
 		if (curr->size == EFI_PAGE_SIZE)
-			do_delete_mem_type(prev, curr);
+			curr = do_delete_mem_type(prev, curr);
 		else
 			curr->size -= EFI_PAGE_SIZE;
-		do_record_mem_type(prev, curr, pg, EFI_PAGE_SIZE,
+		do_record_mem_type(prevprev, prev, curr, pg, PAGE_SIZE,
 		    E820_RESERVED);
-	} else if (curr->start == max_end_addr - EFI_PAGE_SIZE) {
+	} else if (curr->start == max_end_addr - PAGE_SIZE) {
 		pg = curr->start;
-		curr->size -= EFI_PAGE_SIZE;
-		curr->start += EFI_PAGE_SIZE;
-		do_record_mem_type(curr, curr->next, pg, EFI_PAGE_SIZE,
+		curr->size -= PAGE_SIZE;
+		curr->start += PAGE_SIZE;
+		do_record_mem_type(prev, curr, curr->next, pg, PAGE_SIZE,
 		    E820_RESERVED);
 		return (void *)pg;
 	} else {
 		uint64_t old_end = curr->start + curr->size;
-		pg = max_end_addr - EFI_PAGE_SIZE;
+		pg = max_end_addr - PAGE_SIZE;
 		curr->size = pg - curr->start;
-		curr = do_record_mem_type(prev, curr,
+		curr = do_record_mem_type(prevprev, prev, curr,
 		    max_end_addr, old_end - max_end_addr, E820_AVAILABLE);
-		do_record_mem_type(prev, curr, pg, EFI_PAGE_SIZE,
+		do_record_mem_type(prevprev, prev, curr, pg, PAGE_SIZE,
 		    E820_RESERVED);
 	}
-	memset((void *)pg, 0, EFI_PAGE_SIZE);
+	memset((void *)pg, 0, PAGE_SIZE);
 	return (void *)pg;
+}
+
+INIT_TEXT void *mem_map_reserve_page_anywhere(void)
+{
+	return mem_map_reserve_page(~0ULL);
+}
+
+/*
+ * Return the address beyond the last byte of memory covered by the memory
+ * map.
+ */
+INIT_TEXT uint64_t mem_map_all_end(void)
+{
+	mem_type_t *mt = mem_types;
+	/* OVMF does not include the video frame buffer in the memory map. */
+	uint64_t end1 = fb_con_mem_end(), end2 = 0;
+	end1 = (end1 + PAGE_SIZE - 1) & -PAGE_SIZE;
+	if (mt)
+		end2 = mt->start + mt->size;
+	return end1 > end2 ? end1 : end2;
+}
+
+/* Free all UEFI boot services pages & mark them E820_AVAILABLE. */
+INIT_TEXT void mem_map_free_bs(void)
+{
+	mem_type_t *prevprev = NULL, *prev = NULL, *curr = mem_types;
+	cputs("freeing UEFI boot services memory\n");
+	while (curr) {
+		if (curr->e820_type == E820_BS_DATA) {
+			uint64_t start = curr->start, size = curr->size;
+			curr = do_delete_mem_type(prev, curr);
+			do_record_mem_type(prevprev, prev, curr,
+			    start, size, E820_AVAILABLE);
+		}
+		prevprev = prev;
+		prev = curr;
+		curr = curr->next;
+	}
+}
+
+/*
+ * Return cacheability properties of the memory at the given address.  Also
+ * return the address beyond the end of the containing memory block which
+ * has the same cacheability.
+ */
+INIT_TEXT void mem_map_get_cacheability(uint64_t addr, uint64_t *end,
+    bool *writeback_p, bool *writethru_p)
+{
+	const mem_cacheability_t *prev = NULL, *curr = mem_cacheabilities;
+	while (curr && curr->start > addr) {
+		prev = curr;
+		curr = curr->next;
+	}
+	if (curr && addr < curr->start + curr->size) {
+		/* addr lies inside *curr. */
+		if (writeback_p)
+			*writeback_p = false;
+		if (writethru_p)
+			*writethru_p = curr->writethru_p;
+		if (end)
+			*end = curr->start + curr->size;
+	} else {
+		/* addr lies between start of *prev and end of *curr. */
+		if (writeback_p)
+			*writeback_p = true;
+		if (writethru_p)
+			*writethru_p = true;
+		if (end) {
+			if (prev)
+				*end = prev->start;
+			else
+				*end = ~0ULL;
+		}
+	}
 }
 
 INIT_TEXT void stage1_done(UINTN mem_map_key)
@@ -322,7 +446,9 @@ INIT_TEXT void stage1_done(UINTN mem_map_key)
 	 * foundation-secure-boot-system-released/) seems to have no problem.
 	 * And PreLoader is smaller too...
 	 */
-	EFI_STATUS status = BS->ExitBootServices(LibImageHandle, mem_map_key);
+	EFI_STATUS status;
+	cputs("exiting UEFI boot services\n");
+	status = BS->ExitBootServices(LibImageHandle, mem_map_key);
 	if (EFI_ERROR(status))
 		panic_efi("cannot exit UEFI boot services", status);
 	BS = NULL;

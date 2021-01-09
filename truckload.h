@@ -26,6 +26,9 @@
 #define NORETURN	__attribute__((noreturn))
 #define PURE		__attribute__((pure))
 
+#define PAGE_SIZE	0x1000ULL
+#define LARGE_PAGE_SIZE	(0x200ULL * PAGE_SIZE)
+
 enum COLORS
 {
 	BLACK, BLUE, GREEN, CYAN,
@@ -55,8 +58,7 @@ extern INIT_TEXT void acpi_init(const void *);
 
 /* fb-con.c */
 extern INIT_TEXT void fb_con_init(void);
-extern INIT_TEXT bool fb_con_up_p(void);
-extern INIT_TEXT void fb_con_exit(void);
+extern INIT_TEXT uint64_t fb_con_mem_end(void);
 extern void putwch(char16_t);
 extern void cputws(const char16_t *);
 extern void cnputs(const char *, size_t);
@@ -74,6 +76,11 @@ extern void *mem_heap_realloc(void *, size_t);
 
 /* mem-map.c */
 extern INIT_TEXT void *mem_map_reserve_page(uint64_t);
+extern INIT_TEXT void *mem_map_reserve_page_anywhere(void);
+extern INIT_TEXT uint64_t mem_map_all_end(void);
+extern INIT_TEXT void mem_map_free_bs(void);
+extern INIT_TEXT void mem_map_get_cacheability(uint64_t, uint64_t *,
+    bool *, bool *);
 
 /* panic.c */
 extern NORETURN void vpanic_with_far_caller(uint16_t, void *, const char *,
@@ -99,7 +106,7 @@ typedef struct __attribute__((packed)) {
 	uint16_t ss, ip, cs;
 } rm86_regs_t;
 
-extern INIT_TEXT void lm86_rm86_init(void *);
+extern INIT_TEXT void lm86_rm86_init(void *, uint64_t *);
 extern rm86_regs_t *rm86_regs(void);
 extern void rm86(void);
 

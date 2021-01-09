@@ -18,6 +18,10 @@
 #include <efi.h>
 #include "truckload.h"
 
+#if PAGE_SIZE != EFI_PAGE_SIZE
+#   error "PAGE_SIZE disagrees with GNU EFI's EFI_PAGE_SIZE!"
+#endif
+
 /* mem-heap.c */
 extern INIT_TEXT void mem_heap_init(void);
 

@@ -46,8 +46,9 @@ lm86_rm86_init:
 	movl	%eax, .Llm_cr0-.LE(%rdi)/* returning from real mode) */
 	movq	%cr4, %rax
 	movl	%eax, .Llm_cr4-.LE(%rdi)
-	movq	%cr3, %rax		/* save CR3 (FIXME) */
-	movl	%eax, .Llm_cr3-.LE(%rdi)
+	movq	%rdx, %cr3		/* switch to new CR3; save it too */
+	wbinvd
+	movl	%edx, .Llm_cr3-.LE(%rdi)
 	lgdt	.Lour_gdtr-.LE(%rdi)	/* switch to our GDT, %cs, etc. */
 	pushq	$SEL_LM_TEXT
 	leaq	.Linit_cont(%rip), %rax
@@ -160,10 +161,14 @@ rm86:
 	pushw	%ds
 	pushw	%es
 	pushal
-	movl	$0xaaaaaaaa, %eax	/* restore CR3 (FIXME) */
-.Llm_cr3 = . - 4
+	movl	$0xaaaaaaaa, %eax	/* restore CR3 if it was changed */
+.Llm_cr3 = . - 4			/* (FIXME?  only checks low 32 bits) */
+	movl	%cr3, %edx
+	cmpl	%eax, %edx
+	jz	.Lcr3_right
 	movl	%eax, %cr3
-	wbinvd				/* FIXME? */
+	wbinvd
+.Lcr3_right:
 	movl	$0xaaaaaaaa, %eax	/* restore CR4 */
 .Llm_cr4 = . - 4
 	movl	%eax, %cr4
