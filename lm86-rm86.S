@@ -38,9 +38,16 @@ lm86_rm86_init:
 	rep movsq
 					/* fix up everything */
 	addl	%eax, .Lour_gdtr+2-.LE(%rdi)
-	addl	%eax, .Lour_gdt+8+2-.LE(%rdi)
-	addl	%eax, .Lour_gdt+0x10+2-.LE(%rdi)
+	addl	%eax, .Lour_gdt+SEL_PM16_TEXT+2-.LE(%rdi)
+	addl	%eax, .Lour_gdt+SEL_PM16_DATA+2-.LE(%rdi)
 	addl	%eax, .Llm_ip-.LE(%rdi)
+	leaq	.Lour_tss(%rip), %rax
+	movw	%ax, .Lour_gdt+SEL_TSS+2-.LE(%rdi)
+	shrq	$16, %rax
+	movb	%al, .Lour_gdt+SEL_TSS+4-.LE(%rdi)
+	movb	%ah, .Lour_gdt+SEL_TSS+7-.LE(%rdi)
+	shrq	$16, %rax
+	movl	%eax, .Lour_gdt+SEL_TSS+8-.LE(%rdi)
 	cli				/* we must disable interrupts now */
 	movq	%cr0, %rax		/* save our CR0 & CR4 (for use when */
 	movl	%eax, .Llm_cr0-.LE(%rdi)/* returning from real mode) */
@@ -62,6 +69,8 @@ lm86_rm86_init:
 	movw	%ax, %fs
 	movw	%ax, %gs
 	lidt	.Lour_idtr-.LE(%rdi)	/* switch to our IDT */
+	movb	$SEL_TSS, %al		/* switch to our TSS */
+	ltr	%ax
 	leaq	.Lour_idt(%rip), %rdi	/* fill up the IDT & also generate
 					   code for default intr. handlers */
 	leaq	.Ldefault_isrs(%rip), %rdx
@@ -71,7 +80,7 @@ lm86_rm86_init:
 	movw	%dx, %ax
 	stosl
 	movl	%edx, %eax
-	movw	$0x8e00, %ax
+	movw	$0x8e01, %ax
 	stosl
 	movq	%rdx, %rax
 	shrq	$32, %rax
@@ -93,9 +102,21 @@ lm86_rm86_init:
 	retq
 
 .Ldefault_isr_dispatch:
-	cli
-0:	hlt
-	jmp	0b
+	leaq	.Lint_stack_1_end-40(%rip), %rcx
+	cmpq	%rcx, %rsp
+	jz	.Lhave_err_code
+	leaq	.Lint_stack_2_end-40(%rip), %rcx
+	cmpq	%rcx, %rsp
+	jz	.Lhave_err_code
+	pushq	(%rsp)			/* if there is no error code, push */
+	orq	$-1, 8(%rsp)		/* a dummy one */
+.Lhave_err_code:
+	movzwq	8+16(%rsp), %rcx
+	movq	8+8(%rsp), %rdx
+	leaq	.Ldefault_isr_msg(%rip), %r8
+	movzbq	(%rsp), %r9
+	subq	$32-8, %rsp		/* error code will come from stack */
+	call	panic_with_far_caller
 
 /*
  * Return the address of the rm86_regs_t structure containing register
@@ -218,16 +239,18 @@ rm86:
 
 	.code64
 .Lback_in_lm:
-	lidt	.Lour_idtr(%rip)	/* load our IDT */
 					/* restore %rsp */
 	movabsq $0xaaaaaaaaaaaaaaaa, %rsp
 .Llm_rsp = . - 8
-	movw	$SEL_LM_DATA, %bx
+	movw	$SEL_LM_DATA, %bx	/* restore segment registers */
 	movw	%bx, %ds
 	movw	%bx, %es
 	movw	%bx, %ss
 	movw	%bx, %fs
 	movw	%bx, %gs
+	lidt	.Lour_idtr(%rip)	/* load our IDT & TSS */
+	movb	$SEL_TSS, %bl
+	ltr	%bx
 	/* sti */
 	popfq				/* restore flags */
 	popq	%r15			/* restore call-saved registers */
@@ -260,6 +283,10 @@ SEL_LM_TEXT = . - .Lour_gdt
 	.quad	0x00af9a0000000000	/* our long mode code segment */
 SEL_LM_DATA = . - .Lour_gdt
 	.quad	0x00af920000000000	/* our long mode data segment */
+SEL_TSS = . - .Lour_gdt			/* our TSS */
+	.hword	.Lour_tss_end - .Lour_tss - 1, 0
+	.long	0x00008900
+	.quad	0x0000000000000000
 .Lour_gdt_end:
 
 	.balign	8
@@ -269,10 +296,35 @@ SEL_LM_DATA = . - .Lour_gdt
 
 	.section .rdata, "dr"
 
+	.balign	8
+.Lour_tss:
+	.long	0
+	.quad	.Lint_stack_1_end	/* RSP0 */
+	.quad	.Lint_stack_1_end	/* RSP1 */
+	.quad	.Lint_stack_1_end	/* RSP2 */
+	.quad	0
+	.quad	.Lint_stack_1_end	/* IST1 */
+	.quad	.Lint_stack_2_end	/* IST2 */
+	.quad	.Lint_stack_1_end	/* IST3 */
+	.quad	.Lint_stack_1_end	/* IST4 */
+	.quad	.Lint_stack_1_end	/* IST5 */
+	.quad	.Lint_stack_1_end	/* IST6 */
+	.quad	.Lint_stack_1_end	/* IST7 */
+	.quad	0
+	.hword	0
+	.hword	.Lour_tss_end-.Lour_tss
+.Lour_tss_end:
+
 .Ldefault_isr_msg:
-	.asciz	"stray interrupt %#x!"
+	.asciz	"stray interrupt %#x with error code %#llx"
 
 	.lcomm	.Lrm_t_addr, 4
 	.lcomm	.Lrm_t_seg, 2
 	.lcomm	.Ldefault_isrs, 0x100*4-2+5
 	.lcomm	.Lour_idt, 0x100*0x10, 0x10
+INT_STACK_1_SIZE = 0x1000
+	.lcomm	.Lint_stack_1, INT_STACK_1_SIZE, 0x10
+.Lint_stack_1_end = .Lint_stack_1+INT_STACK_1_SIZE
+INT_STACK_2_SIZE = 0x1000
+	.lcomm	.Lint_stack_2, INT_STACK_1_SIZE, 0x10
+.Lint_stack_2_end = .Lint_stack_2+INT_STACK_2_SIZE
