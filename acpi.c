@@ -67,12 +67,18 @@ static INIT_TEXT void process_madt(const ACPI_TABLE_MADT *madt)
 {
 	UINT32 left;
 	const char *p;
+	uintptr_t lapic_addr;
+	bool lapic_i8259_compat;
+	int_fast16_t lapic_nmi_lint = -1;
 	if (!madt)
 		panic("no ACPI MADT?");
+
+	/* Dump the MADT to the console, & start to collect information. */
+	lapic_addr = madt->Address;
+	lapic_i8259_compat = ((madt->Flags & ACPI_MADT_PCAT_COMPAT) != 0);
 	cprintf("ACPI MADT @%p:\n"
-		"  LAPIC: @%#" PRIx32 "  flags: 0x%08" PRIx32 " { %s}\n",
-	    madt, madt->Address, madt->Flags,
-	    madt->Flags & ACPI_MADT_PCAT_COMPAT ? "i8259 " : "");
+		"  LAPIC: @%#" PRIxPTR "  flags: 0x%08" PRIx32 " { %s}\n",
+	    madt, lapic_addr, madt->Flags, lapic_i8259_compat ? "i8259 " : "");
 	left = madt->Header.Length - sizeof(*madt);
 	p = (const char *)(madt + 1);
 	while (left) {
@@ -143,6 +149,7 @@ static INIT_TEXT void process_madt(const ACPI_TABLE_MADT *madt)
 				  (const ACPI_MADT_LOCAL_APIC_OVERRIDE *)stbl;
 				cprintf("  LAPIC override { @%#" PRIx64 " }\n",
 				    ic->Address);
+				lapic_addr = ic->Address;
 			}
 			break;
 		    default:

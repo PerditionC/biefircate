@@ -116,8 +116,9 @@ ACPI_STATUS AcpiOsInstallInterruptHandler(UINT32 int_lvl,
     ACPI_OSD_HANDLER handler, void *context)
 {
 	/* FIXME */
-	panic_with_caller(__builtin_return_address(0),
-	    "AcpiOsInstallInterruptHandler");
+	/*panic_with_caller(__builtin_return_address(0),*/
+	cprintf(
+	    "AcpiOsInstallInterruptHandler %#" PRIx32 " %p %p", int_lvl, handler, context);
 	return AE_OK;
 }
 

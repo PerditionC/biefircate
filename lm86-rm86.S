@@ -12,6 +12,10 @@
  * for more details.
  */
 
+#include "truckload.h"
+
+	.section .text.i, "x"
+
 /*
  * Re-setup some stuff after exiting boot services.  Specifically, re-setup
  * long mode itself to use our own GDT, IDT, & page tables which reside below
@@ -80,7 +84,7 @@ lm86_rm86_init:
 	movw	%dx, %ax
 	stosl
 	movl	%edx, %eax
-	movw	$0x8e01, %ax
+	movw	$0x8e00 | INT_STACK_EXCP, %ax
 	stosl
 	movq	%rdx, %rax
 	shrq	$32, %rax
@@ -97,19 +101,36 @@ lm86_rm86_init:
 	leaq	.Ldefault_isr_dispatch-3(%rip), %rax
 	subl	%edx, %eax
 	movl	%eax, -1(%rdx)
+					/* have the NMI & double fault ISRs
+					   use a different stack */
+	movb	$INT_STACK_BAD_EXCP, .Lour_idt+2*0x10+4(%rip)
+	movb	$INT_STACK_BAD_EXCP, .Lour_idt+8*0x10+4(%rip)
 	popq	%rdi
 	popq	%rsi
 	retq
 
-.Ldefault_isr_dispatch:
+	.text
+
+.Ldefault_isr_dispatch:			/* the stack top contains the
+					   interrupt vector number */
+	movw	$SEL_LM_DATA, %ax
+	movw	%ax, %ds
+	movw	%ax, %es
+	movw	%ax, %ss
+	movw	%ax, %fs
+	movw	%ax, %gs
 	leaq	.Lint_stack_1_end-40(%rip), %rcx
 	cmpq	%rcx, %rsp
 	jz	.Lhave_err_code
 	leaq	.Lint_stack_2_end-40(%rip), %rcx
 	cmpq	%rcx, %rsp
 	jz	.Lhave_err_code
-	pushq	(%rsp)			/* if there is no error code, push */
-	orq	$-1, 8(%rsp)		/* a dummy one */
+	leaq	.Lint_stack_3_end-40(%rip), %rcx
+	cmpq	%rcx, %rsp
+	jz	.Lhave_err_code
+	pushq	(%rsp)			/* if there is no error code, "push" */
+	orq	$-1, 8(%rsp)		/* a dummy one; move the int. vector
+					   number upwards in the stack */
 .Lhave_err_code:
 	movzwq	8+16(%rsp), %rcx
 	movq	8+8(%rsp), %rdx
@@ -160,6 +181,8 @@ rm86:
 	pushq	$8
 	pushq	$.Lgo_to_rm-.LB
 	lretq
+
+	.section .text.i, "x"
 
 	.balign	8
 .LB = . - 8				/* start of area to copy to base mem */
@@ -305,7 +328,7 @@ SEL_TSS = . - .Lour_gdt			/* our TSS */
 	.quad	0
 	.quad	.Lint_stack_1_end	/* IST1 */
 	.quad	.Lint_stack_2_end	/* IST2 */
-	.quad	.Lint_stack_1_end	/* IST3 */
+	.quad	.Lint_stack_3_end	/* IST3 */
 	.quad	.Lint_stack_1_end	/* IST4 */
 	.quad	.Lint_stack_1_end	/* IST5 */
 	.quad	.Lint_stack_1_end	/* IST6 */
@@ -322,9 +345,15 @@ SEL_TSS = . - .Lour_gdt			/* our TSS */
 	.lcomm	.Lrm_t_seg, 2
 	.lcomm	.Ldefault_isrs, 0x100*4-2+5
 	.lcomm	.Lour_idt, 0x100*0x10, 0x10
+
 INT_STACK_1_SIZE = 0x1000
 	.lcomm	.Lint_stack_1, INT_STACK_1_SIZE, 0x10
 .Lint_stack_1_end = .Lint_stack_1+INT_STACK_1_SIZE
+
 INT_STACK_2_SIZE = 0x1000
 	.lcomm	.Lint_stack_2, INT_STACK_1_SIZE, 0x10
 .Lint_stack_2_end = .Lint_stack_2+INT_STACK_2_SIZE
+
+INT_STACK_3_SIZE = 0x1000
+	.lcomm	.Lint_stack_3, INT_STACK_3_SIZE, 0x10
+.Lint_stack_3_end = .Lint_stack_3+INT_STACK_3_SIZE

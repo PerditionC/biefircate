@@ -15,19 +15,27 @@
 #ifndef H_TRUCKLOAD
 #define H_TRUCKLOAD
 
-#include <inttypes.h>
-#include <stdarg.h>
-#include <stdbool.h>
-#include <stdlib.h>
-#include <uchar.h>
+/* Interrupt stack indices. */
+#define INT_STACK_EXCP		1	/* for most exceptions */
+#define INT_STACK_BAD_EXCP	2	/* for really bad exceptions (NMI,
+					   double fault) */
+#define INT_STACK_IRQ		3	/* for IRQs */
 
-#define INIT_TEXT	__attribute__((section(".text.i")))
-#define INIT_DATA	__attribute__((section(".data.i")))
-#define NORETURN	__attribute__((noreturn))
-#define PURE		__attribute__((pure))
+#ifndef __ASSEMBLER__
+#   include <inttypes.h>
+#   include <stdarg.h>
+#   include <stdbool.h>
+#   include <stdlib.h>
+#   include <uchar.h>
 
-#define PAGE_SIZE	0x1000ULL
-#define LARGE_PAGE_SIZE	(0x200ULL * PAGE_SIZE)
+/* Shorthands for C function & data attributes. */
+#   define INIT_TEXT	__attribute__((section(".text.i")))
+#   define INIT_DATA	__attribute__((section(".data.i")))
+#   define NORETURN	__attribute__((noreturn))
+#   define PURE		__attribute__((pure))
+
+#   define PAGE_SIZE	0x1000ULL
+#   define LARGE_PAGE_SIZE (0x200ULL * PAGE_SIZE)
 
 enum COLORS
 {
@@ -113,4 +121,6 @@ extern INIT_TEXT void lm86_rm86_init(void *reserved_base_mem,
 extern rm86_regs_t *rm86_regs(void);
 extern void rm86(void);
 
-#endif
+#endif	/* !__ASSEMBLER__ */
+
+#endif	/* H_TRUCKLOAD */
