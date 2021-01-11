@@ -68,17 +68,18 @@ static INIT_TEXT void process_madt(const ACPI_TABLE_MADT *madt)
 	UINT32 left;
 	const char *p;
 	uintptr_t lapic_addr;
-	bool lapic_i8259_compat;
+	bool i8259_compat_p;
 	int_fast16_t lapic_nmi_lint = -1;
+	unsigned n_ioapics = 0;
 	if (!madt)
 		panic("no ACPI MADT?");
 
 	/* Dump the MADT to the console, & start to collect information. */
 	lapic_addr = madt->Address;
-	lapic_i8259_compat = ((madt->Flags & ACPI_MADT_PCAT_COMPAT) != 0);
+	i8259_compat_p = ((madt->Flags & ACPI_MADT_PCAT_COMPAT) != 0);
 	cprintf("ACPI MADT @%p:\n"
 		"  LAPIC: @%#" PRIxPTR "  flags: 0x%08" PRIx32 " { %s}\n",
-	    madt, lapic_addr, madt->Flags, lapic_i8259_compat ? "i8259 " : "");
+	    madt, lapic_addr, madt->Flags, i8259_compat_p ? "i8259 " : "");
 	left = madt->Header.Length - sizeof(*madt);
 	p = (const char *)(madt + 1);
 	while (left) {
@@ -108,6 +109,7 @@ static INIT_TEXT void process_madt(const ACPI_TABLE_MADT *madt)
 						   "IRQ base: %#" PRIx32
 						   " }\n",
 				    ic->Address, ic->Id, ic->GlobalIrqBase);
+				++n_ioapics;
 			}
 			break;
 		    case ACPI_MADT_TYPE_INTERRUPT_OVERRIDE:
@@ -159,6 +161,9 @@ static INIT_TEXT void process_madt(const ACPI_TABLE_MADT *madt)
 		p += stbl->Length;
 		left -= stbl->Length;
 	}
+
+	/* Start setting up the local APIC & I/O APICs. */
+	apic_init(lapic_addr, i8259_compat_p, n_ioapics);
 }
 
 static INIT_TEXT void process_xsdt(void)

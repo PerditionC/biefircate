@@ -183,24 +183,13 @@ ACPI_STATUS AcpiOsReadPort(ACPI_IO_ADDRESS port, UINT32 *value, UINT32 width)
 		return AE_BAD_PARAMETER;
 	switch (width) {
 	    case 8:
-		{
-			uint8_t v;
-			__asm volatile("in %1, %0" : "=a" (v)
-						   : "d" ((uint16_t)port));
-			*value = v;
-		}
+		*value = inp((uint16_t)port);
 		break;
 	    case 16:
-		{
-			uint16_t v;
-			__asm volatile("in %1, %0" : "=a" (v)
-						   : "d" ((uint16_t)port));
-			*value = v;
-		}
+		*value = inpw((uint16_t)port);
 		break;
 	    case 32:
-		__asm volatile("in %1, %0" : "=a" (*value)
-					   : "d" ((uint16_t)port));
+		*value = inpd((uint16_t)port);
 		break;
 	    default:
 		return AE_BAD_PARAMETER;
@@ -214,19 +203,13 @@ ACPI_STATUS AcpiOsWritePort(ACPI_IO_ADDRESS port, UINT32 value, UINT32 width)
 		return AE_BAD_PARAMETER;
 	switch (width) {
 	    case 8:
-		__asm volatile("out %0, %1" : /* no output operands */
-					    : "a" ((uint8_t)value),
-					      "d" ((uint16_t)port));
+		outp((uint16_t)port, (uint8_t)value);
 		break;
 	    case 16:
-		__asm volatile("out %0, %1" : /* no output operands */
-					    : "a" (value),
-					      "d" ((uint16_t)port));
+		outpw((uint16_t)port, (uint16_t)value);
 		break;
 	    case 32:
-		__asm volatile("out %0, %1" : /* no output operands */
-					    : "a" (value),
-					      "d" ((uint16_t)port));
+		outpd((uint16_t)port, (uint32_t)value);
 		break;
 	    default:
 		return AE_BAD_PARAMETER;

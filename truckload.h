@@ -61,8 +61,58 @@ static inline PURE uint16_t get_cs(void)
 	return cs_val;
 }
 
+/*
+ * GNU EFI defines macros inp, inpw, inpd, outp, outpw, & outpd which go
+ * through UEFI & conflict with our definitions.
+ */
+#undef inp
+#undef inpw
+#undef inpd
+#undef outp
+#undef outpw
+#undef outpd
+
+static inline uint8_t inp(uint16_t port)
+{
+	uint8_t value;
+	__asm volatile("inb %1, %0" : "=a" (value) : "Nd" (port));
+	return value;
+}
+
+static inline uint16_t inpw(uint16_t port)
+{
+	uint16_t value;
+	__asm volatile("inw %1, %0" : "=a" (value) : "Nd" (port));
+	return value;
+}
+
+static inline uint32_t inpd(uint16_t port)
+{
+	uint32_t value;
+	__asm volatile("inl %1, %0" : "=a" (value) : "Nd" (port));
+	return value;
+}
+
+static inline void outp(uint16_t port, uint8_t value)
+{
+	__asm volatile("outb %1, %0" : : "Nd" (port), "a" (value));
+}
+
+static inline void outpw(uint16_t port, uint16_t value)
+{
+	__asm volatile("outw %1, %0" : : "Nd" (port), "a" (value));
+}
+
+static inline void outpd(uint16_t port, uint32_t value)
+{
+	__asm volatile("outl %1, %0" : : "Nd" (port), "a" (value));
+}
+
 /* acpi.c */
 extern INIT_TEXT void acpi_init(const void *);
+
+/* apic.c */
+extern INIT_TEXT void apic_init(uintptr_t, bool, unsigned);
 
 /* fb-con.c */
 extern INIT_TEXT void fb_con_init(void);
