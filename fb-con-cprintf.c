@@ -82,3 +82,15 @@ void cprintf(const char *fmt, ...)
 	vcprintf(fmt, ap);
 	va_end(ap);
 }
+
+void warn(const char *fmt, ...)
+{
+	va_list ap;
+	enum COLORS old_colour = warnvideo();
+	cputs("WARN: ");
+	va_start(ap, fmt);
+	vcprintf(fmt, ap);
+	va_end(ap);
+	putwch(u'\n');
+	textcolor(old_colour);
+}

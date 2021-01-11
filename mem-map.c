@@ -266,13 +266,13 @@ INIT_TEXT void mem_map_init(UINTN *mem_map_key)
 			    type,
 			    desc->Attribute);
 		if (start >= 0x00007ffffffff000ULL) {
-			cprintf("warning: ignoring mem. @%p--@%p above "
-				"47-bit addr. space", start, end);
+			warn("ignoring mem. @%p--@%p above 47-bit addr. space",
+			    start, end);
 		} else {
 			if (end > 0x00007ffffffff000ULL) {
-				cprintf("warning: ignoring mem. @%p--@%p "
-					"above 47-bit addr. space",
-				    (void *)0x000ffffffffff000ULL, end);
+				warn("ignoring mem. @%p--@%p above 47-bit "
+				     "addr. space",
+				    (void *)0x00007ffffffff000ULL, end);
 				end = 0x00007ffffffff000ULL;
 			}
 			record_mem_type(start, end, type);
@@ -290,7 +290,7 @@ INIT_TEXT void mem_map_init(UINTN *mem_map_key)
 	 */
 	mc = mem_cacheabilities;
 	if (!mc)
-		cputs("all mem. is cacheable as write-back!\n");
+		warn("all mem. is cacheable as write-back!");
 	else {
 		cputs("write-thru. or uncacheable mem.:\n"
 		      "  start               end                 w-t.?\n");

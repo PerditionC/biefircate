@@ -473,3 +473,12 @@ enum COLORS textcolor(enum COLORS colour)
 		  (((uint64_t)blue_mask  * blue_share  / 0xff) & blue_mask);
 	return old_colour;
 }
+
+/*
+ * Set the foreground text colour to a colour for displaying warning
+ * messages.
+ */
+enum COLORS warnvideo(void)
+{
+	return textcolor(LIGHTMAGENTA);
+}

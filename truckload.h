@@ -122,10 +122,12 @@ extern void cputws(const char16_t *);
 extern void cnputs(const char *, size_t);
 extern void cputs(const char *);
 extern enum COLORS textcolor(enum COLORS);
+extern enum COLORS warnvideo(void);
 
 /* fb-con-cprintf.c */
 extern void vcprintf(const char *, va_list);
 extern void cprintf(const char *, ...);
+extern void warn(const char *, ...);
 
 /* mem-heap.c */
 extern void *mem_heap_alloc(size_t);
