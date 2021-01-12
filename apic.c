@@ -144,6 +144,7 @@ INIT_TEXT void apic_init(uintptr_t lapic_addr, int_fast16_t lapic_nmi_lint,
 		panic("no IOAPICs?");
 	max_ioapics = max_ioics;
 	lapic = (lapic_t *)lapic_addr;
+	paging_extend(lapic_addr + sizeof(lapic_t));
 
 	/*
 	 * Initialize & turn off legacy i8259 Programmable Interrupt

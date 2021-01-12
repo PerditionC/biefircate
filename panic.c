@@ -27,7 +27,7 @@ NORETURN void vpanic_with_far_caller(uint16_t caller_cs, void *caller,
 	cputs("panic: ");
 	vcprintf(fmt, ap);
 	va_end(ap);
-	cprintf(" [\u2190 @%#" PRIx16 ":%p", caller_cs, caller);
+	cprintf("  [\u2190 @%#" PRIx16 ":%p", caller_cs, caller);
 	if (our_cs_p)
 		cprintf(" = _start+%#tx", (char *)caller - (char *)_start);
 	putwch(u']');

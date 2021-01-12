@@ -126,7 +126,7 @@ extern INIT_TEXT void apic_init(uintptr_t, int_fast16_t, bool, unsigned);
 
 /* fb-con.c */
 extern INIT_TEXT void fb_con_init(void);
-extern INIT_TEXT uint64_t fb_con_mem_end(void);
+extern INIT_TEXT uintptr_t fb_con_mem_end(void);
 extern void putwch(char16_t);
 extern void cputws(const char16_t *);
 extern void cnputs(const char *, size_t);
@@ -145,12 +145,15 @@ extern void mem_heap_free(void *);
 extern void *mem_heap_realloc(void *, size_t);
 
 /* mem-map.c */
-extern INIT_TEXT void *mem_map_reserve_page(uint64_t);
-extern INIT_TEXT void *mem_map_reserve_page_anywhere(void);
-extern INIT_TEXT uint64_t mem_map_all_end(void);
+extern void *mem_map_reserve_page(uint64_t);
+extern void *mem_map_reserve_page_anywhere(void);
 extern INIT_TEXT void mem_map_free_bs(void);
 extern INIT_TEXT void mem_map_get_cacheability(uint64_t, uint64_t *,
     bool *, bool *);
+
+/* paging.c */
+extern INIT_TEXT uint64_t *paging_init(uintptr_t);
+extern void paging_extend(uintptr_t);
 
 /* panic.c */
 extern NORETURN void vpanic_with_far_caller(uint16_t, void *, const char *,
@@ -162,10 +165,10 @@ extern NORETURN void panic_with_caller(void *, const char *, ...);
 extern NORETURN void panic(const char *, ...);
 
 /* stage1.c */
-extern INIT_TEXT void stage1(const void **);
+extern INIT_TEXT void stage1(const void **, uintptr_t *);
 
 /* stage2.c */
-extern INIT_TEXT void stage2(void);
+extern INIT_TEXT void stage2(uintptr_t);
 
 /* stage3.c */
 extern INIT_TEXT void stage3(const void *);

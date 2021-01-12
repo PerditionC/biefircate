@@ -75,7 +75,7 @@ static INIT_TEXT void test_if_secure_boot(void)
 	cprintf("secure boot: %s\n", secure_boot_p ? "yes" : "no");
 }
 
-INIT_TEXT void stage1(const void **p_rsdp)
+INIT_TEXT void stage1(const void **p_rsdp, uintptr_t *mapped_mem_end)
 {
 	UINTN mem_map_key;
 
@@ -95,5 +95,5 @@ INIT_TEXT void stage1(const void **p_rsdp)
 	 * services & start transitioning to our own services.
 	 */
 	mem_map_init(&mem_map_key);
-	stage1_done(mem_map_key);
+	stage1_done(mem_map_key, mapped_mem_end);
 }

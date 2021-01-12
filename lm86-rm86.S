@@ -118,13 +118,13 @@ lm86_rm86_init:
 	movw	%ax, %ss
 	movw	%ax, %fs
 	movw	%ax, %gs
-	leaq	.Lint_stack_1_end-40(%rip), %rcx
+	leaq	.Lint_stack_1_end-56-8(%rip), %rcx
 	cmpq	%rcx, %rsp
 	jz	.Lhave_err_code
-	leaq	.Lint_stack_2_end-40(%rip), %rcx
+	leaq	.Lint_stack_2_end-56-8(%rip), %rcx
 	cmpq	%rcx, %rsp
 	jz	.Lhave_err_code
-	leaq	.Lint_stack_3_end-40(%rip), %rcx
+	leaq	.Lint_stack_3_end-56-8(%rip), %rcx
 	cmpq	%rcx, %rsp
 	jz	.Lhave_err_code
 	pushq	(%rsp)			/* if there is no error code, "push" */
@@ -135,6 +135,8 @@ lm86_rm86_init:
 	movq	8+8(%rsp), %rdx
 	leaq	.Ldefault_isr_msg(%rip), %r8
 	movzbq	(%rsp), %r9
+	movq	%cr2, %rax		/* read CR2 & put value on stack */
+	movq	%rax, 8+8(%rsp)
 	subq	$32-8, %rsp		/* error code will come from stack */
 	call	panic_with_far_caller
 
@@ -338,7 +340,8 @@ SEL_TSS = . - .Lour_gdt			/* our TSS */
 .Lour_tss_end:
 
 .Ldefault_isr_msg:
-	.asciz	"stray interrupt %#x with error code %#llx"
+	.ascii	"stray interrupt 0x%02x\n"
+	.asciz	"  error code: %#llx  %%cr2: %#llx"
 
 	.lcomm	.Lrm_t_addr, 4
 	.lcomm	.Lrm_t_seg, 2

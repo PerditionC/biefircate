@@ -397,10 +397,10 @@ INIT_TEXT void fb_con_init(void)
 }
 
 /* Return the address after the end of the frame buffer console memory. */
-INIT_TEXT uint64_t fb_con_mem_end(void)
+INIT_TEXT uintptr_t fb_con_mem_end(void)
 {
-	return (uint64_t)frame_buf +
-	    (size_t)pix_width * pix_height * pixel_octets;
+	return (uintptr_t)&frame_buf->
+	    a8[(size_t)pix_width * (size_t)pix_height * (size_t)pixel_octets];
 }
 
 /*

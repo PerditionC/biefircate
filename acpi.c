@@ -119,7 +119,7 @@ static INIT_TEXT void process_madt(const ACPI_TABLE_MADT *madt)
 				cprintf("  int. override { "
 					  "%#" PRIx8 " \u2192 %#" PRIx32 "  "
 					  "bus: %#" PRIx8 "  "
-					  "INTI: 0x%04" PRIx16 " }\n",
+					  "INTI fl.: 0x%04" PRIx16 " }\n",
 				    ic->SourceIrq, ic->GlobalIrq, ic->Bus,
 				    ic->IntiFlags);
 			}
@@ -129,7 +129,7 @@ static INIT_TEXT void process_madt(const ACPI_TABLE_MADT *madt)
 				const ACPI_MADT_NMI_SOURCE *ic =
 				    (const ACPI_MADT_NMI_SOURCE *)stbl;
 				cprintf("  NMI source { "
-					  "INTI: 0x%04" PRIx16 "  "
+					  "INTI fl.: 0x%04" PRIx16 "  "
 					  "global IRQ: %#" PRIx32 " }\n",
 				    ic->IntiFlags, ic->GlobalIrq);
 			}
@@ -140,7 +140,7 @@ static INIT_TEXT void process_madt(const ACPI_TABLE_MADT *madt)
 				    (const ACPI_MADT_LOCAL_APIC_NMI *)stbl;
 				cprintf("  LAPIC NMI { "
 					  "proc. id.: %#" PRIx8 "  "
-					  "INTI: 0x%04" PRIx16 "  "
+					  "INTI fl.: 0x%04" PRIx16 "  "
 					  "LINT#: %#" PRIx8 " }\n",
 				    ic->ProcessorId, ic->IntiFlags, ic->Lint);
 				lapic_nmi_lint = ic->Lint;

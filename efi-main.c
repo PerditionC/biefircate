@@ -14,6 +14,7 @@
 
 #include <efi.h>
 #include <efilib.h>
+#include <inttypes.h>
 #include <string.h>
 #include "efi-stuff.h"
 #include "truckload.h"
@@ -22,9 +23,10 @@ INIT_TEXT EFI_STATUS efi_main(EFI_HANDLE image_handle,
 			      EFI_SYSTEM_TABLE *system_table)
 {
 	const void *rsdp;
+	uintptr_t mapped_mem_end;
 	InitializeLib(image_handle, system_table);
-	stage1(&rsdp);
-	stage2();
+	stage1(&rsdp, &mapped_mem_end);
+	stage2(mapped_mem_end);
 	stage3(rsdp);
 	__builtin_unreachable();
 }

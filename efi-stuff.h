@@ -16,6 +16,7 @@
 #define H_EFI_STUFF
 
 #include <efi.h>
+#include <inttypes.h>
 #include "truckload.h"
 
 #if PAGE_SIZE != EFI_PAGE_SIZE
@@ -27,7 +28,7 @@ extern INIT_TEXT void mem_heap_init(void);
 
 /* mem-map.c */
 extern INIT_TEXT void mem_map_init(UINTN *);
-extern INIT_TEXT void stage1_done(UINTN);
+extern INIT_TEXT void stage1_done(UINTN, uintptr_t *);
 
 /* panic.c */
 extern NORETURN INIT_TEXT void panic_efi(const char *, EFI_STATUS);

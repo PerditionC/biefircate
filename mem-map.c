@@ -310,7 +310,7 @@ INIT_TEXT void mem_map_init(UINTN *mem_map_key)
 		    (void *)addr2, ty2);
 }
 
-INIT_TEXT void *mem_map_reserve_page(uint64_t max_end_addr)
+void *mem_map_reserve_page(uint64_t max_end_addr)
 {
 	uint64_t pg;
 	mem_type_t *prevprev = NULL, *prev = NULL, *curr = mem_types;
@@ -361,24 +361,9 @@ INIT_TEXT void *mem_map_reserve_page(uint64_t max_end_addr)
 	return (void *)pg;
 }
 
-INIT_TEXT void *mem_map_reserve_page_anywhere(void)
+void *mem_map_reserve_page_anywhere(void)
 {
 	return mem_map_reserve_page(~0ULL);
-}
-
-/*
- * Return the address beyond the last byte of memory covered by the memory
- * map.
- */
-INIT_TEXT uint64_t mem_map_all_end(void)
-{
-	mem_type_t *mt = mem_types;
-	/* OVMF does not include the video frame buffer in the memory map. */
-	uint64_t end1 = fb_con_mem_end(), end2 = 0;
-	end1 = (end1 + PAGE_SIZE - 1) & -PAGE_SIZE;
-	if (mt)
-		end2 = mt->start + mt->size;
-	return end1 > end2 ? end1 : end2;
 }
 
 /* Free all UEFI boot services pages & mark them E820_AVAILABLE. */
@@ -438,7 +423,7 @@ INIT_TEXT void mem_map_get_cacheability(uint64_t addr, uint64_t *end,
 	}
 }
 
-INIT_TEXT void stage1_done(UINTN mem_map_key)
+INIT_TEXT void stage1_done(UINTN mem_map_key, uintptr_t *mapped_mem_end)
 {
 	/*
 	 * FIXME: the Red Hat shim (https://github.com/rhboot/shim) says
@@ -450,9 +435,22 @@ INIT_TEXT void stage1_done(UINTN mem_map_key)
 	 * And PreLoader is smaller too...
 	 */
 	EFI_STATUS status;
+	mem_type_t *mt = mem_types;
+	uintptr_t end1 = fb_con_mem_end(), end2 = 0;
 	cputs("exiting UEFI boot services\n");
 	status = BS->ExitBootServices(LibImageHandle, mem_map_key);
 	if (EFI_ERROR(status))
 		panic_efi("cannot exit UEFI boot services", status);
 	BS = NULL;
+	/*
+	 * Get the end of known mapped memory.
+	 *
+	 * OVMF does not include the video frame buffer in the memory map,
+	 * so we need to factor it in.  Also, we may need to add in the
+	 * addresses for the APICs, etc.
+	 */
+	end1 = (end1 + PAGE_SIZE - 1) & -PAGE_SIZE;
+	if (mt)
+		end2 = mt->start + mt->size;
+	*mapped_mem_end = end1 > end2 ? end1 : end2;
 }

@@ -104,6 +104,7 @@ void AcpiOsWaitEventsComplete(void)
 
 void *AcpiOsMapMemory(ACPI_PHYSICAL_ADDRESS addr, ACPI_SIZE size)
 {
+	paging_extend(addr + size);
 	return (void *)addr;
 }
 
