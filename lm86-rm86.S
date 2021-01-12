@@ -52,7 +52,6 @@ lm86_rm86_init:
 	movb	%ah, .Lour_gdt+SEL_TSS+7-.LE(%rdi)
 	shrq	$16, %rax
 	movl	%eax, .Lour_gdt+SEL_TSS+8-.LE(%rdi)
-	cli				/* we must disable interrupts now */
 	movq	%cr0, %rax		/* save our CR0 & CR4 (for use when */
 	movl	%eax, .Llm_cr0-.LE(%rdi)/* returning from real mode) */
 	movq	%cr4, %rax

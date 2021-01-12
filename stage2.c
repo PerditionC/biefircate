@@ -179,5 +179,6 @@ INIT_TEXT void stage2(void)
 	reserved_base_mem = mem_map_reserve_page(0xf0000ULL);
 	cprintf("installing LM \u2194 RM trampolines @%p; starting new "
 		"LM env.\n", reserved_base_mem);
+	disable();
 	lm86_rm86_init(reserved_base_mem, pml4);
 }

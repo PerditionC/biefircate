@@ -143,6 +143,7 @@ static INIT_TEXT void process_madt(const ACPI_TABLE_MADT *madt)
 					  "INTI: 0x%04" PRIx16 "  "
 					  "LINT#: %#" PRIx8 " }\n",
 				    ic->ProcessorId, ic->IntiFlags, ic->Lint);
+				lapic_nmi_lint = ic->Lint;
 			}
 			break;
 		    case ACPI_MADT_TYPE_LOCAL_APIC_OVERRIDE:
@@ -163,7 +164,7 @@ static INIT_TEXT void process_madt(const ACPI_TABLE_MADT *madt)
 	}
 
 	/* Start setting up the local APIC & I/O APICs. */
-	apic_init(lapic_addr, i8259_compat_p, n_ioapics);
+	apic_init(lapic_addr, lapic_nmi_lint, i8259_compat_p, n_ioapics);
 }
 
 static INIT_TEXT void process_xsdt(void)

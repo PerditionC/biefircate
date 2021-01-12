@@ -16,22 +16,135 @@
 #include <stdbool.h>
 #include "truckload.h"
 
+#define ALIGN_APIC	__attribute__((aligned(0x10)))
+
+typedef volatile struct __attribute__((packed))
+{
+	uint32_t value ALIGN_APIC, : 0;
+} wrapped_apic_reg32_t;
+
+/*
+ * Local APIC memory-mapped registers.  I capitalize the field names to
+ * highlight that these do not refer to ordinary memory.
+ */
+typedef volatile struct __attribute__((packed)) {
+	uint32_t : 32 ALIGN_APIC;	/* 0x0000 */
+	uint32_t : 32 ALIGN_APIC;
+	uint32_t ID ALIGN_APIC;
+	uint32_t VERSION ALIGN_APIC;
+	uint32_t : 32 ALIGN_APIC;	/* 0x0040 */
+	uint32_t : 32 ALIGN_APIC;
+	uint32_t : 32 ALIGN_APIC;
+	uint32_t : 32 ALIGN_APIC;
+	uint32_t TPR ALIGN_APIC;	/* 0x0080 */
+	uint32_t APR ALIGN_APIC;
+	uint32_t PPR ALIGN_APIC;
+	uint32_t EOI ALIGN_APIC;
+	uint32_t RRD ALIGN_APIC;	/* 0x00c0 */
+	uint32_t LDR ALIGN_APIC;
+	uint32_t DFR ALIGN_APIC;
+	uint32_t SVR ALIGN_APIC;
+	wrapped_apic_reg32_t ISR[8];	/* 0x0100 */
+	wrapped_apic_reg32_t TMR[8];	/* 0x0180 */
+	wrapped_apic_reg32_t IRR[8];	/* 0x0200 */
+	uint32_t ESR ALIGN_APIC;	/* 0x0280 */
+	uint32_t : 32 ALIGN_APIC;
+	uint32_t : 32 ALIGN_APIC;
+	uint32_t : 32 ALIGN_APIC;
+	uint32_t : 32 ALIGN_APIC;	/* 0x02c0 */
+	uint32_t : 32 ALIGN_APIC;
+	uint32_t : 32 ALIGN_APIC;
+	uint32_t LVT_CMCI ALIGN_APIC;
+	wrapped_apic_reg32_t ICR[2];	/* 0x0300 */
+	uint32_t LVT_TMR ALIGN_APIC;
+	uint32_t LVT_THRM ALIGN_APIC;
+	uint32_t LVT_PMC ALIGN_APIC;	/* 0x0340 */
+	wrapped_apic_reg32_t LVT_LINT[2];
+	uint32_t LVT_ERR ALIGN_APIC;
+	uint32_t TMR_IC ALIGN_APIC;	/* 0x0380 */
+	uint32_t TMR_CC ALIGN_APIC;
+	uint32_t : 32 ALIGN_APIC;
+	uint32_t : 32 ALIGN_APIC;
+	uint32_t : 32 ALIGN_APIC;	/* 0x03c0 */
+	uint32_t : 32 ALIGN_APIC;
+	uint32_t TMR_DC ALIGN_APIC;
+	uint32_t : 32 ALIGN_APIC;
+} lapic_t;
+
+/* Field values for the spurious interrupt vector register (->SVR). */
+#define SVR_APIC_ENABLE		0x00000100U
+#define SVR_NO_FOCUS_CHECKING	0x00000200U
+#define SVR_NO_EOI_BROADCAST	0x00001000U
+
+/* Field values for local vector table registers. */
+#define LVT_DM			0x00000700U	/* delivery modes */
+#define    LVT_DM_FIXED		0x00000000U
+#define    LVT_DM_SMI		0x00000200U
+#define    LVT_DM_NMI		0x00000400U
+#define    LVT_DM_INIT		0x00000500U
+#define    LVT_DM_EXTINT	0x00000700U
+#define LVT_PENDING		0x00001000U	/* delivery status: whether
+						   interrupt pending */
+#define LVT_PIN_POLARITY	0x00002000U	/* input pin polarity */
+#define    LVT_ACTIVE_HIGH	0U
+#define    LVT_ACTIVE_LOW	LVT_PIN_POLARITY
+#define LVT_REMOTE_IRR		0x00004000U	/* remote IRR */
+#define LVT_TRIGGER_MODE	0x00008000U	/* trigger mode */
+#define    LVT_EDGE_SENSITIVE	0U
+#define    LVT_LEVEL_SENSITIVE	LVT_TRIGGER_MODE
+#define LVT_MASKED		0x00010000U	/* whether interrupt masked */
+
+/* I/O APIC memory-mapped registers. */
+typedef volatile struct __attribute__((packed)) {
+	uint32_t IOREGSEL ALIGN_APIC;	/* 0x0000 */
+	uint32_t IOREGWIN ALIGN_APIC;	/* 0x0010 */
+} ioapic_t;
+
+/* Information on an I/O APIC. */
 typedef struct {
 	uint32_t irq_base;
 	volatile uint32_t *mem;
-} ioapic_t;
+} ioapic_info_t;
 
-static volatile uint32_t *lapic = NULL;
+static lapic_t *lapic = NULL;
 static unsigned max_ioapics = 0, n_ioapics = 0;
-static ioapic_t *ioapic = NULL;
+static ioapic_info_t *ioapic_info = NULL;
 
-INIT_TEXT void apic_init(uintptr_t lapic_addr, bool i8259_compat_p,
-    unsigned max_ioics)
+static INIT_TEXT void apic_init_lapic(int_fast16_t lapic_nmi_lint)
+{
+	cprintf("starting LAPIC  id.: %#" PRIx32 "  ver.: %#" PRIx32 "\n",
+	    lapic->ID, lapic->VERSION);
+
+	/* Probably good to disable everything first... */
+	lapic->SVR &= ~SVR_APIC_ENABLE;
+	lapic->LVT_CMCI |= LVT_MASKED;
+	lapic->LVT_TMR |= LVT_MASKED;
+	lapic->LVT_THRM |= LVT_MASKED;
+	lapic->LVT_PMC |= LVT_MASKED;
+	lapic->LVT_LINT[0].value |= LVT_MASKED;
+	lapic->LVT_LINT[1].value |= LVT_MASKED;
+	lapic->LVT_ERR |= LVT_MASKED;
+
+	/* Set up the LAPIC's NMI. */
+	if (lapic_nmi_lint < 0)
+		warn("no LAPIC NMI LINT#?");
+	else if (lapic_nmi_lint > 1)
+		warn("LAPIC NMI LINT# %#" PRIxFAST16 " looks bogus "
+		     "(not 0 or 1)", lapic_nmi_lint);
+	else {
+		cprintf("  setting up LAPIC NMI\n");
+		/* FIXME */
+	}
+}
+
+INIT_TEXT void apic_init(uintptr_t lapic_addr, int_fast16_t lapic_nmi_lint,
+    bool i8259_compat_p, unsigned max_ioics)
 {
 	if (!max_ioics)
 		panic("no IOAPICs?");
 	max_ioapics = max_ioics;
-	lapic = (volatile uint32_t *)lapic_addr;
+	lapic = (lapic_t *)lapic_addr;
+
 	/*
 	 * Initialize & turn off legacy i8259 Programmable Interrupt
 	 * Controller support --- but only if there is legacy i8259 support.
@@ -57,5 +170,7 @@ INIT_TEXT void apic_init(uintptr_t lapic_addr, bool i8259_compat_p,
 		outp(0xa1, 0xff);	/* OCW1 for PIC 2 --- disable legacy
 					   IRQs 8--15 */
 	}
-	/* FIXME */
+
+	/* Initialize the local APIC for the current core. */
+	apic_init_lapic(lapic_nmi_lint);
 }
