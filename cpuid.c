@@ -12,17 +12,24 @@
  * for more details.
  */
 
+#include <inttypes.h>
 #include "truckload.h"
 
-INIT_TEXT void stage2(uintptr_t mapped_mem_end)
+uint32_t max_std_leaf = 0;
+
+INIT_TEXT void cpuid_init(void)
 {
-	void *reserved_base_mem;
-	uint64_t *pml4 = paging_init(mapped_mem_end);
-	mem_map_free_bs();
-	cpuid_init();
-	reserved_base_mem = mem_map_reserve_page(0xf0000ULL);
-	cprintf("installing LM \u2194 RM trampolines @%p; starting new "
-		"LM env.\n", reserved_base_mem);
-	disable();
-	lm86_rm86_init(reserved_base_mem, pml4);
+	union {
+		uint32_t lw;
+		char c[4];
+	} vendor1, vendor2, vendor3;
+	cpuid(0, &max_std_leaf, &vendor1.lw, &vendor3.lw, &vendor2.lw);
+	cprintf("CPUID  max. std. leaf: %#" PRIx32 "  "
+		"vendor: %4.4s%4.4s%4.4s\n",
+	    max_std_leaf, vendor1.c, vendor2.c, vendor3.c);
+}
+
+INIT_TEXT bool cpuid_has_std_leaf_p(uint32_t leaf)
+{
+	return leaf <= max_std_leaf;
 }

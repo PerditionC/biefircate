@@ -57,7 +57,7 @@ truckload.signed.efi: truckload.efi
 	       --output $@ $<
 endif
 
-truckload.efi: start.o efi-main.o acpi.o acpica-osl.o apic.o fb-con.o \
+truckload.efi: start.o efi-main.o acpi.o acpica-osl.o apic.o cpuid.o fb-con.o \
     fb-con-cprintf.o font-default.o lm86-rm86.o mem-heap.o mem-map.o \
     paging.o panic.o stage1.o stage2.o stage3.o $(LIBEFI) $(LIBACPICA) \
     crt/ctype.o crt/mbtowc.o crt/memcmp.o crt/memmove.o crt/memset.o \

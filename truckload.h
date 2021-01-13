@@ -118,12 +118,32 @@ static inline void outpd(uint16_t port, uint32_t value)
 	__asm volatile("outl %1, %0" : : "Nd" (port), "a" (value));
 }
 
+static inline void cpuid(uint32_t leaf,
+    uint32_t *a, uint32_t *b, uint32_t *c, uint32_t *d)
+{
+	__asm volatile("cpuid"
+		       : "=a" (*a), "=b" (*b), "=c" (*c), "=d" (*d)
+		       : "0" (leaf));
+}
+
+static inline void cpuid_with_subleaf(uint32_t leaf, uint32_t subleaf,
+    uint32_t *a, uint32_t *b, uint32_t *c, uint32_t *d)
+{
+	__asm volatile("cpuid"
+		       : "=a" (*a), "=b" (*b), "=c" (*c), "=d" (*d)
+		       : "0" (leaf), "2" (subleaf));
+}
+
 /* acpi.c */
 extern INIT_TEXT void acpi_init(const void *);
 
 /* apic.c */
 extern INIT_TEXT void apic_init(uintptr_t, int_fast16_t, bool, bool,
     bool, unsigned);
+
+/* cpuid.c */
+extern INIT_TEXT void cpuid_init(void);
+extern INIT_TEXT bool cpuid_has_std_leaf_p(uint32_t);
 
 /* fb-con.c */
 extern INIT_TEXT void fb_con_init(void);

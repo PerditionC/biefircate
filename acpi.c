@@ -103,10 +103,10 @@ static void parse_inti_flags(UINT16 flags, int_fast16_t bus,
 					     ", assuming ISA", bus);
 			}
 			/* fall through */
-		    case 0x01:
+		    case 0x04:
 			*lvl_trig_p = false;
 			break;
-		    case 0x03:
+		    case 0x0c:
 			*lvl_trig_p = true;
 			break;
 		    default:
