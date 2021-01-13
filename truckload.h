@@ -122,7 +122,8 @@ static inline void outpd(uint16_t port, uint32_t value)
 extern INIT_TEXT void acpi_init(const void *);
 
 /* apic.c */
-extern INIT_TEXT void apic_init(uintptr_t, int_fast16_t, bool, unsigned);
+extern INIT_TEXT void apic_init(uintptr_t, int_fast16_t, bool, bool,
+    bool, unsigned);
 
 /* fb-con.c */
 extern INIT_TEXT void fb_con_init(void);

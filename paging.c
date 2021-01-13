@@ -146,7 +146,7 @@ static void fill_pml4(uint64_t start, uint64_t end,
 
 static void paging_stat(void)
 {
-	cprintf("page tables cover @%#" PRIxPTR "  "
+	cprintf("page tables now cover @%#" PRIxPTR "  "
 		"PML4s: 1  PDPs: %#zu  PDs: %#zu  PTs: %#zu\n",
 	    curr_mem_end - 1, pdp_pgs, pd_pgs, pt_pgs);
 }

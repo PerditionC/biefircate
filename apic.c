@@ -77,6 +77,7 @@ typedef volatile struct __attribute__((packed)) {
 #define SVR_NO_EOI_BROADCAST	0x00001000U
 
 /* Field values for local vector table registers. */
+#define LVT_VECTOR		0x000000ffU	/* bit mask for vector */
 #define LVT_DM			0x00000700U	/* delivery modes */
 #define    LVT_DM_FIXED		0x00000000U
 #define    LVT_DM_SMI		0x00000200U
@@ -90,8 +91,8 @@ typedef volatile struct __attribute__((packed)) {
 #define    LVT_ACTIVE_LOW	LVT_PIN_POLARITY
 #define LVT_REMOTE_IRR		0x00004000U	/* remote IRR */
 #define LVT_TRIGGER_MODE	0x00008000U	/* trigger mode */
-#define    LVT_EDGE_SENSITIVE	0U
-#define    LVT_LEVEL_SENSITIVE	LVT_TRIGGER_MODE
+#define    LVT_EDGE_TRIG	0U
+#define    LVT_LEVEL_TRIG	LVT_TRIGGER_MODE
 #define LVT_MASKED		0x00010000U	/* whether interrupt masked */
 
 /* I/O APIC memory-mapped registers. */
@@ -110,7 +111,22 @@ static lapic_t *lapic = NULL;
 static unsigned max_ioapics = 0, n_ioapics = 0;
 static ioapic_info_t *ioapic_info = NULL;
 
-static INIT_TEXT void apic_init_lapic(int_fast16_t lapic_nmi_lint)
+static inline void lapic_enable_int_as_nmi(volatile uint32_t *lapic_reg,
+    bool active_low_p, bool lvl_trig_p)
+{
+	uint32_t value = *lapic_reg;
+	if (lvl_trig_p)
+		warn("requesting to make NMI level-triggered?");
+	value &= ~(LVT_DM | LVT_PIN_POLARITY | LVT_TRIGGER_MODE |
+		   LVT_MASKED);
+	value |= LVT_DM_NMI |
+		 (active_low_p ? LVT_ACTIVE_LOW : LVT_ACTIVE_HIGH) |
+		 (lvl_trig_p ? LVT_LEVEL_TRIG : LVT_EDGE_TRIG);
+	*lapic_reg = value;
+}
+
+static INIT_TEXT void lapic_init(int_fast16_t lapic_nmi_lint,
+    bool lapic_nmi_active_low_p, bool lapic_nmi_lvl_trig_p)
 {
 	cprintf("starting LAPIC  id.: %#" PRIx32 "  ver.: %#" PRIx32 "\n",
 	    lapic->ID, lapic->VERSION);
@@ -132,12 +148,15 @@ static INIT_TEXT void apic_init_lapic(int_fast16_t lapic_nmi_lint)
 		warn("LAPIC NMI LINT# %#" PRIxFAST16 " looks bogus "
 		     "(not 0 or 1)", lapic_nmi_lint);
 	else {
-		cprintf("  setting up LAPIC NMI\n");
-		/* FIXME */
+		cprintf("  LAPIC NMI LINT# %#" PRIxFAST16, lapic_nmi_lint);
+		lapic_enable_int_as_nmi(&lapic->LVT_LINT[lapic_nmi_lint].value,
+		    lapic_nmi_active_low_p, lapic_nmi_lvl_trig_p);
 	}
+	putwch(u'\n');
 }
 
 INIT_TEXT void apic_init(uintptr_t lapic_addr, int_fast16_t lapic_nmi_lint,
+    bool lapic_nmi_active_low_p, bool lapic_nmi_lvl_trig_p,
     bool i8259_compat_p, unsigned max_ioics)
 {
 	if (!max_ioics)
@@ -173,5 +192,6 @@ INIT_TEXT void apic_init(uintptr_t lapic_addr, int_fast16_t lapic_nmi_lint,
 	}
 
 	/* Initialize the local APIC for the current core. */
-	apic_init_lapic(lapic_nmi_lint);
+	lapic_init(lapic_nmi_lint,
+	    lapic_nmi_active_low_p, lapic_nmi_lvl_trig_p);
 }

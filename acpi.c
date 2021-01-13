@@ -63,6 +63,59 @@ static INIT_TEXT void process_fadt(const ACPI_TABLE_FADT *fadt)
 						    : "");
 }
 
+static void parse_inti_flags(UINT16 flags, int_fast16_t bus,
+    bool *active_low_p, bool *lvl_trig_p)
+{
+	bool warned = false;
+	if (active_low_p) {
+		switch (flags & 0x03) {
+		    case 0x00:
+			if (bus != 0) {
+				if (bus < 0)
+					warn("no bus type given, "
+					     "assuming ISA");
+				else
+					warn("unknown bus type %#" PRIxFAST16
+					     ", assuming ISA", bus);
+				warned = true;
+			}
+			/* fall through */
+		    case 0x03:
+			*active_low_p = true;
+			break;
+		    case 0x01:
+			*active_low_p = false;
+			break;
+		    default:
+			panic("cannot get int. polarity from MPS INTI flags "
+			      "%#" PRIx16, flags);
+		}
+	}
+	if (lvl_trig_p) {
+		switch (flags & 0x0c) {
+		    case 0x00:
+			if (bus != 0 && !warned) {
+				if (bus < 0)
+					warn("no bus type given, "
+					     "assuming ISA");
+				else
+					warn("unknown bus type %#" PRIxFAST16
+					     ", assuming ISA", bus);
+			}
+			/* fall through */
+		    case 0x01:
+			*lvl_trig_p = false;
+			break;
+		    case 0x03:
+			*lvl_trig_p = true;
+			break;
+		    default:
+			panic("cannot get int. trigger mode from MPS INTI "
+			      "flags %#" PRIx16, flags);
+		}
+	}
+}
+
 static INIT_TEXT void process_madt(const ACPI_TABLE_MADT *madt)
 {
 	UINT32 left;
@@ -70,6 +123,7 @@ static INIT_TEXT void process_madt(const ACPI_TABLE_MADT *madt)
 	uintptr_t lapic_addr;
 	bool i8259_compat_p;
 	int_fast16_t lapic_nmi_lint = -1;
+	bool lapic_nmi_active_low_p = true, lapic_nmi_lvl_trig_p = false;
 	unsigned n_ioapics = 0;
 	if (!madt)
 		panic("no ACPI MADT?");
@@ -144,6 +198,9 @@ static INIT_TEXT void process_madt(const ACPI_TABLE_MADT *madt)
 					  "LINT#: %#" PRIx8 " }\n",
 				    ic->ProcessorId, ic->IntiFlags, ic->Lint);
 				lapic_nmi_lint = ic->Lint;
+				parse_inti_flags(ic->IntiFlags, -1,
+				    &lapic_nmi_active_low_p,
+				    &lapic_nmi_lvl_trig_p);
 			}
 			break;
 		    case ACPI_MADT_TYPE_LOCAL_APIC_OVERRIDE:
@@ -164,7 +221,8 @@ static INIT_TEXT void process_madt(const ACPI_TABLE_MADT *madt)
 	}
 
 	/* Start setting up the local APIC & I/O APICs. */
-	apic_init(lapic_addr, lapic_nmi_lint, i8259_compat_p, n_ioapics);
+	apic_init(lapic_addr, lapic_nmi_lint, lapic_nmi_active_low_p,
+	    lapic_nmi_lvl_trig_p, i8259_compat_p, n_ioapics);
 }
 
 static INIT_TEXT void process_xsdt(void)
