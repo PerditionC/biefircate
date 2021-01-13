@@ -46,6 +46,22 @@ lm86_rm86_init:
 	addl	%eax, .Lour_gdt+SEL_PM16_DATA+2-.LE(%rdi)
 	addl	%eax, .Llm_ip-.LE(%rdi)
 	leaq	.Lour_tss(%rip), %rax
+					/* fill up the TSS while at it */
+	leaq	.Lint_stack_1_end(%rip), %rcx
+	movq	%rcx, 0x4(%rax)		/* RSP0 */
+	movq	%rcx, 0xc(%rax)		/* RSP1 */
+	movq	%rcx, 0x14(%rax)	/* RSP2 */
+	movq	%rcx, 0x24(%rax)	/* IST1 */
+	movq	%rcx, 0x3c(%rax)	/* IST4 */
+	movq	%rcx, 0x44(%rax)	/* IST5 */
+	movq	%rcx, 0x4c(%rax)	/* IST6 */
+	movq	%rcx, 0x54(%rax)	/* IST7 */
+	leaq	.Lint_stack_2_end(%rip), %rcx
+	movq	%rcx, 0x2c(%rax)	/* IST2 */
+	leaq	.Lint_stack_3_end(%rip), %rcx
+	movq	%rcx, 0x34(%rax)	/* IST3 */
+	movw	$TSS_IO_PERMS_OFF, 0x66(%rax)
+					/* continue fixing up everything */
 	movw	%ax, .Lour_gdt+SEL_TSS+2-.LE(%rdi)
 	shrq	$16, %rax
 	movb	%al, .Lour_gdt+SEL_TSS+4-.LE(%rdi)
@@ -118,14 +134,17 @@ lm86_rm86_init:
 	movw	%ax, %ss
 	movw	%ax, %fs
 	movw	%ax, %gs
-	leaq	.Lint_stack_1_end-56-8(%rip), %rcx
-	cmpq	%rcx, %rsp
+					/* we need to figure out if an error
+					   code has been pushed... */
+	leaq	.Lint_stacks_end(%rip), %rcx
+	andq	$-16, %rcx		/* misalignment lossage :-( --- see
+					   .Lint_stacks_end below */
+	subq	%rsp, %rcx
+	cmpq	$48+8, %rcx
 	jz	.Lhave_err_code
-	leaq	.Lint_stack_2_end-56-8(%rip), %rcx
-	cmpq	%rcx, %rsp
+	cmpq	$48+8+INT_STACK_3_SIZE, %rcx
 	jz	.Lhave_err_code
-	leaq	.Lint_stack_3_end-56-8(%rip), %rcx
-	cmpq	%rcx, %rsp
+	cmpq	$48+8+INT_STACK_2_SIZE+INT_STACK_3_SIZE, %rcx
 	jz	.Lhave_err_code
 	pushq	(%rsp)			/* if there is no error code, "push" */
 	orq	$-1, 8(%rsp)		/* a dummy one; move the int. vector
@@ -308,7 +327,7 @@ SEL_LM_TEXT = . - .Lour_gdt
 SEL_LM_DATA = . - .Lour_gdt
 	.quad	0x00af920000000000	/* our long mode data segment */
 SEL_TSS = . - .Lour_gdt			/* our TSS */
-	.hword	.Lour_tss_end - .Lour_tss - 1, 0
+	.hword	TSS_SIZE-1, 0
 	.long	0x00008900
 	.quad	0x0000000000000000
 .Lour_gdt_end:
@@ -320,42 +339,36 @@ SEL_TSS = . - .Lour_gdt			/* our TSS */
 
 	.section .rdata, "dr"
 
-	.balign	8
-.Lour_tss:
-	.long	0
-	.quad	.Lint_stack_1_end	/* RSP0 */
-	.quad	.Lint_stack_1_end	/* RSP1 */
-	.quad	.Lint_stack_1_end	/* RSP2 */
-	.quad	0
-	.quad	.Lint_stack_1_end	/* IST1 */
-	.quad	.Lint_stack_2_end	/* IST2 */
-	.quad	.Lint_stack_3_end	/* IST3 */
-	.quad	.Lint_stack_1_end	/* IST4 */
-	.quad	.Lint_stack_1_end	/* IST5 */
-	.quad	.Lint_stack_1_end	/* IST6 */
-	.quad	.Lint_stack_1_end	/* IST7 */
-	.quad	0
-	.hword	0
-	.hword	.Lour_tss_end-.Lour_tss
-.Lour_tss_end:
-
 .Ldefault_isr_msg:
 	.ascii	"stray interrupt 0x%02x\n"
-	.asciz	"  error code: %#llx  %%cr2: %#llx"
+	.asciz	"  error code: %#llx  CR2: %#llx"
 
 	.lcomm	.Lrm_t_addr, 4
 	.lcomm	.Lrm_t_seg, 2
 	.lcomm	.Ldefault_isrs, 0x100*4-2+5
-	.lcomm	.Lour_idt, 0x100*0x10, 0x10
+	.lcomm	.Lour_idt, 0x100*0x10, 8
+TSS_IO_PERMS_OFF = 0x68
+TSS_SIZE = TSS_IO_PERMS_OFF
+	.lcomm	.Lour_tss, TSS_SIZE, 4
 
-INT_STACK_1_SIZE = 0x1000
-	.lcomm	.Lint_stack_1, INT_STACK_1_SIZE, 0x10
-.Lint_stack_1_end = .Lint_stack_1+INT_STACK_1_SIZE
-
-INT_STACK_2_SIZE = 0x1000
-	.lcomm	.Lint_stack_2, INT_STACK_1_SIZE, 0x10
-.Lint_stack_2_end = .Lint_stack_2+INT_STACK_2_SIZE
-
+INT_STACK_1_SIZE = 0x0c00
+INT_STACK_2_SIZE = 0x0400
 INT_STACK_3_SIZE = 0x1000
-	.lcomm	.Lint_stack_3, INT_STACK_3_SIZE, 0x10
-.Lint_stack_3_end = .Lint_stack_3+INT_STACK_3_SIZE
+INT_STACKS_SIZE = INT_STACK_1_SIZE+INT_STACK_2_SIZE+INT_STACK_3_SIZE
+	/*
+	 * We really need the stacks to be 16-bit aligned:  the CPU will
+	 * round down the ISTn addresses in the TSS to multiples of 16
+	 * before using them.
+	 *
+	 * Alas the UEFI loader in OVMF (at least) seems to insist on loading
+	 * our program only at an 8-byte boundary, no matter what the section
+	 * headers say.
+	 *
+	 * So just ask the loader to place BSS at an 8-byte boundary & add
+	 * a calculation to the ISR (above) to account for this.
+	 */
+	.lcomm	.Lint_stacks, INT_STACKS_SIZE, 8
+.Lint_stack_1_end = .Lint_stacks+INT_STACK_1_SIZE
+.Lint_stack_2_end = .Lint_stack_1_end+INT_STACK_2_SIZE
+.Lint_stack_3_end = .Lint_stack_2_end+INT_STACK_3_SIZE
+.Lint_stacks_end = .Lint_stack_3_end

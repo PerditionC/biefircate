@@ -36,7 +36,7 @@ CPPFLAGS = -I'$(abspath $(GNUEFISRCDIR))'/inc \
 	   -iquote '$(abspath $(ACPICASRCDIR))'/source/include \
 	   -DGNU_EFI_USE_MS_ABI -UWIN32 -D_CRTIMP= -D__USE_MINGW_ANSI_STDIO
 CFLAGS = -pie -fPIC -ffreestanding -Os -Wall -mno-red-zone \
-    -fno-stack-protector -MMD
+    -fno-stack-protector -MMD -fno-ident
 LDFLAGS = $(CFLAGS) -nostdlib -ffreestanding -Wl,--entry,_start \
 	  -Wl,--subsystem,10 -Wl,--strip-all -Wl,-Map=$(@:.efi=.map) \
 	  -Wl,--wrap=memcpy -Wl,--wrap=memset

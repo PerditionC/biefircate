@@ -12,6 +12,8 @@
  * for more details.
  */
 
+	.section .text.i, "x"
+
 /* Switch to our own stack memory before starting efi_main(, ). */
 	.globl	_start
 _start:
