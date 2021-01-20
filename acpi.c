@@ -125,6 +125,15 @@ static INIT_TEXT void process_madt(const ACPI_TABLE_MADT *madt)
 	int_fast16_t lapic_nmi_lint = -1;
 	bool lapic_nmi_active_low_p = true, lapic_nmi_lvl_trig_p = false;
 	unsigned n_ioapics = 0;
+	UINT32 i8259_to_apic_irq_map[] =
+	    { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15 };
+	bool i8259_irq_active_low_p[] =
+	    { true, true, true, true, true, true, true, true,
+	      true, true, true, true, true, true, true, true };
+	bool i8259_irq_lvl_trig_p[] =
+	    { false, false, false, false, false, false, false, false,
+	      false, false, false, false, false, false, false, false };
+
 	if (!madt)
 		panic("no ACPI MADT?");
 
@@ -134,6 +143,110 @@ static INIT_TEXT void process_madt(const ACPI_TABLE_MADT *madt)
 	cprintf("ACPI MADT @%p:\n"
 		"  LAPIC: @%#" PRIxPTR "  flags: 0x%08" PRIx32 " { %s}\n",
 	    madt, lapic_addr, madt->Flags, i8259_compat_p ? "i8259 " : "");
+	left = madt->Header.Length - sizeof(*madt);
+	p = (const char *)(madt + 1);
+	while (left) {
+		const ACPI_SUBTABLE_HEADER *stbl = (ACPI_SUBTABLE_HEADER *)p;
+		switch (stbl->Type) {
+		    case ACPI_MADT_TYPE_LOCAL_APIC:
+			{
+				const ACPI_MADT_LOCAL_APIC *ic =
+				    (const ACPI_MADT_LOCAL_APIC *)stbl;
+				cprintf("  LAPIC { proc. uid.: %#" PRIx8 "  "
+						  "APIC id.: %#" PRIx8 "  "
+						  "flags: 0x%08" PRIx32
+						  " { %s%s} }\n",
+				    ic->ProcessorId, ic->Id,
+				    ic->LapicFlags,
+				    ic->LapicFlags & 1 ? "enabled " : "",
+				    ic->LapicFlags & 2 ? "online-capable "
+						       : "");
+			}
+			break;
+		    case ACPI_MADT_TYPE_IO_APIC:
+			{
+				const ACPI_MADT_IO_APIC *ic =
+				    (const ACPI_MADT_IO_APIC *)stbl;
+				cprintf("  IOAPIC { @%#" PRIx32 "  "
+						   "APIC id.: %#" PRIx8 "  "
+						   "IRQ base: %#" PRIx32
+						   " }\n",
+				    ic->Address, ic->Id, ic->GlobalIrqBase);
+				++n_ioapics;
+			}
+			break;
+		    case ACPI_MADT_TYPE_INTERRUPT_OVERRIDE:
+			{
+				const ACPI_MADT_INTERRUPT_OVERRIDE *ic =
+				    (const ACPI_MADT_INTERRUPT_OVERRIDE *)stbl;
+				UINT8 src_irq = ic->SourceIrq, bus = ic->Bus;
+				UINT32 apic_irq = ic->GlobalIrq;
+				UINT16 inti_fl = ic->IntiFlags;
+				cprintf("  int. override { "
+					  "%#" PRIx8 " \u2192 %#" PRIx32 "  "
+					  "bus: %#" PRIx8 "  "
+					  "INTI fl.: 0x%04" PRIx16 " }\n",
+				    src_irq, apic_irq, bus, inti_fl);
+				if (bus != 0)
+					warn("unknown bus type %#" PRIx8,
+					    ic->Bus);
+				else if (src_irq > 15)
+					panic("no idea how to override ISA "
+					      "IRQ %#" PRIx8 " > 15", src_irq);
+				else {
+					i8259_to_apic_irq_map[src_irq] =
+					    apic_irq;
+					parse_inti_flags(inti_fl, bus,
+					    &i8259_irq_active_low_p[src_irq],
+					    &i8259_irq_lvl_trig_p[src_irq]);
+				}
+			}
+			break;
+		    case ACPI_MADT_TYPE_NMI_SOURCE:
+			{
+				const ACPI_MADT_NMI_SOURCE *ic =
+				    (const ACPI_MADT_NMI_SOURCE *)stbl;
+				cprintf("  NMI source { "
+					  "INTI fl.: 0x%04" PRIx16 "  "
+					  "global IRQ: %#" PRIx32 " }\n",
+				    ic->IntiFlags, ic->GlobalIrq);
+			}
+			break;
+		    case ACPI_MADT_TYPE_LOCAL_APIC_NMI:
+			{
+				const ACPI_MADT_LOCAL_APIC_NMI *ic =
+				    (const ACPI_MADT_LOCAL_APIC_NMI *)stbl;
+				cprintf("  LAPIC NMI { "
+					  "proc. id.: %#" PRIx8 "  "
+					  "INTI fl.: 0x%04" PRIx16 "  "
+					  "LINT#: %#" PRIx8 " }\n",
+				    ic->ProcessorId, ic->IntiFlags, ic->Lint);
+				lapic_nmi_lint = ic->Lint;
+				parse_inti_flags(ic->IntiFlags, -1,
+				    &lapic_nmi_active_low_p,
+				    &lapic_nmi_lvl_trig_p);
+			}
+			break;
+		    case ACPI_MADT_TYPE_LOCAL_APIC_OVERRIDE:
+			{
+				const ACPI_MADT_LOCAL_APIC_OVERRIDE *ic =
+				  (const ACPI_MADT_LOCAL_APIC_OVERRIDE *)stbl;
+				cprintf("  LAPIC override { @%#" PRIx64 " }\n",
+				    ic->Address);
+				lapic_addr = ic->Address;
+			}
+			break;
+		    default:
+			cprintf("  type %#" PRIx8 " int. ctrlr. struc. @%p\n",
+			    stbl->Type, stbl);
+		}
+		p += stbl->Length;
+		left -= stbl->Length;
+	}
+
+	/* Start setting up the local APIC & I/O APICs. */
+	apic_init(lapic_addr, lapic_nmi_lint, lapic_nmi_active_low_p,
+	    lapic_nmi_lvl_trig_p, i8259_compat_p, n_ioapics);
 	left = madt->Header.Length - sizeof(*madt);
 	p = (const char *)(madt + 1);
 	while (left) {
@@ -219,10 +332,6 @@ static INIT_TEXT void process_madt(const ACPI_TABLE_MADT *madt)
 		p += stbl->Length;
 		left -= stbl->Length;
 	}
-
-	/* Start setting up the local APIC & I/O APICs. */
-	apic_init(lapic_addr, lapic_nmi_lint, lapic_nmi_active_low_p,
-	    lapic_nmi_lvl_trig_p, i8259_compat_p, n_ioapics);
 }
 
 static INIT_TEXT void process_xsdt(void)
