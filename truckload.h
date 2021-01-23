@@ -134,12 +134,18 @@ static inline void cpuid_with_subleaf(uint32_t leaf, uint32_t subleaf,
 		       : "0" (leaf), "2" (subleaf));
 }
 
+#define assert(p)	((p) || (assert_fail(#p), 0))
+
 /* acpi.c */
 extern INIT_TEXT void acpi_init(const void *);
 
 /* apic.c */
 extern INIT_TEXT void apic_init(uintptr_t, int_fast16_t, bool, bool,
     bool, unsigned);
+extern INIT_TEXT void apic_add_ioapic(uint8_t, uintptr_t, uint32_t);
+extern INIT_TEXT void apic_finalize_ioapics(const uint32_t[],
+    const bool[], const bool[]);
+extern INIT_TEXT void apic_add_ioapic_nmi(uint32_t, bool, bool);
 
 /* cpuid.c */
 extern INIT_TEXT void cpuid_init(void);
@@ -184,6 +190,7 @@ extern NORETURN void panic_with_far_caller(uint16_t, void *,
 extern NORETURN void vpanic_with_caller(void *, const char *, va_list);
 extern NORETURN void panic_with_caller(void *, const char *, ...);
 extern NORETURN void panic(const char *, ...);
+extern NORETURN void assert_fail(const char *);
 
 /* stage1.c */
 extern INIT_TEXT void stage1(const void **, uintptr_t *);

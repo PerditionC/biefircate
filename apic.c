@@ -103,12 +103,15 @@ typedef volatile struct __attribute__((packed)) {
 
 /* Information on an I/O APIC. */
 typedef struct {
+	uint8_t id;
 	uint32_t irq_base;
-	volatile uint32_t *mem;
+	ioapic_t *mem;
 } ioapic_info_t;
 
+static INIT_DATA bool i8259_compat_p = false;
 static lapic_t *lapic = NULL;
-static unsigned max_ioapics = 0, n_ioapics = 0;
+static INIT_DATA unsigned max_ioapics = 0;
+static unsigned n_ioapics = 0;
 static ioapic_info_t *ioapic_info = NULL;
 
 static inline void lapic_enable_int_as_nmi(volatile uint32_t *lapic_reg,
@@ -156,8 +159,8 @@ static INIT_TEXT void lapic_init(int_fast16_t lapic_nmi_lint,
 }
 
 INIT_TEXT void apic_init(uintptr_t lapic_addr, int_fast16_t lapic_nmi_lint,
-    bool lapic_nmi_active_low_p, bool lapic_nmi_lvl_trig_p,
-    bool i8259_compat_p, unsigned max_ioics)
+    bool lapic_nmi_active_low_p, bool lapic_nmi_lvl_trig_p, bool i8259_p,
+    unsigned max_ioics)
 {
 	if (!max_ioics)
 		panic("no IOAPICs?");
@@ -171,7 +174,8 @@ INIT_TEXT void apic_init(uintptr_t lapic_addr, int_fast16_t lapic_nmi_lint,
 	 *
 	 * Assume that interrupts are currently disabled.
 	 */
-	if (i8259_compat_p) {
+	i8259_compat_p = i8259_p;
+	if (i8259_p) {
 		cputs("disabling i8259\n");
 		outp(0x20, 0x11);	/* ICW1 for PIC 1 */
 		outp(0xa0, 0x11);	/* ICW1 for PIC 2 */
@@ -194,4 +198,25 @@ INIT_TEXT void apic_init(uintptr_t lapic_addr, int_fast16_t lapic_nmi_lint,
 	/* Initialize the local APIC for the current core. */
 	lapic_init(lapic_nmi_lint,
 	    lapic_nmi_active_low_p, lapic_nmi_lvl_trig_p);
+
+	/* Reserve space for information on I/O APICs. */
+	ioapic_info =
+	    mem_heap_alloc((size_t)max_ioics * sizeof(ioapic_info_t));
+}
+
+INIT_TEXT void apic_add_ioapic(uint8_t id, uintptr_t addr, uint32_t irq_base)
+{
+	unsigned i;
+	assert(n_ioapics < max_ioapics);
+	i = n_ioapics;
+	while (i > 0 && ioapic_info[i - 1].irq_base > irq_base) {
+		ioapic_info[i] = ioapic_info[i - 1];
+		--i;
+	}
+	if (i > 0 && ioapic_info[i - 1].irq_base == irq_base)
+		panic("two IOAPICs with same IRQ base!");
+	ioapic_info[i] =
+	    (ioapic_info_t){ id, irq_base, (ioapic_t *)addr };
+	++n_ioapics;
+	paging_extend(addr + sizeof(ioapic_t));
 }

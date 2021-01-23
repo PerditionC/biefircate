@@ -61,6 +61,12 @@ NORETURN void panic(const char *fmt, ...)
 	vpanic_with_caller(__builtin_return_address(0), fmt, ap);
 }
 
+NORETURN void assert_fail(const char *assertion)
+{
+	panic_with_caller(__builtin_return_address(0), "assertion failed: %s",
+	    assertion);
+}
+
 NORETURN INIT_TEXT void panic_efi(const char *msg, EFI_STATUS status)
 {
 	panic_with_caller(__builtin_return_address(0),
