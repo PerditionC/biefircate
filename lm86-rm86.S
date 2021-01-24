@@ -90,11 +90,10 @@ lm86_rm86_init:
 	lidt	.Lour_idtr-.LE(%rdi)	/* switch to our IDT */
 	movb	$SEL_TSS, %al		/* switch to our TSS */
 	ltr	%ax
-	leaq	.Lour_idt(%rip), %rdi	/* fill up the IDT & also generate
-					   code for default intr. handlers */
-	leaq	.Ldefault_isrs(%rip), %rdx
-	movb	$0, %cl
-.Lfill_idt_and_isrs:
+	leaq	.Lour_idt(%rip), %rdi	/* fill up the IDT */
+	leaq	.Lisr_shims(%rip), %rdx
+	movl	$0x100, %ecx
+.Lfill_idt:
 	movl	$SEL_LM_TEXT<<16, %eax
 	movw	%dx, %ax
 	stosl
@@ -104,60 +103,47 @@ lm86_rm86_init:
 	movq	%rdx, %rax
 	shrq	$32, %rax
 	stosq
-	movl	$0x02eb006a, %eax	/*	pushq	$0x00		*/
-	movb	%cl, %ah		/*	jmp	0f		*/
-	movl	%eax, (%rdx)		/* 	pushq	$0x01		*/
-	addq	$4, %rdx		/* 0:	jmp	1f		*/
-	incb	%cl			/* 	pushq	$0x02		*/
-	jnz	.Lfill_idt_and_isrs	/* 1:	jmp	2f		*/
-					/*	...			*/
-					/*	pushq	$-1		*/
-	movb	$0xe9, -2(%rdx)		/*	jmp .Ldefault_isr_dispatch */
-	leaq	.Ldefault_isr_dispatch-3(%rip), %rax
-	subl	%edx, %eax
-	movl	%eax, -1(%rdx)
+	addq	$ISR_SHIM_LEN, %rdx
+	loop	.Lfill_idt
 					/* have the NMI & double fault ISRs
 					   use a different stack */
 	movb	$INT_STACK_BAD_EXCP, .Lour_idt+2*0x10+4(%rip)
 	movb	$INT_STACK_BAD_EXCP, .Lour_idt+8*0x10+4(%rip)
+	leaq	.Lisr_shims(%rip), %rdi	/* fill in the shims for the ISRs */
+	movb	$0, %al			/* & set them to call the default
+					   handler which panics */
+	leaq	.Ldefault_isr(%rip), %rdx
+	leaq	.Lisr_shim_epilog(%rip), %r8
+.Lfill_isr_shims:
+	leaq	.LBI(%rip), %rsi
+	movq	$ISR_SHIM_LEN/8, %rcx
+	rep movsq
+	movb	%al, .Lint_num-.LEI(%rdi)
+	movq	%rdx, .Lisr_addr-.LEI(%rdi)
+	movq	%r8, .Lisr_shim_epilog_addr-.LEI(%rdi)
+	incb	%al
+	jnz	.Lfill_isr_shims
 	popq	%rdi
 	popq	%rsi
 	retq
 
 	.text
 
-.Ldefault_isr_dispatch:			/* the stack top contains the
-					   interrupt vector number */
-	movw	$SEL_LM_DATA, %ax
-	movw	%ax, %ds
-	movw	%ax, %es
-	movw	%ax, %ss
-	movw	%ax, %fs
-	movw	%ax, %gs
-					/* we need to figure out if an error
-					   code has been pushed... */
-	leaq	.Lint_stacks_end(%rip), %rcx
-	andq	$-16, %rcx		/* misalignment lossage :-( --- see
-					   .Lint_stacks_end below */
-	subq	%rsp, %rcx
-	cmpq	$48+8, %rcx
-	jz	.Lhave_err_code
-	cmpq	$48+8+INT_STACK_3_SIZE, %rcx
-	jz	.Lhave_err_code
-	cmpq	$48+8+INT_STACK_2_SIZE+INT_STACK_3_SIZE, %rcx
-	jz	.Lhave_err_code
-	pushq	(%rsp)			/* if there is no error code, "push" */
-	orq	$-1, 8(%rsp)		/* a dummy one; move the int. vector
-					   number upwards in the stack */
-.Lhave_err_code:
-	movzwq	8+16(%rsp), %rcx
-	movq	8+8(%rsp), %rdx
+.Ldefault_isr:
+	movq	%cr2, %rax		/* read CR2 & push value on stack */
+	pushq	%rax
+	pushq	%r8			/* push error code on stack */
 	leaq	.Ldefault_isr_msg(%rip), %r8
-	movzbq	(%rsp), %r9
-	movq	%cr2, %rax		/* read CR2 & put value on stack */
-	movq	%rax, 8+8(%rsp)
-	subq	$32-8, %rsp		/* error code will come from stack */
+	subq	$0x20, %rsp
 	call	panic_with_far_caller
+
+/* Set the interrupt handling routine for a particular interrupt vector. */
+	.globl	lm86_set_isr
+lm86_set_isr:
+	movzbq	%cl, %rcx
+	imulq	$ISR_SHIM_LEN, %rcx, %rcx
+	movq	%rdx, .Lisr_addr-.LBI(%rcx)
+	retq
 
 /*
  * Return the address of the rm86_regs_t structure containing register
@@ -337,6 +323,74 @@ SEL_TSS = . - .Lour_gdt			/* our TSS */
 					   this _must_ be 8-byte aligned */
 .Lrm_regs = .
 
+	.balign	8
+.LBI = .				/* start of template for interrupt
+					   handler shims */
+	testb	$8, %spl		/* if %rsp is not 16-byte aligned, */
+	jz	.Lhave_err_code		/* then it means no error code was */
+	pushq	$-1			/* pushed; push a dummy code */
+.Lhave_err_code:
+	pushq	%rax
+	pushq	%rcx
+	pushq	%rdx
+	pushq	%r8
+	pushq	%r9
+	pushq	%r10
+	pushq	%r11
+	movw	%ds, %ax
+	shlq	$16, %rax
+	movw	%es, %ax
+	shlq	$16, %rax
+	movw	%fs, %ax
+	shlq	$16, %rax
+	movw	%gs, %ax
+	pushq	%rax
+	movw	$SEL_LM_DATA, %ax
+	movw	%ax, %ds
+	movw	%ax, %es
+	movw	%ax, %ss
+	movw	%ax, %fs
+	movw	%ax, %gs
+	movzwq	0x50(%rsp), %rcx
+	movq	0x48(%rsp), %rdx
+	movq	0x40(%rsp), %r8
+	xorq	%r9, %r9
+	movb	$0xaa, %r9b
+.Lint_num = . - 1
+	subq	$0x20, %rsp
+	movabsq	$0xaaaaaaaaaaaaaaaa, %rax
+.Lisr_shim_epilog_addr = . - 8
+	pushq	%rax
+	movabsq	$0xaaaaaaaaaaaaaaaa, %rax
+.Lisr_addr = . - 8
+	jmpq	*%rax
+ISR_SHIM_LEN = 0x70
+	.org	.LBI+ISR_SHIM_LEN
+.LEI = .LBI+ISR_SHIM_LEN		/* end of template for interrupt
+					   handler shims */
+
+	.text
+
+.Lisr_shim_epilog:
+	addq	$0x20, %rsp
+	popq	%rax
+	movw	%ax, %gs
+	shrq	$16, %rax
+	movw	%ax, %fs
+	shrq	$16, %rax
+	movw	%ax, %es
+	shrq	$16, %rax
+	movw	%ax, %ds
+	popq	%r11
+	popq	%r10
+	popq	%r9
+	popq	%r8
+	popq	%rdx
+	popq	%rcx
+	popq	%rax
+	addq	$8, %rsp
+	iretq
+
 	.section .rdata, "dr"
 
 .Ldefault_isr_msg:
@@ -345,7 +399,7 @@ SEL_TSS = . - .Lour_gdt			/* our TSS */
 
 	.lcomm	.Lrm_t_addr, 4
 	.lcomm	.Lrm_t_seg, 2
-	.lcomm	.Ldefault_isrs, 0x100*4-2+5
+	.lcomm	.Lisr_shims, 0x100*(.LEI-.LBI)
 	.lcomm	.Lour_idt, 0x100*0x10, 8
 TSS_IO_PERMS_OFF = 0x68
 TSS_SIZE = TSS_IO_PERMS_OFF
@@ -356,7 +410,7 @@ INT_STACK_2_SIZE = 0x0400
 INT_STACK_3_SIZE = 0x1000
 INT_STACKS_SIZE = INT_STACK_1_SIZE+INT_STACK_2_SIZE+INT_STACK_3_SIZE
 	/*
-	 * We really need the stacks to be 16-bit aligned:  the CPU will
+	 * We really want the stacks to be 16-bit aligned:  the CPU will
 	 * round down the ISTn addresses in the TSS to multiples of 16
 	 * before using them.
 	 *
@@ -364,8 +418,7 @@ INT_STACKS_SIZE = INT_STACK_1_SIZE+INT_STACK_2_SIZE+INT_STACK_3_SIZE
 	 * our program only at an 8-byte boundary, no matter what the section
 	 * headers say.
 	 *
-	 * So just ask the loader to place BSS at an 8-byte boundary & add
-	 * a calculation to the ISR (above) to account for this.
+	 * So just ask the loader to place the stacks at an 8-byte boundary.
 	 */
 	.lcomm	.Lint_stacks, INT_STACKS_SIZE, 8
 .Lint_stack_1_end = .Lint_stacks+INT_STACK_1_SIZE

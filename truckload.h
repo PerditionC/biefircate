@@ -201,16 +201,19 @@ extern INIT_TEXT void stage2(uintptr_t);
 /* stage3.c */
 extern INIT_TEXT void stage3(const void *);
 
-/* x64.S */
+/* lm86-rm86.S */
 typedef struct __attribute__((packed)) {
 	uint32_t edi, esi, ebp, reserved1, ebx, edx, ecx, eax;
 	uint16_t es, ds, fs, gs;
 	uint32_t eflags, esp;
 	uint16_t ss, ip, cs;
 } rm86_regs_t;
+typedef void lm86_isr_t(uint16_t caller_cs, void *caller,
+    uint64_t error_code, uint8_t int_num);
 
 extern INIT_TEXT void lm86_rm86_init(void *reserved_base_mem,
     uint64_t *pml4);
+extern void lm86_set_isr(uint8_t int_num, lm86_isr_t *isr);
 extern rm86_regs_t *rm86_regs(void);
 extern void rm86(void);
 
