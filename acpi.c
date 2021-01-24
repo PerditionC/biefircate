@@ -132,16 +132,7 @@ static INIT_TEXT void process_madt(const ACPI_TABLE_MADT *madt)
 	bool i8259_compat_p;
 	int_fast16_t lapic_nmi_lint = -1;
 	bool lapic_nmi_active_low_p = true, lapic_nmi_lvl_trig_p = false;
-	bool ioapic_nmi_active_low_p, ioapic_nmi_lvl_trig_p;
 	unsigned n_ioapics = 0;
-	uint32_t i8259_to_apic_irq_map[] =
-	    { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15 };
-	bool i8259_irq_active_low_p[] =
-	    { true, true, true, true, true, true, true, true,
-	      true, true, true, true, true, true, true, true };
-	bool i8259_irq_lvl_trig_p[] =
-	    { false, false, false, false, false, false, false, false,
-	      false, false, false, false, false, false, false, false };
 
 	if (!madt)
 		panic("no ACPI MADT?");
@@ -193,19 +184,6 @@ static INIT_TEXT void process_madt(const ACPI_TABLE_MADT *madt)
 					  "bus: %#" PRIx8 "  "
 					  "INTI fl.: 0x%04" PRIx16 " }\n",
 				    src_irq, apic_irq, bus, inti_fl);
-				if (bus != 0)
-					warn("unknown bus type %#" PRIx8,
-					    ic->Bus);
-				else if (src_irq > 15)
-					panic("no idea how to override ISA "
-					      "IRQ %#" PRIx8 " > 15", src_irq);
-				else {
-					i8259_to_apic_irq_map[src_irq] =
-					    apic_irq;
-					parse_inti_flags(inti_fl, bus,
-					    &i8259_irq_active_low_p[src_irq],
-					    &i8259_irq_lvl_trig_p[src_irq]);
-				}
 			}
 			break;
 		    case ACPI_MADT_TYPE_NMI_SOURCE:
@@ -248,29 +226,58 @@ static INIT_TEXT void process_madt(const ACPI_TABLE_MADT *madt)
 		}
 	}
 
-	/* Start setting up the local APIC & I/O APICs. */
+	/*
+	 * Start setting up the local APIC & I/O APICs, & also disable all
+	 * the I/O APICs' IRQs first.
+	 */
 	apic_init(lapic_addr, lapic_nmi_lint, lapic_nmi_active_low_p,
 	    lapic_nmi_lvl_trig_p, i8259_compat_p, n_ioapics);
-	FOR_EACH_MADT_SUBTABLE(stbl, madt, itr)
+	FOR_EACH_MADT_SUBTABLE(stbl, madt, itr) {
 		if (stbl->Type == ACPI_MADT_TYPE_IO_APIC) {
 			const ACPI_MADT_IO_APIC *ic =
 			    (const ACPI_MADT_IO_APIC *)stbl;
 			apic_add_ioapic(ic->Id, ic->Address,
 					ic->GlobalIrqBase);
 		}
-#if 0
-	apic_finalize_ioapics(i8259_to_apic_irq_map,
-	    i8259_irq_active_low_p, i8259_irq_lvl_trig_p);
-	FOR_EACH_MADT_SUBTABLE(stbl, madt, itr)
-		if (stbl->Type == ACPI_MADT_TYPE_NMI_SOURCE) {
-			const ACPI_MADT_NMI_SOURCE *ic =
-			    (const ACPI_MADT_NMI_SOURCE *)stbl;
-			parse_inti_flags(ic->IntiFlags, -1,
-			    &ioapic_nmi_active_low_p, &ioapic_nmi_lvl_trig_p);
-			apic_add_ioapic_nmi(ic->GlobalIrq,
-			    ioapic_nmi_active_low_p, ioapic_nmi_lvl_trig_p);
+	}
+
+	/*
+	 * We have disabled all the I/O APIC IRQs.  Enable interrupt
+	 * handling on the CPU, then slowly bring up (some of) the IRQs as
+	 * mentioned in the MADT.
+	 */
+	enable();
+	FOR_EACH_MADT_SUBTABLE(stbl, madt, itr) {
+		switch (stbl->Type) {
+		    case ACPI_MADT_TYPE_INTERRUPT_OVERRIDE:
+			{
+				const ACPI_MADT_INTERRUPT_OVERRIDE *ic =
+				    (const ACPI_MADT_INTERRUPT_OVERRIDE *)stbl;
+				UINT8 src_irq = ic->SourceIrq, bus = ic->Bus;
+				UINT32 apic_irq = ic->GlobalIrq;
+				UINT16 inti_fl = ic->IntiFlags;
+				bool active_low_p, lvl_trig_p;
+				parse_inti_flags(inti_fl, bus,
+				    &active_low_p, &lvl_trig_p);
+				apic_add_irq_override(bus, src_irq, apic_irq,
+				    active_low_p, lvl_trig_p);
+			}
+			break;
+		    case ACPI_MADT_TYPE_NMI_SOURCE:
+			{
+				const ACPI_MADT_NMI_SOURCE *ic =
+				    (const ACPI_MADT_NMI_SOURCE *)stbl;
+				bool active_low_p, lvl_trig_p;
+				parse_inti_flags(ic->IntiFlags, -1,
+				    &active_low_p, &lvl_trig_p);
+				apic_add_ioapic_nmi(ic->GlobalIrq,
+				    active_low_p, lvl_trig_p);
+			}
+			break;
+		    default:
+			;
 		}
-#endif
+	}
 }
 
 static INIT_TEXT void process_xsdt(void)

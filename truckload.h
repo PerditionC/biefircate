@@ -143,9 +143,9 @@ extern INIT_TEXT void acpi_init(const void *);
 extern INIT_TEXT void apic_init(uintptr_t, int_fast16_t, bool, bool,
     bool, unsigned);
 extern INIT_TEXT void apic_add_ioapic(uint8_t, uintptr_t, uint32_t);
-extern INIT_TEXT void apic_finalize_ioapics(const uint32_t[],
-    const bool[], const bool[]);
 extern INIT_TEXT void apic_add_ioapic_nmi(uint32_t, bool, bool);
+extern INIT_TEXT void apic_add_irq_override(uint8_t, uint8_t, uint32_t,
+    bool, bool);
 
 /* cpuid.c */
 extern INIT_TEXT void cpuid_init(void);
