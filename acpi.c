@@ -26,6 +26,12 @@
 #include "acrestyp.h"
 #include "acpixf.h"
 #include "acexcep.h"
+#include "aclocal.h"
+#include "acobject.h"
+#include "acstruct.h"
+#include "acnamesp.h"
+#include "acnames.h"
+#include "acpiosxf.h"
 
 /* Used by ACPICA (via acpica-osl.c). */
 const ACPI_TABLE_RSDP *acpi_rsdp = NULL;
@@ -35,7 +41,7 @@ static const ACPI_TABLE_XSDT *acpi_xsdt = NULL;
 static NORETURN void panic_acpi(const char *msg, ACPI_STATUS status)
 {
 	panic_with_caller(__builtin_return_address(0),
-	    "%s: ACPI_STATUS %#" PRIx32, msg, (uint32_t)status);
+	    "%s failed: ACPI_STATUS %#" PRIx32, msg, (uint32_t)status);
 }
 
 static INIT_TEXT void process_fadt(const ACPI_TABLE_FADT *fadt)
@@ -311,6 +317,30 @@ static INIT_TEXT void process_xsdt(void)
 	process_madt(madt);
 }
 
+static INIT_TEXT ACPI_STATUS list_devices_cb(ACPI_HANDLE object,
+    UINT32 nest_lvl, void *ctx, void **rv)
+{
+	ACPI_BUFFER path = { .Length = ACPI_ALLOCATE_BUFFER };
+	ACPI_STATUS status = AcpiNsHandleToPathname(object, &path, FALSE);
+	if (ACPI_FAILURE(status))
+		panic_acpi("AcpiNsHandleToPathname", status);
+	cprintf("%s ", path.Pointer);
+	AcpiOsFree(path.Pointer);
+	return AE_OK;
+}
+
+static INIT_TEXT void list_devices(void)
+{
+	ACPI_HANDLE root_h;
+	ACPI_STATUS status = AcpiGetHandle(NULL, ACPI_NS_ROOT_PATH, &root_h);
+	if (ACPI_FAILURE(status))
+		panic_acpi("AcpiGetHandle", status);
+	status = AcpiWalkNamespace(ACPI_TYPE_DEVICE, root_h, UINT_MAX,
+	    list_devices_cb, NULL, NULL, NULL);
+	if (ACPI_FAILURE(status))
+		panic_acpi("AcpiWalkNamespace", status);
+}
+
 INIT_TEXT void acpi_init(const void *p)
 {
 	const char rsdp_sig[8] = "RSD PTR ";
@@ -328,17 +358,18 @@ INIT_TEXT void acpi_init(const void *p)
 	process_xsdt();
 	status = AcpiInitializeSubsystem();
 	if (ACPI_FAILURE(status))
-		panic_acpi("AcpiInitializeSubsystem failed", status);
+		panic_acpi("AcpiInitializeSubsystem", status);
 	status = AcpiInitializeTables(NULL, 0, TRUE);
 	if (ACPI_FAILURE(status))
-		panic_acpi("AcpiInitializeTables failed", status);
+		panic_acpi("AcpiInitializeTables", status);
 	status = AcpiLoadTables();
 	if (ACPI_FAILURE(status))
-		panic_acpi("AcpiLoadTables failed", status);
+		panic_acpi("AcpiLoadTables", status);
 	status = AcpiEnableSubsystem(ACPI_FULL_INITIALIZATION);
 	if (ACPI_FAILURE(status))
-		panic_acpi("AcpiEnableSubsystem failed", status);
+		panic_acpi("AcpiEnableSubsystem", status);
 	status = AcpiInitializeObjects(ACPI_FULL_INITIALIZATION);
 	if (ACPI_FAILURE(status))
-		panic_acpi("AcpiInitializeObjects failed", status);
+		panic_acpi("AcpiInitializeObjects", status);
+	list_devices();
 }
