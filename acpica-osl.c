@@ -117,9 +117,8 @@ ACPI_STATUS AcpiOsInstallInterruptHandler(UINT32 int_lvl,
     ACPI_OSD_HANDLER handler, void *context)
 {
 	/* FIXME */
-	/*panic_with_caller(__builtin_return_address(0),*/
-	cprintf(
-	    "AcpiOsInstallInterruptHandler %#" PRIx32 " %p %p", int_lvl, handler, context);
+	warn("AcpiOsInstallInterruptHandler %#" PRIx32 " %p %p",
+	    int_lvl, handler, context);
 	return AE_OK;
 }
 
@@ -256,7 +255,7 @@ void AcpiOsVprintf(const char *fmt, va_list ap)
 UINT64 AcpiOsGetTimer(void)
 {
 	/* FIXME */
-	panic_with_caller(__builtin_return_address(0), "AcpiOsGetTimer");
+	warn("AcpiOsGetTimer");
 	return 0;
 }
 
