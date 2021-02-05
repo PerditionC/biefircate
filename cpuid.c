@@ -23,10 +23,11 @@ INIT_TEXT void cpuid_init(void)
 		uint32_t lw;
 		char c[4];
 	} vendor1, vendor2, vendor3;
-	cpuid(0, &max_std_leaf, &vendor1.lw, &vendor3.lw, &vendor2.lw);
+	cpuid_t id = cpuid(0);
+	max_std_leaf = id.a;
 	cprintf("CPUID  max. std. leaf: %#" PRIx32 "  "
 		"vendor: %4.4s%4.4s%4.4s\n",
-	    max_std_leaf, vendor1.c, vendor2.c, vendor3.c);
+	    id.a, id.b_bytes, id.d_bytes, id.c_bytes);
 }
 
 INIT_TEXT bool cpuid_has_std_leaf_p(uint32_t leaf)

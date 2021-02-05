@@ -118,20 +118,41 @@ static inline void outpd(uint16_t port, uint32_t value)
 	__asm volatile("outl %1, %0" : : "Nd" (port), "a" (value));
 }
 
-static inline void cpuid(uint32_t leaf,
-    uint32_t *a, uint32_t *b, uint32_t *c, uint32_t *d)
+typedef struct {
+	union {
+		uint32_t a;
+		uint8_t a_bytes[4];
+	};
+	union {
+		uint32_t b;
+		uint8_t b_bytes[4];
+	};
+	union {
+		uint32_t c;
+		uint8_t c_bytes[4];
+	};
+	union {
+		uint32_t d;
+		uint8_t d_bytes[4];
+	};
+} cpuid_t;
+
+static inline cpuid_t cpuid(uint32_t leaf)
 {
+	cpuid_t id;
 	__asm volatile("cpuid"
-		       : "=a" (*a), "=b" (*b), "=c" (*c), "=d" (*d)
+		       : "=a" (id.a), "=b" (id.b), "=c" (id.c), "=d" (id.d)
 		       : "0" (leaf));
+	return id;
 }
 
-static inline void cpuid_with_subleaf(uint32_t leaf, uint32_t subleaf,
-    uint32_t *a, uint32_t *b, uint32_t *c, uint32_t *d)
+static inline cpuid_t cpuid_with_subleaf(uint32_t leaf, uint32_t subleaf)
 {
+	cpuid_t id;
 	__asm volatile("cpuid"
-		       : "=a" (*a), "=b" (*b), "=c" (*c), "=d" (*d)
+		       : "=a" (id.a), "=b" (id.b), "=c" (id.c), "=d" (id.d)
 		       : "0" (leaf), "2" (subleaf));
+	return id;
 }
 
 #define assert(p)	((p) || (assert_fail(#p), 0))
