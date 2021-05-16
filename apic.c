@@ -20,7 +20,8 @@
 
 typedef volatile struct __attribute__((packed))
 {
-	uint32_t value ALIGN_APIC, : 0;
+	uint32_t value ALIGN_APIC;
+	uint32_t : 0 ALIGN_APIC;
 } wrapped_apic_reg32_t;
 
 /*

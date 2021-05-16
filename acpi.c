@@ -298,10 +298,11 @@ static INIT_TEXT void process_madt(const ACPI_TABLE_MADT *madt)
 static INIT_TEXT void process_hpet(const ACPI_TABLE_HPET *hpet)
 {
 	static bool hpet_inited = false;
-	if (hpet_inited)
+	if (!hpet) {
+		if (!hpet_inited)
+			panic("no usable ACPI HPET?");
 		return;
-	if (!hpet)
-		panic("no usable ACPI HPET?");
+	}
 	cprintf("ACPI HPET @%p:\n"
 		"  seq.: %" PRIu8 "  id.: %#" PRIx32 "  min. tick: %" PRIu16
 		"  flags: %#" PRIx8 "\n"
@@ -309,6 +310,12 @@ static INIT_TEXT void process_hpet(const ACPI_TABLE_HPET *hpet)
 	    hpet, hpet->Sequence, hpet->Id, hpet->MinimumTick, hpet->Flags);
 	dump_acpi_gen_addr(&hpet->Address);
 	putwch(u'\n');
+	if (!hpet_inited &&
+	    hpet->Address.SpaceId == ACPI_ADR_SPACE_SYSTEM_MEMORY) {
+		hpet_inited = hpet_init(hpet->Address.Address);
+		if (hpet_inited)
+			cprintf("done HPET init.\n");
+	}
 }
 
 static INIT_TEXT void process_xsdt(void)

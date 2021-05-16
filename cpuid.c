@@ -19,10 +19,6 @@ uint32_t max_std_leaf = 0;
 
 INIT_TEXT void cpuid_init(void)
 {
-	union {
-		uint32_t lw;
-		char c[4];
-	} vendor1, vendor2, vendor3;
 	cpuid_t id = cpuid(0);
 	max_std_leaf = id.a;
 	cprintf("CPUID  max. std. leaf: %#" PRIx32 "  "

@@ -187,6 +187,9 @@ extern void vcprintf(const char *, va_list);
 extern void cprintf(const char *, ...);
 extern void warn(const char *, ...);
 
+/* hpet.c */
+extern bool hpet_init(uintptr_t);
+
 /* mem-heap.c */
 extern void *mem_heap_alloc(size_t);
 extern void mem_heap_free(void *);
