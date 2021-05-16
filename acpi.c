@@ -44,6 +44,15 @@ static NORETURN void panic_acpi(const char *msg, ACPI_STATUS status)
 	    "%s failed: ACPI_STATUS %#" PRIx32, msg, (uint32_t)status);
 }
 
+static INIT_TEXT void dump_acpi_gen_addr(const ACPI_GENERIC_ADDRESS *addr)
+{
+	cprintf("{ (%" PRIu8 ") @%#" PRIx64 "[%" PRIu8 "..",
+	    addr->SpaceId, addr->Address, addr->BitOffset);
+	if (addr->BitWidth)
+		cprintf("%" PRIu8, addr->BitOffset + addr->BitWidth - 1);
+	cputs("] }");
+}
+
 static INIT_TEXT void process_fadt(const ACPI_TABLE_FADT *fadt)
 {
 	if (!fadt)
@@ -286,10 +295,26 @@ static INIT_TEXT void process_madt(const ACPI_TABLE_MADT *madt)
 	}
 }
 
+static INIT_TEXT void process_hpet(const ACPI_TABLE_HPET *hpet)
+{
+	static bool hpet_inited = false;
+	if (hpet_inited)
+		return;
+	if (!hpet)
+		panic("no usable ACPI HPET?");
+	cprintf("ACPI HPET @%p:\n"
+		"  seq.: %" PRIu8 "  id.: %#" PRIx32 "  min. tick: %" PRIu16
+		"  flags: %#" PRIx8 "\n"
+		"  addr: ",
+	    hpet, hpet->Sequence, hpet->Id, hpet->MinimumTick, hpet->Flags);
+	dump_acpi_gen_addr(&hpet->Address);
+	putwch(u'\n');
+}
+
 static INIT_TEXT void process_xsdt(void)
 {
 	const char xsdt_sig[4] = "XSDT", fadt_sig[4] = "FACP",
-		   madt_sig[4] = "APIC";
+		   madt_sig[4] = "APIC", hpet_sig[4] = "HPET";
 	const ACPI_TABLE_FADT *fadt = NULL;
 	const ACPI_TABLE_MADT *madt = NULL;
 	UINT32 n, i;
@@ -315,6 +340,16 @@ static INIT_TEXT void process_xsdt(void)
 	putwch(u'\n');
 	process_fadt(fadt);
 	process_madt(madt);
+	for (i = 0; i < n; ++i) {
+		const ACPI_TABLE_HEADER *tbl =
+		    (const ACPI_TABLE_HEADER *)acpi_xsdt->TableOffsetEntry[i];
+		if (memcmp(tbl->Signature, hpet_sig, sizeof hpet_sig) == 0) {
+			const ACPI_TABLE_HPET *hpet =
+			    (const ACPI_TABLE_HPET *)tbl;
+			process_hpet(hpet);
+		}
+	}
+	process_hpet(NULL);
 }
 
 static INIT_TEXT ACPI_STATUS list_devices_cb(ACPI_HANDLE object,
