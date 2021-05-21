@@ -32,6 +32,7 @@
 #include "acnamesp.h"
 #include "acnames.h"
 #include "acpiosxf.h"
+#include "acutils.h"
 
 /* Used by ACPICA (via acpica-osl.c). */
 const ACPI_TABLE_RSDP *acpi_rsdp = NULL;
@@ -359,6 +360,25 @@ static INIT_TEXT void process_xsdt(void)
 	process_hpet(NULL);
 }
 
+static INIT_TEXT void acpica_init(void)
+{
+	ACPI_STATUS status = AcpiInitializeSubsystem();
+	if (ACPI_FAILURE(status))
+		panic_acpi("AcpiInitializeSubsystem", status);
+	status = AcpiInitializeTables(NULL, 0, TRUE);
+	if (ACPI_FAILURE(status))
+		panic_acpi("AcpiInitializeTables", status);
+	status = AcpiLoadTables();
+	if (ACPI_FAILURE(status))
+		panic_acpi("AcpiLoadTables", status);
+	status = AcpiEnableSubsystem(ACPI_FULL_INITIALIZATION);
+	if (ACPI_FAILURE(status))
+		panic_acpi("AcpiEnableSubsystem", status);
+	status = AcpiInitializeObjects(ACPI_FULL_INITIALIZATION);
+	if (ACPI_FAILURE(status))
+		panic_acpi("AcpiInitializeObjects", status);
+}
+
 static INIT_TEXT ACPI_STATUS list_devices_cb(ACPI_HANDLE object,
     UINT32 nest_lvl, void *ctx, void **rv)
 {
@@ -383,11 +403,47 @@ static INIT_TEXT void list_devices(void)
 		panic_acpi("AcpiWalkNamespace", status);
 }
 
+static INIT_TEXT bool acpi_has_method_p(ACPI_HANDLE object, const char *meth)
+{
+	ACPI_HANDLE tmp;
+	return ACPI_SUCCESS(AcpiGetHandle(object, (ACPI_STRING)meth, &tmp));
+}
+
+typedef struct {
+	const char *hid;
+	void (*actual_cb)(void);
+} start_devices_ctx_t;
+
+static INIT_TEXT ACPI_STATUS start_devices_cb(ACPI_HANDLE object,
+    UINT32 nest_lvl, void *p, void **rv)
+{
+	start_devices_ctx_t *pctx = p;
+	ACPI_BUFFER name = { .Length = ACPI_ALLOCATE_BUFFER };
+	cprintf("starting dev. %s", pctx->hid);
+	if (acpi_has_method_p(object, "_STR") &&
+	    ACPI_SUCCESS(AcpiEvaluateObject(object, "_STR", NULL, &name))) {
+		cprintf(" (%s)", name.Pointer);
+		AcpiOsFree(name.Pointer);
+	}
+	putwch(u'\n');
+	return AE_OK;
+}
+
+static INIT_TEXT void start_devices(const char *hid, void (*cb)(void))
+{
+	start_devices_ctx_t ctx;
+	ACPI_STATUS status;
+	ctx.hid = hid;
+	ctx.actual_cb = cb;
+	status = AcpiGetDevices((char *)hid, start_devices_cb, &ctx, NULL);
+	if (ACPI_FAILURE(status))
+		panic_acpi("AcpiGetDevices", status);
+}
+
 INIT_TEXT void acpi_init(const void *p)
 {
 	const char rsdp_sig[8] = "RSD PTR ";
 	const ACPI_TABLE_RSDP *rsdp = (const ACPI_TABLE_RSDP *)p;
-	ACPI_STATUS status;
 	if (memcmp(rsdp->Signature, rsdp_sig, sizeof rsdp_sig) != 0)
 		panic("ACPI RSDP has bogus signature");
 	cprintf("ACPI v2 RSDP @%p:\n"
@@ -398,20 +454,7 @@ INIT_TEXT void acpi_init(const void *p)
 	acpi_rsdp = rsdp;
 	acpi_xsdt = (const ACPI_TABLE_XSDT *)rsdp->XsdtPhysicalAddress;
 	process_xsdt();
-	status = AcpiInitializeSubsystem();
-	if (ACPI_FAILURE(status))
-		panic_acpi("AcpiInitializeSubsystem", status);
-	status = AcpiInitializeTables(NULL, 0, TRUE);
-	if (ACPI_FAILURE(status))
-		panic_acpi("AcpiInitializeTables", status);
-	status = AcpiLoadTables();
-	if (ACPI_FAILURE(status))
-		panic_acpi("AcpiLoadTables", status);
-	status = AcpiEnableSubsystem(ACPI_FULL_INITIALIZATION);
-	if (ACPI_FAILURE(status))
-		panic_acpi("AcpiEnableSubsystem", status);
-	status = AcpiInitializeObjects(ACPI_FULL_INITIALIZATION);
-	if (ACPI_FAILURE(status))
-		panic_acpi("AcpiInitializeObjects", status);
+	acpica_init();
 	list_devices();
+	start_devices("PNP0103", NULL);
 }
