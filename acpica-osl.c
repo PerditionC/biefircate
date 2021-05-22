@@ -220,18 +220,75 @@ ACPI_STATUS AcpiOsWritePort(ACPI_IO_ADDRESS port, UINT32 value, UINT32 width)
 ACPI_STATUS AcpiOsReadPciConfiguration(ACPI_PCI_ID *pci_id, UINT32 reg_num,
     UINT64 *value, UINT32 width)
 {
-	/* FIXME */
-	panic_with_caller(__builtin_return_address(0),
-	    "AcpiOsReadPciConfiguration");
+	const uint16_t ADDR_PORT = 0x0cf8, DATA_PORT = 0x0cfc;
+	unsigned bus, device, function, shift = 0;
+	UINT64 v = 0;
+	UINT32 address;
+	if (!value)
+		return AE_BAD_PARAMETER;
+	switch (width) {
+	    case 8:
+	    case 16:
+	    case 32:
+	    case 64:
+		break;
+	    default:
+		return AE_BAD_PARAMETER;
+	}
+	width /= 8;
+	if (reg_num > 0xff || reg_num + width > 0x100)
+		return AE_BAD_PARAMETER;
+	bus = pci_id->Bus;
+	device = pci_id->Device;
+	function = pci_id->Function;
+	if (bus > 0xff || device > 0x1f || function > 7)
+		return AE_BAD_PARAMETER;
+	address = (UINT32)1 << 31 | (UINT32)bus << 16 |
+		  (UINT32)device << 11 | (UINT32)function << 8;
+	/* FIXME: this is slow and stupid. */
+	while (width) {
+		outpd(ADDR_PORT, address | ((UINT8)reg_num & ~(UINT8)3));
+		v |= (UINT64)inp(DATA_PORT + (UINT16)reg_num % 4U) << shift;
+		shift += 8;
+		++reg_num;
+		--width;
+	}
+	*value = v;
 	return AE_OK;
 }
 
 ACPI_STATUS AcpiOsWritePciConfiguration(ACPI_PCI_ID *pci_id, UINT32 reg_num,
     UINT64 value, UINT32 width)
 {
-	/* FIXME */
-	panic_with_caller(__builtin_return_address(0),
-	    "AcpiOsWritePciConfiguration");
+	const uint16_t ADDR_PORT = 0x0cf8, DATA_PORT = 0x0cfc;
+	unsigned bus, device, function;
+	UINT32 address;
+	switch (width) {
+	    case 8:
+	    case 16:
+	    case 32:
+	    case 64:
+		break;
+	    default:
+		return AE_BAD_PARAMETER;
+	}
+	width /= 8;
+	if (reg_num > 0xff || reg_num + width > 0x100)
+		return AE_BAD_PARAMETER;
+	bus = pci_id->Bus;
+	device = pci_id->Device;
+	function = pci_id->Function;
+	if (bus > 0xff || device > 0x1f || function > 7)
+		return AE_BAD_PARAMETER;
+	address = (UINT32)1 << 31 | (UINT32)bus << 16 |
+		  (UINT32)device << 11 | (UINT32)function << 8;
+	while (width) {
+		outpd(ADDR_PORT, address | ((UINT8)reg_num & ~(UINT8)3));
+		outp(DATA_PORT + (UINT16)reg_num % 4U, (UINT8)value);
+		value >>= 8;
+		++reg_num;
+		--width;
+	}
 	return AE_OK;
 }
 
