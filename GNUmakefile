@@ -27,13 +27,13 @@ loader.signed.efi: loader.efi
 	       --output $@ $<
 endif
 
-loader.efi: efi-main.o rm86.o
+loader.efi: s1-main.o rm86.o
 	$(CC) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
 %.o: %.c $(LIBEFI)
 	$(CC) $(CFLAGS) $(CPPFLAGS) -c -o $@ $<
 
-efi-main.o : CPPFLAGS += -DVERSION='"$(conf_Pkg_ver)"'
+s1-main.o : CPPFLAGS += -DVERSION='"$(conf_Pkg_ver)"'
 
 # gnu-efi's Make.defaults has a bit of a bug in its setting of $(GCCVERSION)
 # & $(GCCMINOR): if $(CC) -dumpversion says something like `10-win32' it
@@ -42,8 +42,8 @@ efi-main.o : CPPFLAGS += -DVERSION='"$(conf_Pkg_ver)"'
 $(LIBEFI):
 	mkdir -p gnu-efi
 	$(MAKE) CROSS_COMPILE=x86_64-w64-mingw32- CFLAGS='$(CFLAGS)' \
-	    GCCVERSION=$(shell $(CC) -dumpversion | cut -f1 -d. | cut -f1 -d-)\
-	    GCCMINOR=$(shell $(CC) -dumpversion | cut -f2 -d. | cut -f1 -d-) \
+	    GCCVERSION=$(shell $(CC) -dumpversion | cut -f1 -d- | cut -f1 -d.)\
+	    GCCMINOR=$(shell $(CC) -dumpversion | cut -f1 -d- | cut -f2 -d.) \
 	    -C gnu-efi \
 	    -f '$(abspath $(conf_Srcdir))'/gnu-efi/Makefile \
 	    lib inc
