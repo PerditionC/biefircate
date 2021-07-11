@@ -2,7 +2,6 @@
 
 #include <efi.h>
 #include <efilib.h>
-#include <inttypes.h>
 #include <string.h>
 #include "rm86.h"
 
@@ -102,7 +101,7 @@ static void find_pci(void)
 	    &gEfiPciRootBridgeIoProtocolGuid, NULL, &num_handles, &handles);
 	if (EFI_ERROR(status))
 	        error_with_status(u"no PCI root bridges found", status);
-	Print(u"PCI root bridges: %" PRIx64 "\n", num_handles);
+	Print(u"PCI root bridges: %lu\n", num_handles);
 	FreePool(handles);
 }
 
@@ -147,12 +146,15 @@ static char *alloc_dos_mem_with_psp(UINTN bytes)
 	return mem;
 }
 
-static void load_command_com(void)
+#define STAGE2		u"biefirc2.sys"
+
+static void load_stage2(void)
 {
 	const UINTN dos_mem_size = 0x10000UL;
 	UINTN read_size = dos_mem_size - 0x200UL;
 	EFI_SIMPLE_FILE_SYSTEM_PROTOCOL *fs;
 	EFI_FILE_PROTOCOL *vol, *prog;
+	EFI_FILE_INFO *info;
 	EFI_STATUS status;
 	rm86_regs_t *regs;
 	char *psp = alloc_dos_mem_with_psp(dos_mem_size);
@@ -164,18 +166,24 @@ static void load_command_com(void)
 	status = fs->OpenVolume(fs, &vol);
 	if (EFI_ERROR(status))
 		error_with_status(u"cannot get EFI_FILE_PROTOCOL", status);
-	status = vol->Open(vol, &prog, u"command.com", EFI_FILE_MODE_READ, 0);
+	status = vol->Open(vol, &prog, STAGE2, EFI_FILE_MODE_READ, 0);
 	if (EFI_ERROR(status)) {
 		vol->Close(vol);
-		error_with_status(u"cannot open command.com", status);
+		error_with_status(u"cannot open " STAGE2, status);
 	}
+	info = LibFileInfo(prog);
+	if (!info)
+		error(u"cannot get info on " STAGE2);
+	Print(u"stage2: %s  size: 0x%lx  attrs.: 0x%lx\n",
+	    STAGE2, info->FileSize, info->Attribute);
+	FreePool(info);
 	status = prog->Read(prog, &read_size, psp + 0x100);
 	prog->Close(prog);
 	vol->Close(vol);
 	if (EFI_ERROR(status))
-		error_with_status(u"cannot read command.com", status);
-	Print(u"read 0x%x byte%s from command.com\r\n", read_size,
-	    read_size == 1 ? u"" : u"s");
+		error_with_status(u"cannot read " STAGE2, status);
+	Print(u"read 0x%x byte%s from %s\r\n", read_size,
+	    read_size == 1 ? u"" : u"s", STAGE2);
 	psp[0xfffe] = psp[0xffff] = 0;
 	regs = rm86_regs();
 	memset(regs, 0, sizeof *regs);
@@ -184,10 +192,10 @@ static void load_command_com(void)
 	regs->esp = 0xfffe;
 }
 
-static void run_command_com(void)
+static void run_stage2(void)
 {
 	rm86();
-	Output(u"command.com finished\r\n");
+	Output(STAGE2 u" finished\r\n");
 }
 
 EFI_STATUS efi_main(EFI_HANDLE image_handle, EFI_SYSTEM_TABLE *system_table)
@@ -199,8 +207,8 @@ EFI_STATUS efi_main(EFI_HANDLE image_handle, EFI_SYSTEM_TABLE *system_table)
 	test_if_secure_boot();
 	find_pci();
 	init_trampolines();
-	load_command_com();
-	run_command_com();
+	load_stage2();
+	run_stage2();
 	wait_and_exit(0);
 	return 0;
 }
