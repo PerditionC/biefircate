@@ -48,6 +48,24 @@ $(LIBEFI):
 	    -f '$(abspath $(conf_Srcdir))'/gnu-efi/Makefile \
 	    lib inc
 
+hd.img: loader.efi
+	$(RM) $@.tmp
+	dd if=/dev/zero of=$@.tmp bs=1048576 count=32
+	echo start=32K type=0B bootable | sfdisk $@.tmp
+	-sudo umount mnt
+	mkdir -p mnt
+	loopdev="`losetup -f`" && \
+	    sudo losetup -o32768 "$$loopdev" $@.tmp && \
+	    trap 'sudo losetup -d "$$loopdev"' EXIT ERR TERM QUIT && \
+	    sudo mkdosfs -v -F16 "$$loopdev" && \
+	    sudo mount -t vfat "$$loopdev" mnt && \
+	    sudo mkdir -p mnt/EFI/BOOT && \
+	    sudo cp $< mnt/EFI/BOOT/bootx64.efi && \
+	    sync && \
+	    sudo sudo umount mnt
+	mv $@.tmp $@
+	rmdir mnt
+
 distclean: clean
 	$(RM) config.cache
 ifeq "$(conf_Separate_build_dir)" "yes"
@@ -56,12 +74,16 @@ endif
 .PHONY: distclean
 
 clean:
-	$(RM) *.[od] *.so *.efi *.map *~
+	$(RM) *.[od] *.so *.efi *.img *.map *~
 ifeq "$(conf_Separate_build_dir)" "yes"
 	$(RM) -r gnu-efi
 else
 	$(MAKE) -C gnu-efi clean
 endif
 .PHONY: clean
+
+run-qemu: hd.img
+	qemu-system-x86_64 -bios /usr/share/ovmf/OVMF.fd -hda $<
+.PHONY: run-qemu
 
 -include *.d

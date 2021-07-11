@@ -2,4 +2,6 @@ config.cache
 *.[od]
 *.so
 *.efi
+*.img
+*.map
 *~
