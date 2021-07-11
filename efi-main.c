@@ -2,6 +2,7 @@
 
 #include <efi.h>
 #include <efilib.h>
+#include <inttypes.h>
 #include <string.h>
 #include "rm86.h"
 
@@ -91,6 +92,18 @@ static void test_if_secure_boot(void)
 	if (!EFI_ERROR(status) && data)
 		secure_boot_p = TRUE;
 	Print(u"secure boot: %s\r\n", secure_boot_p ? u"yes" : u"no");
+}
+
+static void find_pci(void)
+{
+	EFI_HANDLE *handles;
+	UINTN num_handles;
+	EFI_STATUS status = LibLocateHandle(ByProtocol,
+	    &gEfiPciRootBridgeIoProtocolGuid, NULL, &num_handles, &handles);
+	if (EFI_ERROR(status))
+	        error_with_status(u"no PCI root bridges found", status);
+	Print(u"PCI root bridges: %" PRIx64 "\n", num_handles);
+	FreePool(handles);
 }
 
 static void init_trampolines(void)
@@ -184,6 +197,7 @@ EFI_STATUS efi_main(EFI_HANDLE image_handle, EFI_SYSTEM_TABLE *system_table)
 	process_memory_map();
 	find_boot_media();
 	test_if_secure_boot();
+	find_pci();
 	init_trampolines();
 	load_command_com();
 	run_command_com();
