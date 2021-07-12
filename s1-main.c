@@ -46,24 +46,25 @@ static void process_memory_map(void)
 	while (num_entries-- != 0) {
 		EFI_PHYSICAL_ADDRESS start, end;
 		start = desc->PhysicalStart;
-		if (start > 0xffffffUL)
-			continue;
-		end = start + desc->NumberOfPages * EFI_PAGE_SIZE;
-		Print(u"  0x%06lx 0x%06lx%c %4u 0x%016lx\r\n", start,
-		    end > 0x1000000ULL ? (UINT64)0x1000000ULL - 1 : end - 1,
-		    end > 0x1000000ULL ? u'+' : u' ',
-		    (UINT32)desc->Type, desc->Attribute);
-		if (!base_mem_start &&
-		    desc->Type == EfiConventionalMemory &&
-		    start < 0xf0000ULL) {
-			if (start > EFI_PAGE_SIZE)
-				base_mem_start = start;
-			else
-				base_mem_start = EFI_PAGE_SIZE;
-			if (end < 0xf0000ULL)
-				base_mem_end = end;
-			else
-				base_mem_end = 0xf0000ULL;
+		if (start <= 0xffffffUL) {
+			end = start + desc->NumberOfPages * EFI_PAGE_SIZE;
+			Print(u"  0x%06lx 0x%06lx%c %4u 0x%016lx\r\n", start,
+			    end > 0x1000000ULL ? (UINT64)0x1000000ULL - 1
+					       : end - 1,
+			    end > 0x1000000ULL ? u'+' : u' ',
+			    (UINT32)desc->Type, desc->Attribute);
+			if (!base_mem_start &&
+			    desc->Type == EfiConventionalMemory &&
+			    start < 0xf0000ULL) {
+				if (start > EFI_PAGE_SIZE)
+					base_mem_start = start;
+				else
+					base_mem_start = EFI_PAGE_SIZE;
+				if (end < 0xf0000ULL)
+					base_mem_end = end;
+				else
+					base_mem_end = 0xf0000ULL;
+			}
 		}
 		/* :-| */
 		desc = (EFI_MEMORY_DESCRIPTOR *)((char *)desc + desc_sz);
