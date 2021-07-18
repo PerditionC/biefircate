@@ -32,6 +32,27 @@ static void error(IN CONST CHAR16 *msg)
 	wait_and_exit(EFI_ABORTED);
 }
 
+static void process_efi_conf_tables(void)
+{
+	UINTN i, sct_cnt = ST->NumberOfTableEntries;
+	Output(u"EFI sys. conf. tables:");
+	for (i = 0; i < sct_cnt; ++i) {
+		const EFI_CONFIGURATION_TABLE *cft =
+		    &ST->ConfigurationTable[i];
+		const EFI_GUID *vguid = &cft->VendorGuid;
+		if (i % 2 == 0)
+			Output(u"\r\n");
+		Print(u"  %08x-%04x-%04x-%02x%02x-"
+			 "%02x%02x%02x%02x%02x%02x",
+		    vguid->Data1, (UINT32)vguid->Data2, (UINT32)vguid->Data3,
+		    (UINT32)vguid->Data4[0], (UINT32)vguid->Data4[1],
+		    (UINT32)vguid->Data4[2], (UINT32)vguid->Data4[3],
+		    (UINT32)vguid->Data4[4], (UINT32)vguid->Data4[5],
+		    (UINT32)vguid->Data4[6], (UINT32)vguid->Data4[7]);
+	}
+	Output(u"\r\n");
+}
+
 static unsigned process_memory_map(void)
 {
 	enum { BASE_MEM_MAX = 0xff000ULL };
@@ -285,6 +306,7 @@ EFI_STATUS efi_main(EFI_HANDLE image_handle, EFI_SYSTEM_TABLE *system_table)
 	Elf32_Addr trampoline, entry;
 	InitializeLib(image_handle, system_table);
 	Output(u".:. biefircate " VERSION " .:.\r\n");
+	process_efi_conf_tables();
 	base_kib = process_memory_map();
 	find_boot_media();
 	test_if_secure_boot();
