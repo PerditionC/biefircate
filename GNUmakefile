@@ -27,7 +27,7 @@ loader.signed.efi: loader.efi
 	       --output $@ $<
 endif
 
-loader.efi: s1-main.o rm86.o
+loader.efi: s1-main.o s1-run-s2.o
 	$(CC) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
 %.o: %.c $(LIBEFI)
@@ -48,7 +48,7 @@ $(LIBEFI):
 	    -f '$(abspath $(conf_Srcdir))'/gnu-efi/Makefile \
 	    lib inc
 
-hd.img: loader.efi
+hd.img: loader.efi biefist2.sys
 	$(RM) $@.tmp
 	dd if=/dev/zero of=$@.tmp bs=1048576 count=32
 	echo start=32K type=0B bootable | sfdisk $@.tmp
@@ -61,6 +61,7 @@ hd.img: loader.efi
 	    sudo mount -t vfat "$$loopdev" mnt && \
 	    sudo mkdir -p mnt/EFI/BOOT && \
 	    sudo cp $< mnt/EFI/BOOT/bootx64.efi && \
+	    sudo cp $(filter %.sys,$^) mnt/biefist2.sys && \
 	    sync && \
 	    sudo sudo umount mnt
 	mv $@.tmp $@
@@ -83,7 +84,7 @@ endif
 .PHONY: clean
 
 run-qemu: hd.img
-	qemu-system-x86_64 -bios /usr/share/ovmf/OVMF.fd -hda $<
+	qemu-system-x86_64 -bios /usr/share/ovmf/OVMF.fd -hda $< $(QEMUFLAGS)
 .PHONY: run-qemu
 
 -include *.d

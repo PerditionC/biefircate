@@ -1,0 +1,60 @@
+	.globl	run_stage2
+run_stage2:
+	cli
+	leal	0x1000(%edx), %esp	/* switch to new stack */
+	pushq	%rcx			/* push ELF32 entry point */
+	pushq	%r8			/* push base mem. size (in KiB) */
+	movl	%edx, %edi		/* copy trampoline to mem. < 4 GiB */
+	pushq	%rdi			/* push trampoline address */
+	leaq	.LB(%rip), %rsi
+	movq	$(.LE-.LB)/8, %rcx
+	rep movsq
+	addl	%edx, .Lpm32_gdtr+2-.LE(%rdi) /* fix up GDTR value */
+	retq				/* jump to trampoline */
+
+	.balign	8
+.LB = .					/* start of trampoline to copy */
+
+	lgdt	.Lpm32_gdtr-.LE(%rdi)	/* go to 32-bit protected mode */
+	pushq	$8
+	leaq	.Lpm32-.LE(%rdi), %rdi
+	pushq	%rdi
+	lretq
+
+	.code32
+
+.Lpm32:
+	movw	$0x10, %ax		/* prime segment descriptor caches */
+	movw	%ax, %ds		/* with correct properties */
+	movw	%ax, %es
+	movw	%ax, %ss
+	xorb	%al, %al
+	movw	%ax, %fs
+	movw	%ax, %gs
+	movl	%cr0, %eax		/* turn off paging (CR0.PG) */
+	andl	$0x7fffffff, %eax
+	movl	%eax, %cr0
+	movl	$0xc0000080, %ecx	/* turn off LM support (EFER.LME) */
+	rdmsr
+	and	$0xfe, %ah
+	wrmsr
+	movl	%cr4, %ebx		/* turn off paging extensions */
+	andb	$0xcf, %bl		/* (CR4.PAE, CR4.PSE) */
+	movl	%ebx, %cr4
+	wbinvd
+	popl	%eax			/* set base mem. size in */
+	movw	%ax, 0x0413		/* BIOS data area */
+	popl	%ebx
+	retl	$4			/* jump to the stage2 entry point */
+
+	.balign 2
+.Lpm32_gdtr:
+	.hword	.Lpm32_gdt_end-.Lpm32_gdt-1
+	.quad	.Lpm32_gdt-.LB
+	.balign	8
+.Lpm32_gdt = . - 8
+	.quad	0x00cf9a000000ffff	/* 32-bit protected mode code seg. */
+	.quad	0x00cf92000000ffff	/* 32-bit protected mode data seg. */
+.Lpm32_gdt_end:
+
+.LE:					/* end of trampoline to copy */
