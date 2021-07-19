@@ -56,6 +56,37 @@ static void process_efi_conf_tables(void)
 	Output(u"\r\n");
 }
 
+static void find_pci(void)
+{
+	EFI_HANDLE *handles;
+	UINTN num_handles, idx;
+	EFI_STATUS status = LibLocateHandle(ByProtocol,
+	    &gEfiPciRootBridgeIoProtocolGuid, NULL, &num_handles, &handles);
+	if (EFI_ERROR(status))
+	        error_with_status(u"no PCI root bridges found", status);
+	Print(u"PCI root bridges: %lu\r\n"
+	       "  seg.       curr.attrs.        supported attrs.\r\n",
+	    num_handles);
+	for (idx = 0; idx < num_handles; ++idx) {
+		EFI_HANDLE handle = handles[idx];
+		EFI_PCI_ROOT_BRIDGE_IO_PROTOCOL *rb;
+		UINT64 supports, attrs;
+		status = BS->HandleProtocol(handle,
+		    &gEfiPciRootBridgeIoProtocolGuid, (void **)&rb);
+		if (EFI_ERROR(status))
+			error_with_status
+			    (u"cannot get EFI_PCI_ROOT_BRIDGE_IO_PROTOCOL",
+			     status);
+		status = rb->GetAttributes(rb, &supports, &attrs);
+		if (EFI_ERROR(status))
+			error_with_status(u"cannot get attrs. of bridge",
+			    status);
+		Print(u"  0x%08x 0x%016lx 0x%016lx\r\n",
+		    rb->SegmentNumber, attrs, supports);
+	}
+	FreePool(handles);
+}
+
 static unsigned process_memory_map(void)
 {
 	enum { BASE_MEM_MAX = 0xff000ULL };
@@ -69,7 +100,7 @@ static unsigned process_memory_map(void)
 		error(u"cannot get memory map!");
 	memset(avail, 0, sizeof avail);
 	Output(u"memory map below 16 MiB:\r\n"
-		"  start    end       type attrs\r\n");
+		"  start    end       type attrs.\r\n");
 	while (num_entries-- != 0) {
 		EFI_PHYSICAL_ADDRESS start, end;
 		start = desc->PhysicalStart;
@@ -249,18 +280,6 @@ static void test_if_secure_boot(void)
 	Print(u"secure boot: %s\r\n", secure_boot_p ? u"yes" : u"no");
 }
 
-static void find_pci(void)
-{
-	EFI_HANDLE *handles;
-	UINTN num_handles;
-	EFI_STATUS status = LibLocateHandle(ByProtocol,
-	    &gEfiPciRootBridgeIoProtocolGuid, NULL, &num_handles, &handles);
-	if (EFI_ERROR(status))
-	        error_with_status(u"no PCI root bridges found", status);
-	Print(u"PCI root bridges: %lu\r\n", num_handles);
-	FreePool(handles);
-}
-
 static Elf32_Addr alloc_trampoline(void)
 {
 	EFI_PHYSICAL_ADDRESS addr = 0x100000000ULL;
@@ -435,13 +454,13 @@ EFI_STATUS efi_main(EFI_HANDLE image_handle, EFI_SYSTEM_TABLE *system_table)
 	InitializeLib(image_handle, system_table);
 	Output(u".:. biefircate " VERSION " .:.\r\n");
 	process_efi_conf_tables();
+	find_pci();
 	base_kib = process_memory_map();
 #ifdef XV6_COMPAT
 	fake_mp_table(base_kib);
 #endif
 	find_boot_media();
 	test_if_secure_boot();
-	find_pci();
 	trampoline = alloc_trampoline();
 	entry = load_stage2();
 	run_stage2(entry, trampoline, base_kib);
