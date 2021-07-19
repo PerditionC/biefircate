@@ -6,9 +6,12 @@ endif
 -include $(conf_Lolwutconf_dir)/lolwutconf.mk
 
 GNUEFISRCDIR := '$(abspath $(conf_Srcdir))'/gnu-efi
-CFLAGS = -pie -fPIC -ffreestanding -Os -Wall -mno-red-zone -fno-stack-protector -MMD
+CFLAGS = -pie -fPIC -ffreestanding -Os -Wall -mno-red-zone \
+	 -fno-stack-protector -MMD
+ASFLAGS = -pie -fPIC -MMD
 CPPFLAGS = -I $(GNUEFISRCDIR)/inc -I $(GNUEFISRCDIR)/protocol \
-	   -I $(GNUEFISRCDIR)/inc/x86_64
+	   -I $(GNUEFISRCDIR)/inc/x86_64 \
+	   -DXV6_COMPAT
 LDFLAGS = $(CFLAGS) -nostdlib -ffreestanding -Wl,--entry,efi_main \
 	  -Wl,--subsystem,10 -Wl,--strip-all -Wl,-Map=$(@:.efi=.map)
 LIBEFI = gnu-efi/x86_64/lib/libefi.a
@@ -32,6 +35,9 @@ loader.efi: s1-main.o s1-run-s2.o
 
 %.o: %.c $(LIBEFI)
 	$(CC) $(CFLAGS) $(CPPFLAGS) -c -o $@ $<
+
+%.o: %.S $(LIBEFI)
+	$(CC) $(ASFLAGS) $(CPPFLAGS) -c -o $@ $<
 
 s1-main.o : CPPFLAGS += -DVERSION='"$(conf_Pkg_ver)"'
 

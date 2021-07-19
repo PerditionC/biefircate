@@ -4,6 +4,9 @@
 #include <efilib.h>
 #include <string.h>
 #include "elf.h"
+#ifdef XV6_COMPAT
+#   include "mp.h"
+#endif
 
 extern EFI_HANDLE LibImageHandle;
 extern EFI_GUID gEfiLoadedImageProtocolGuid, gEfiGlobalVariableGuid;
@@ -101,8 +104,127 @@ static unsigned process_memory_map(void)
 		++i;
 	i = (i * EFI_PAGE_SIZE) / 1024U;
 	Print(u"base mem. avail.: %u KiB\r\n", (UINT32)i);
+	if (i < 128)
+		error(u"too little base mem.!");
 	return i;
 }
+
+#ifdef XV6_COMPAT
+static uint64_t rdmsr(uint32_t idx)
+{
+	uint32_t hi, lo;
+	__asm volatile("rdmsr" : "=d" (hi), "=a" (lo)
+			       : "c" (idx));
+	return (uint64_t)hi << 32 | lo;
+}
+
+static void cpuid(uint32_t leaf,
+		  uint32_t *pa, uint32_t *pb, uint32_t *pc, uint32_t *pd)
+{
+	uint32_t a, b, c, d;
+	__asm volatile("cpuid" : "=a" (a), "=b" (b), "=c" (c), "=d" (d)
+			       : "0" (leaf));
+	if (pa)
+		*pa = a;
+	if (pb)
+		*pb = b;
+	if (pc)
+		*pc = c;
+	if (pd)
+		*pd = d;
+}
+
+static void update_cksum(uint8_t *buf, size_t n, uint8_t *p_cksum)
+{
+	uint8_t *p = buf, cksum = 0;
+	*p_cksum = 0;  /* the checksum may be part of the summed area */
+	while (n-- != 0)
+		cksum -= *p++;
+	*p_cksum = cksum;
+}
+
+static void fake_mp_table(unsigned base_kib)
+{
+	/*
+	 * MIT's Xv6 teaching OS --- to be precise, the x86 version at
+	 * https://github.com/mit-pdos/xv6-public --- will panic unless the
+	 * Intel multiprocessor configuration tables are set up.
+	 *
+	 * This code just fashions a minimal set of MP tables to keep Xv6
+	 * happy.  The tables are set up in the last KiB of available base
+	 * memory.
+	 *
+	 * The intent is that a more practical ELF32 kernel or bootloader
+	 * will obtain the actual multiprocessor setup by other means, such
+	 * as ACPI tables.
+	 */
+	static const char flt_sig[4] = "_MP_", conf_sig[4] = "PCMP",
+			  oem_id[8] = "BOCHSCPU", prod_id[12] = "0.1         ";
+	typedef struct __attribute__((packed)) {
+		intel_mp_flt_t flt;
+		intel_mp_conf_hdr_t conf;
+		intel_mp_cpu_t cpu;
+		intel_mp_ioapic_t ioapic;
+	} mp_bundle_t;
+	typedef union {
+		mp_bundle_t s;
+		uint8_t b[sizeof(mp_bundle_t)];
+	} mp_bundle_union_t;
+	mp_bundle_union_t *u =
+	    (mp_bundle_union_t *)((uintptr_t)(base_kib - 1) << 10);
+	uint32_t cpu_sig, cpu_features;
+	/* Get the local APIC address & APIC version. */
+	uintptr_t lapic_addr = rdmsr(0x1b) & 0x000ffffffffff000ULL;
+	volatile uint32_t *lapic = (volatile uint32_t *)lapic_addr;
+	/* Get the I/O APIC information. */
+	volatile uint32_t *ioapic = (volatile uint32_t *)IOAPIC_ADDR;
+	/* Fill up the MP floating pointer structure. */
+	memcpy(u->s.flt.sig, flt_sig, sizeof flt_sig);
+	u->s.flt.mp_conf_addr = (uint32_t)(uintptr_t)&u->s.conf;
+	u->s.flt.len = sizeof(u->s.flt);
+	u->s.flt.spec_rev = 4;
+	u->s.flt.features[0] = u->s.flt.features[2] =
+	    u->s.flt.features[3] = u->s.flt.features[4] = 0;
+	u->s.flt.features[1] = MP_FEAT1_IMCRP;
+	update_cksum(u->b, sizeof(u->s.flt), &u->s.flt.cksum);
+	/*
+	 * Fill up the MP configuration table header (except for the
+	 * checksum).
+	 */
+	memcpy(u->s.conf.sig, conf_sig, sizeof conf_sig);
+	u->s.conf.base_tbl_len = sizeof(u->s.conf) + sizeof(u->s.cpu) +
+				 sizeof(u->s.ioapic);
+	u->s.conf.spec_rev = 4;
+	memcpy(u->s.conf.oem_id, oem_id, sizeof oem_id);
+	memcpy(u->s.conf.prod_id, prod_id, sizeof prod_id);
+	u->s.conf.oem_tbl_ptr = 0;
+	u->s.conf.oem_tbl_sz = 0;
+	u->s.conf.ent_cnt = 2;
+	u->s.conf.lapic_addr = (uint32_t)lapic_addr;
+	u->s.conf.ext_tbl_len = 0;
+	u->s.conf.ext_tbl_cksum = u->s.conf.reserved = 0;
+	/* Fill up the entry for this processor. */
+	u->s.cpu.type = MP_CPU;
+	u->s.cpu.lapic_id = (uint8_t)lapic[0x20 / 4];
+	u->s.cpu.lapic_ver = (uint8_t)lapic[0x30 / 4];
+	u->s.cpu.cpu_flags = MP_CPU_EN | MP_CPU_BP;
+	cpuid(1, &cpu_sig, NULL, NULL, &cpu_features);
+	u->s.cpu.cpu_sig = cpu_sig;
+	u->s.cpu.cpu_features = cpu_features;
+	/* Fill up the entry for the (first) I/O APIC. */
+	u->s.ioapic.type = MP_IOAPIC;
+	ioapic[0] = 0x00;
+	u->s.ioapic.ic_id = (uint8_t)(ioapic[0x10 / 4] >> 24);
+	ioapic[0] = 0x01;
+	u->s.ioapic.ic_ver = (uint8_t)ioapic[0x10 / 4];
+	u->s.ioapic.ic_flags = MP_IOAPIC_EN;
+	u->s.ioapic.ic_addr = (uint32_t)IOAPIC_ADDR;
+	/* Compute the checksum for the MP configuration table. */
+	update_cksum(u->b + sizeof(u->s.flt),
+		     sizeof(u->s.conf) + sizeof(u->s.cpu) +
+		     sizeof(u->s.ioapic), &u->s.conf.cksum);
+}
+#endif
 
 static void find_boot_media(void)
 {
@@ -308,6 +430,9 @@ EFI_STATUS efi_main(EFI_HANDLE image_handle, EFI_SYSTEM_TABLE *system_table)
 	Output(u".:. biefircate " VERSION " .:.\r\n");
 	process_efi_conf_tables();
 	base_kib = process_memory_map();
+#ifdef XV6_COMPAT
+	fake_mp_table(base_kib);
+#endif
 	find_boot_media();
 	test_if_secure_boot();
 	find_pci();
