@@ -16,6 +16,7 @@ LDFLAGS = $(CFLAGS) -nostdlib -ffreestanding -Wl,--entry,efi_main \
 	  -Wl,--subsystem,10 -Wl,--strip-all -Wl,-Map=$(@:.efi=.map)
 LIBEFI = gnu-efi/x86_64/lib/libefi.a
 LDLIBS := $(LIBEFI) $(LDLIBS)
+QEMUFLAGS = -m 512m -serial stdio
 
 ifneq "" "$(SBSIGN_MOK)"
 default: loader.signed.efi loader.efi

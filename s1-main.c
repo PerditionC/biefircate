@@ -274,14 +274,15 @@ static Elf32_Addr alloc_trampoline(void)
 }
 
 #define STAGE2		u"biefist2.sys"
+#define STAGE2_ALT	u"kernel.sys"
 
-static void dump_stage2_info(EFI_FILE_PROTOCOL *prog)
+static void dump_stage2_info(EFI_FILE_PROTOCOL *prog, CONST CHAR16 *name)
 {
 	EFI_FILE_INFO *info = LibFileInfo(prog);
 	if (!info)
-		error(u"cannot get info on " STAGE2);
+		error(u"cannot get info on stage 2");
 	Print(u"stage2: %s  size: 0x%lx  attrs.: 0x%lx\r\n",
-	    STAGE2, info->FileSize, info->Attribute);
+	    name, info->FileSize, info->Attribute);
 	FreePool(info);
 }
 
@@ -293,12 +294,12 @@ static void read_stage2(EFI_FILE_PROTOCOL *prog, EFI_FILE_PROTOCOL *vol,
 	if (EFI_ERROR(status)) {
 		prog->Close(prog);
 		vol->Close(vol);
-		error_with_status(u"cannot read from " STAGE2, status);
+		error_with_status(u"cannot read stage 2", status);
 	}
 	if (read_size != size) {
 		prog->Close(prog);
 		vol->Close(vol);
-		error_with_status(u"short read from " STAGE2, status);
+		error_with_status(u"short read from stage 2", status);
 	}
 }
 
@@ -309,7 +310,7 @@ static void seek_stage2(EFI_FILE_PROTOCOL *prog, EFI_FILE_PROTOCOL *vol,
 	if (EFI_ERROR(status)) {
 		prog->Close(prog);
 		vol->Close(vol);
-		error_with_status(u"cannot seek into " STAGE2, status);
+		error_with_status(u"cannot seek into stage 2", status);
 	}
 }
 
@@ -329,6 +330,7 @@ static Elf32_Addr load_stage2(void)
 {
 	enum { MAX_PHDRS = 16 };
 	EFI_SIMPLE_FILE_SYSTEM_PROTOCOL *fs;
+	CHAR16 *name = STAGE2;
 	EFI_FILE_PROTOCOL *vol, *prog;
 	EFI_STATUS status;
 	Elf32_Ehdr ehdr;
@@ -342,12 +344,16 @@ static Elf32_Addr load_stage2(void)
 	status = fs->OpenVolume(fs, &vol);
 	if (EFI_ERROR(status))
 		error_with_status(u"cannot get EFI_FILE_PROTOCOL", status);
-	status = vol->Open(vol, &prog, STAGE2, EFI_FILE_MODE_READ, 0);
+	status = vol->Open(vol, &prog, name, EFI_FILE_MODE_READ, 0);
+	if (EFI_ERROR(status)) {
+		name = STAGE2_ALT;
+		status = vol->Open(vol, &prog, name, EFI_FILE_MODE_READ, 0);
+	}
 	if (EFI_ERROR(status)) {
 		vol->Close(vol);
-		error_with_status(u"cannot open " STAGE2, status);
+		error_with_status(u"cannot open stage 2", status);
 	}
-	dump_stage2_info(prog);
+	dump_stage2_info(prog, name);
 	read_stage2(prog, vol, sizeof ehdr, &ehdr);
 	if (ehdr.e_ident[EI_MAG0] != ELFMAG0 ||
 	    ehdr.e_ident[EI_MAG1] != ELFMAG1 ||
