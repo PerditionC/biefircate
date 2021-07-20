@@ -252,12 +252,40 @@ static void test_if_secure_boot(void)
 static void find_pci(void)
 {
 	EFI_HANDLE *handles;
-	UINTN num_handles;
+	UINTN num_handles, idx;
 	EFI_STATUS status = LibLocateHandle(ByProtocol,
-	    &gEfiPciRootBridgeIoProtocolGuid, NULL, &num_handles, &handles);
+	    &gEfiPciIoProtocolGuid, NULL, &num_handles, &handles);
 	if (EFI_ERROR(status))
-	        error_with_status(u"no PCI root bridges found", status);
-	Print(u"PCI root bridges: %lu\r\n", num_handles);
+	        error_with_status(u"no PCI devices found", status);
+	Print(u"PCI devices: %lu\r\n"
+	       "  locn.       curr.attrs.        supports\r\n", num_handles);
+	for (idx = 0; idx < num_handles; ++idx) {
+		EFI_HANDLE handle = handles[idx];
+		EFI_PCI_IO_PROTOCOL *io;
+		UINTN seg, bus, dev, fn;
+		UINT64 attrs, supports;
+		status = BS->HandleProtocol(handle,
+		    &gEfiPciIoProtocolGuid, (void **)&io);
+		if (EFI_ERROR(status))
+			error_with_status(u"cannot get EFI_PCI_IO_PROTOCOL",
+			    status);
+		status = io->GetLocation(io, &seg, &bus, &dev, &fn);
+		if (EFI_ERROR(status))
+			error_with_status(u"cannot get PCI ctrlr. locn.",
+			    status);
+		status = io->Attributes(io, EfiPciIoAttributeOperationGet,
+		    0, &attrs);
+		if (EFI_ERROR(status))
+			error_with_status(u"cannot get PCI ctrlr. attrs.",
+			    status);
+		status = io->Attributes(io,
+		    EfiPciIoAttributeOperationSupported, 0, &supports);
+		if (EFI_ERROR(status))
+			error_with_status(u"cannot get PCI ctrlr. attrs.",
+			    status);
+		Print(u"  %02x:%02x:%02x.%02x 0x%016lx 0x%016lx\r\n",
+		    seg, bus, dev, fn, attrs, supports);
+	}
 	FreePool(handles);
 }
 
