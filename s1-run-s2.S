@@ -74,6 +74,11 @@ run_stage2:
 	popl	%eax			/* set base mem. size in */
 	movw	%ax, 0x0413		/* BIOS data area */
 	popl	%ebx
+	movw	$0x03cc, %dx		/* frob VGA miscellaneous output */
+	inb	%dx, %al		/* reg. --- make sure CRTC */
+	orb	$0x01, %al		/* appears at ports 00x3d4 etc., */
+	movb	$0xc2, %dl		/* not 0x03b4 etc. */
+	outb	%al, %dx
 	retl	$4			/* jump to the stage2 entry point */
 
 	.balign 2
