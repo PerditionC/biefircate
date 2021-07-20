@@ -88,17 +88,18 @@ static void process_efi_conf_tables(void)
 static unsigned process_memory_map(void)
 {
 	enum { BASE_MEM_MAX = 0xff000ULL };
-	EFI_MEMORY_DESCRIPTOR *desc;
+	EFI_MEMORY_DESCRIPTOR *desc, *descs;
 	UINTN num_entries = 0, map_key, desc_sz;
 	UINT32 desc_ver;
 	unsigned i;
 	char avail[BASE_MEM_MAX / EFI_PAGE_SIZE];
-	desc = LibMemoryMap(&num_entries, &map_key, &desc_sz, &desc_ver);
-	if (!num_entries)
-		error(u"cannot get memory map!");
+	descs = LibMemoryMap(&num_entries, &map_key, &desc_sz, &desc_ver);
+	if (!num_entries || !descs)
+		error(u"cannot get mem. map!");
 	memset(avail, 0, sizeof avail);
 	Output(u"memory map below 16 MiB:\r\n"
 		"  start    end       type attrs\r\n");
+	desc = descs;
 	while (num_entries-- != 0) {
 		EFI_PHYSICAL_ADDRESS start, end;
 		start = desc->PhysicalStart;
@@ -128,6 +129,7 @@ static unsigned process_memory_map(void)
 		/* :-| */
 		desc = (EFI_MEMORY_DESCRIPTOR *)((char *)desc + desc_sz);
 	}
+	FreePool(descs);
 	i = 0;
 	while (i < sizeof avail && avail[i])
 		++i;
@@ -199,14 +201,26 @@ static void fake_mp_table(unsigned base_kib)
 		mp_bundle_t s;
 		uint8_t b[sizeof(mp_bundle_t)];
 	} mp_bundle_union_t;
-	mp_bundle_union_t *u =
-	    (mp_bundle_union_t *)((uintptr_t)(base_kib - 1) << 10);
+	EFI_PHYSICAL_ADDRESS mp_addr =
+	    (EFI_PHYSICAL_ADDRESS)(base_kib - 1) << 10;
+	EFI_PHYSICAL_ADDRESS pg_addr =
+	    mp_addr & -(EFI_PHYSICAL_ADDRESS)EFI_PAGE_SIZE;
+	mp_bundle_union_t *u = (mp_bundle_union_t *)mp_addr;
 	uint32_t cpu_sig, cpu_features;
 	/* Get the local APIC address & APIC version. */
 	uintptr_t lapic_addr = rdmsr(0x1b) & 0x000ffffffffff000ULL;
 	volatile uint32_t *lapic = (volatile uint32_t *)lapic_addr;
-	/* Get the I/O APIC information. */
+	/* Get the pointer to the I/O APIC. */
 	volatile uint32_t *ioapic = (volatile uint32_t *)IOAPIC_ADDR;
+	/*
+	 * Call dibs on the 1 KiB (or more) of space at the end of
+	 * conventional memory, so that the UEFI runtime will not try to
+	 * do anything with it.
+	 */
+	EFI_STATUS status = BS->AllocatePages(AllocateAddress,
+	    EfiLoaderData, 1, &pg_addr);
+	if (EFI_ERROR(status))
+		error_with_status(u"cannot get mem. for MP tables", status);
 	/* Fill up the MP floating pointer structure. */
 	memcpy(u->s.flt.sig, flt_sig, sizeof flt_sig);
 	u->s.flt.mp_conf_addr = (uint32_t)(uintptr_t)&u->s.conf;
@@ -296,7 +310,7 @@ static Elf32_Addr alloc_trampoline(void)
 	EFI_STATUS status = BS->AllocatePages(AllocateMaxAddress,
 	    EfiLoaderData, 1, &addr);
 	if (EFI_ERROR(status))
-		error_with_status(u"cannot alloc. mem. for trampoline & stk.",
+		error_with_status(u"cannot get mem. for trampoline & stk.",
 		    status);
 	Print(u"made space for trampoline & stk. @0x%lx\r\n", addr);
 	return (Elf32_Addr)addr;
@@ -364,7 +378,7 @@ static Elf32_Addr load_stage2(void)
 	EFI_STATUS status;
 	Elf32_Ehdr ehdr;
 	Elf32_Phdr phdrs[MAX_PHDRS], *phdr;
-	UINT32 x1, x2, ph_cnt, ph_idx;
+	UINT32 x1, x2, ph_cnt, ph_idx, entry;
 	status = BS->HandleProtocol(boot_media_handle,
 	    &gEfiSimpleFileSystemProtocolGuid, (void **)&fs);
 	if (EFI_ERROR(status))
@@ -408,7 +422,8 @@ static Elf32_Addr load_stage2(void)
 		goto bad_elf;
 	}
 	x1 = ehdr.e_machine;
-	Print(u"  machine: 0x%x\r\n", x1);
+	entry = ehdr.e_entry;
+	Print(u"  machine: 0x%x  entry: @0x%x\r\n", x1, entry);
 	if (x1 != EM_386) {
 		Output(u"  not x86-32 ELF\r\n");
 		goto bad_elf;
@@ -439,7 +454,7 @@ static Elf32_Addr load_stage2(void)
 		    EfiRuntimeServicesData, pages, &paddr);
 		if (EFI_ERROR(status)) {
 			free_stage2_mem(phdrs, ph_idx);
-			error_with_status(u"cannot alloc. mem. for ELF seg.",
+			error_with_status(u"cannot get mem. for ELF seg.",
 			    status);
 		}
 		seek_stage2(prog, vol, off);
@@ -448,13 +463,31 @@ static Elf32_Addr load_stage2(void)
 	}
 	prog->Close(prog);
 	vol->Close(vol);
-	Print(u"  entry: @0x%x\r\n", ehdr.e_entry);
-	return ehdr.e_entry;
+	return entry;
 bad_elf:
 	prog->Close(prog);
 	vol->Close(vol);
 	error(u"bad stage2");
 	return 0;
+}
+
+static void prepare_to_hand_over(EFI_HANDLE image_handle)
+{
+	EFI_MEMORY_DESCRIPTOR *descs;
+	UINTN num_entries = 0, map_key, desc_sz;
+	UINT32 desc_ver;
+	EFI_STATUS status;
+	Output(u"exit UEFI\r\n");
+	/*
+	 * In order to exit boot services, we need to get the memory map
+	 * again, this time silently. =_=
+	 */
+	descs = LibMemoryMap(&num_entries, &map_key, &desc_sz, &desc_ver);
+	if (!num_entries || !descs)
+		error(u"cannot get mem. map again!");
+	status = BS->ExitBootServices(image_handle, map_key);
+	if (EFI_ERROR(status))
+		error_with_status(u"cannot exit UEFI", status);
 }
 
 EFI_STATUS efi_main(EFI_HANDLE image_handle, EFI_SYSTEM_TABLE *system_table)
@@ -473,6 +506,7 @@ EFI_STATUS efi_main(EFI_HANDLE image_handle, EFI_SYSTEM_TABLE *system_table)
 	find_pci();
 	trampoline = alloc_trampoline();
 	entry = load_stage2();
+	prepare_to_hand_over(image_handle);
 	run_stage2(entry, trampoline, base_kib);
 	return 0;
 }
