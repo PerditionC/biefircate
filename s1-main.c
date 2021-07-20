@@ -222,6 +222,7 @@ static void fake_mp_table(unsigned base_kib)
 	if (EFI_ERROR(status))
 		error_with_status(u"cannot get mem. for MP tables", status);
 	/* Fill up the MP floating pointer structure. */
+	Print(u"placing MP tables @0x%x\r\n", mp_addr);
 	memcpy(u->s.flt.sig, flt_sig, sizeof flt_sig);
 	u->s.flt.mp_conf_addr = (uint32_t)(uintptr_t)&u->s.conf;
 	u->s.flt.len = sizeof(u->s.flt);
@@ -246,6 +247,8 @@ static void fake_mp_table(unsigned base_kib)
 	u->s.conf.lapic_addr = (uint32_t)lapic_addr;
 	u->s.conf.ext_tbl_len = 0;
 	u->s.conf.ext_tbl_cksum = u->s.conf.reserved = 0;
+	/* While at it... */
+	Print(u"LAPIC: @0x%lx\r\n", lapic_addr);
 	/* Fill up the entry for this processor. */
 	u->s.cpu.type = MP_CPU;
 	u->s.cpu.lapic_id = (uint8_t)lapic[0x20 / 4];
@@ -478,6 +481,7 @@ static void prepare_to_hand_over(EFI_HANDLE image_handle)
 	UINT32 desc_ver;
 	EFI_STATUS status;
 	Output(u"exit UEFI\r\n");
+	WaitForSingleEvent(ST->ConIn->WaitForKey, 10000000ULL);
 	/*
 	 * In order to exit boot services, we need to get the memory map
 	 * again, this time silently. =_=
