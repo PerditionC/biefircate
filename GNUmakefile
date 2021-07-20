@@ -43,12 +43,15 @@ LDFLAGS = $(CFLAGS) -nostdlib -ffreestanding -Wl,--entry,efi_main \
 	  -Wl,--subsystem,10 -Wl,--strip-all -Wl,-Map=$(@:.efi=.map)
 LIBEFI = gnu-efi/x86_64/lib/libefi.a
 LDLIBS := $(LIBEFI) $(LDLIBS)
-QEMUFLAGS = -m 512m -serial stdio
+QEMUFLAGS = -m 224m -serial stdio
+QEMUFLAGSXV6 = $(QEMUFLAGS) -hdb xv6/fs.img
 
 ifneq "" "$(SBSIGN_MOK)"
 default: loader.signed.efi loader.efi
+LOADER = loader.signed.efi
 else
 default: loader.efi
+LOADER = loader.efi
 endif
 .PHONY: default
 
@@ -82,7 +85,15 @@ $(LIBEFI):
 	    -f '$(abspath $(conf_Srcdir))'/gnu-efi/Makefile \
 	    lib inc
 
-hd.img: loader.efi biefist2.sys
+xv6.stamp: $(conf_Srcdir)/xv6/Makefile
+ifeq "$(conf_Separate_build_dir)" "yes"
+	$(RM) -r xv6
+	cp -a $(<D) xv6
+endif
+	$(MAKE) -C xv6 kernel fs.img
+	>$@
+
+hd.img: $(LOADER) biefist2.sys
 	$(RM) $@.tmp
 	dd if=/dev/zero of=$@.tmp bs=1048576 count=32
 	echo start=32K type=0B bootable | sfdisk $@.tmp
@@ -95,7 +106,26 @@ hd.img: loader.efi biefist2.sys
 	    sudo mount -t vfat "$$loopdev" mnt && \
 	    sudo mkdir -p mnt/EFI/BOOT && \
 	    sudo cp $< mnt/EFI/BOOT/bootx64.efi && \
-	    sudo cp $(filter %.sys,$^) mnt/biefist2.sys && \
+	    sudo cp biefist2.sys mnt/biefist2.sys && \
+	    sync && \
+	    sudo sudo umount mnt
+	mv $@.tmp $@
+	rmdir mnt
+
+hd-xv6.img: $(LOADER) xv6.stamp
+	$(RM) $@.tmp
+	dd if=/dev/zero of=$@.tmp bs=1048576 count=32
+	echo start=32K type=0B bootable | sfdisk $@.tmp
+	-sudo umount mnt
+	mkdir -p mnt
+	loopdev="`losetup -f`" && \
+	    sudo losetup -o32768 "$$loopdev" $@.tmp && \
+	    trap 'sudo losetup -d "$$loopdev"' EXIT ERR TERM QUIT && \
+	    sudo mkdosfs -v -F16 "$$loopdev" && \
+	    sudo mount -t vfat "$$loopdev" mnt && \
+	    sudo mkdir -p mnt/EFI/BOOT && \
+	    sudo cp $< mnt/EFI/BOOT/bootx64.efi && \
+	    sudo cp xv6/kernel mnt/kernel.sys && \
 	    sync && \
 	    sudo sudo umount mnt
 	mv $@.tmp $@
@@ -109,16 +139,22 @@ endif
 .PHONY: distclean
 
 clean:
-	$(RM) *.[od] *.so *.efi *.img *.map *~
+	$(RM) *.[od] *.so *.efi *.img *.map *.stamp *~
 ifeq "$(conf_Separate_build_dir)" "yes"
-	$(RM) -r gnu-efi
+	$(RM) -r gnu-efi xv6
 else
 	$(MAKE) -C gnu-efi clean
+	$(MAKE) -C xv6 clean
 endif
 .PHONY: clean
 
 run-qemu: hd.img
 	qemu-system-x86_64 -bios /usr/share/ovmf/OVMF.fd -hda $< $(QEMUFLAGS)
+.PHONY: run-qemu
+
+run-qemu-xv6: hd-xv6.img xv6.stamp
+	qemu-system-x86_64 -bios /usr/share/ovmf/OVMF.fd -hda $< \
+	    $(QEMUFLAGSXV6)
 .PHONY: run-qemu
 
 -include *.d
