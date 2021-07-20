@@ -33,9 +33,9 @@ run_stage2:
 	leal	0x1000(%edx), %esp	/* switch to new stack */
 	pushq	%rcx			/* push ELF32 entry point */
 	pushq	%r8			/* push base mem. size (in KiB) */
-	movl	%edx, %edi		/* copy trampoline to mem. < 4 GiB */
+	movl	%edx, %edi
 	pushq	%rdi			/* push trampoline address */
-	leaq	.LB(%rip), %rsi
+	leaq	.LB(%rip), %rsi		/* copy trampoline to mem. < 4 GiB */
 	movq	$(.LE-.LB)/8, %rcx
 	rep movsq
 	addl	%edx, .Lpm32_gdtr+2-.LE(%rdi) /* fix up GDTR value */
@@ -76,7 +76,7 @@ run_stage2:
 	popl	%ebx
 	movw	$0x03cc, %dx		/* frob VGA miscellaneous output */
 	inb	%dx, %al		/* reg. --- make sure CRTC */
-	orb	$0x01, %al		/* appears at ports 00x3d4 etc., */
+	orb	$0x01, %al		/* appears at ports 0x03d4 etc., */
 	movb	$0xc2, %dl		/* not 0x03b4 etc. */
 	outb	%al, %dx
 	retl	$4			/* jump to the stage2 entry point */
@@ -91,4 +91,5 @@ run_stage2:
 	.quad	0x00cf92000000ffff	/* 32-bit protected mode data seg. */
 .Lpm32_gdt_end:
 
-.LE:					/* end of trampoline to copy */
+.LE:					/* end of trampoline to copy; must
+					   be 8-byte aligned w.r.t. .LB */
