@@ -296,6 +296,50 @@ static void test_if_secure_boot(void)
 	Print(u"secure boot: %s\r\n", secure_boot_p ? u"yes" : u"no");
 }
 
+static bool enable_legacy_vga(EFI_PCI_IO_PROTOCOL *io, UINT32 class_if,
+			      UINT64 attrs, UINT64 supports, UINT64 *p_enables)
+{
+	EFI_STATUS status;
+	UINT64 enables;
+	*p_enables = 0;
+	switch (class_if & 0xffff0000UL) {
+	    case 0x03000000:  /* VGA */
+	    case 0x03010000:  /* XGA */
+		break;
+	    default:
+		return false;
+	}
+	switch (supports & (EFI_PCI_ATTRIBUTE_VGA_MEMORY |
+			    EFI_PCI_ATTRIBUTE_VGA_IO |
+			    EFI_PCI_ATTRIBUTE_VGA_IO_16)) {
+	    case EFI_PCI_ATTRIBUTE_VGA_MEMORY | EFI_PCI_ATTRIBUTE_VGA_IO:
+		enables = EFI_PCI_ATTRIBUTE_VGA_MEMORY |
+			  EFI_PCI_ATTRIBUTE_VGA_IO;
+		break;
+	    case EFI_PCI_ATTRIBUTE_VGA_MEMORY | EFI_PCI_ATTRIBUTE_VGA_IO_16:
+	    case EFI_PCI_ATTRIBUTE_VGA_MEMORY | EFI_PCI_ATTRIBUTE_VGA_IO_16
+					      | EFI_PCI_ATTRIBUTE_VGA_IO:
+		enables = EFI_PCI_ATTRIBUTE_VGA_MEMORY |
+			  EFI_PCI_ATTRIBUTE_VGA_IO_16;
+		break;
+	    default:
+		return false;
+	}
+	/*
+	 * If legacy VGA memory & I/O are already enabled, then there is
+	 * nothing more to do.
+	 */
+	if ((attrs | enables) == attrs)
+		return true;
+	/* Otherwise... */
+	status = io->Attributes(io, EfiPciIoAttributeOperationEnable,
+	    enables, NULL);
+	if (EFI_ERROR(status))
+		return false;
+	*p_enables = enables;
+	return true;
+}
+
 static void find_pci(void)
 {
 	EFI_HANDLE *handles;
@@ -312,10 +356,10 @@ static void find_pci(void)
 		EFI_HANDLE handle = handles[idx];
 		EFI_PCI_IO_PROTOCOL *io;
 		UINTN seg, bus, dev, fn;
-		UINT64 attrs, supports;
+		UINT64 attrs, supports, enables;
 		UINT32 pci_hdr[10], pci_id, class_if;
 		unsigned idx;
-		bool first_bar = true;
+		bool got_bar = false, got_vga = false;
 		status = BS->HandleProtocol(handle,
 		    &gEfiPciIoProtocolGuid, (void **)&io);
 		if (EFI_ERROR(status))
@@ -342,7 +386,7 @@ static void find_pci(void)
 		pci_id = pci_hdr[0];
 		class_if = pci_hdr[2];
 		Print(u"  %02x:%02x:%02x.%02x 0x%06lx%c 0x%06lx%c "
-			 "%04x:%04x 0x%06lx%c %02x %02x %02x",
+			 "%04x:%04x 0x%06lx%c %02x %02x %02x\r\n",
 		    seg, bus, dev, fn,
 		    attrs & 0xffffffULL,
 		    attrs & ~0xffffffULL ? u'+' : u' ',
@@ -353,9 +397,22 @@ static void find_pci(void)
 		    io->RomSize <= 0xffffffULL ? u' ' : u'+',
 		    class_if >> 24, (class_if >> 16) & 0xffU,
 		    (class_if >> 8) & 0xffU);
-		if ((pci_hdr[3] >> 8 & 0xff) != 0) {
-			Output(u"\r\n");
+		if ((pci_hdr[3] >> 8 & 0xff) != 0)
 			continue;  /* skip if not a general device */
+		/*
+		 * If this is a VGA or XGA display controller, try to enable
+		 * the legacy memory & I/O port locations for the controller.
+		 */
+		if (!got_vga &&
+		    enable_legacy_vga(io, class_if, attrs, supports, &enables))
+		{
+			got_vga = true;
+			if ((attrs | enables) != attrs) {
+				attrs |= enables;
+				Print(u"           -> 0x%06lx%c\r\n",
+				    attrs & 0xffffffULL,
+				    attrs & ~0xffffffULL ? u'+' : u' ');
+			}
 		}
 		/* Enumerate all BAR values. */
 		idx = 4 - 1;
@@ -364,9 +421,9 @@ static void find_pci(void)
 			UINT64 addr;
 			if (!bar)
 				continue;
-			if (first_bar) {
-				first_bar = false;
-				Output(u"\r\n    BAR:");
+			if (!got_bar) {
+				got_bar = true;
+				Output(u"    BAR:");
 			}
 			switch (bar & 0x00000007U) {
 			    case 0x00000000U:
@@ -396,7 +453,8 @@ static void find_pci(void)
 				error(u"unhandled 16-bit PCI BAR");
 			}
 		}
-		Output(u"\r\n");
+		if (got_bar)
+			Output(u"\r\n");
 	}
 	FreePool(handles);
 }
