@@ -31,6 +31,7 @@
 
 #include <efi.h>
 #include <efilib.h>
+#include <stdbool.h>
 #include <string.h>
 #include "elf.h"
 #ifdef XV6_COMPAT
@@ -304,14 +305,17 @@ static void find_pci(void)
 	if (EFI_ERROR(status))
 	        error_with_status(u"no PCI devices found", status);
 	Print(u"PCI devices: %lu\r\n"
-	       "  locn.       attrs.    supports  PCI id.\r\n",
+	       "  locn.       attrs.    supports  PCI id.   ROM sz.   "
+		 "class+IF\r\n",
 	    num_handles);
 	for (idx = 0; idx < num_handles; ++idx) {
 		EFI_HANDLE handle = handles[idx];
 		EFI_PCI_IO_PROTOCOL *io;
 		UINTN seg, bus, dev, fn;
 		UINT64 attrs, supports;
-		UINT32 pci_id;
+		UINT32 pci_hdr[10], pci_id, class_if;
+		unsigned idx;
+		bool first_bar = true;
 		status = BS->HandleProtocol(handle,
 		    &gEfiPciIoProtocolGuid, (void **)&io);
 		if (EFI_ERROR(status))
@@ -331,17 +335,68 @@ static void find_pci(void)
 		if (EFI_ERROR(status))
 			error_with_status(u"cannot get PCI ctrlr. attrs.",
 			    status);
-		status = io->Pci.Read(io, EfiPciIoWidthUint32, 0, 1, &pci_id);
+		status = io->Pci.Read(io, EfiPciIoWidthUint32, 0, 10, pci_hdr);
 		if (EFI_ERROR(status))
-			error_with_status(u"cannot read PCI id.", status);
+			error_with_status(u"cannot read PCI conf. sp.",
+			    status);
+		pci_id = pci_hdr[0];
+		class_if = pci_hdr[2];
 		Print(u"  %02x:%02x:%02x.%02x 0x%06lx%c 0x%06lx%c "
-			 "0x%04x:0x%04x\r\n",
+			 "%04x:%04x 0x%06lx%c %02x %02x %02x",
 		    seg, bus, dev, fn,
 		    attrs & 0xffffffULL,
 		    attrs & ~0xffffffULL ? u'+' : u' ',
 		    supports & 0xffffffULL,
 		    supports & ~0xffffffULL ? u'+' : u' ',
-		    (UINT32)(pci_id & 0xffffU), (UINT32)(pci_id >> 16));
+		    (UINT32)(pci_id & 0xffffU), (UINT32)(pci_id >> 16),
+		    io->RomSize <= 0xffffffULL ? io->RomSize : 0xffffffULL,
+		    io->RomSize <= 0xffffffULL ? u' ' : u'+',
+		    class_if >> 24, (class_if >> 16) & 0xffU,
+		    (class_if >> 8) & 0xffU);
+		if ((pci_hdr[3] >> 8 & 0xff) != 0) {
+			Output(u"\r\n");
+			continue;  /* skip if not a general device */
+		}
+		/* Enumerate all BAR values. */
+		idx = 4 - 1;
+		while (++idx < 10) {
+			UINT32 bar = pci_hdr[idx];
+			UINT64 addr;
+			if (!bar)
+				continue;
+			if (first_bar) {
+				first_bar = false;
+				Output(u"\r\n    BAR:");
+			}
+			switch (bar & 0x00000007U) {
+			    case 0x00000000U:
+				/* 32-bit address in memory space */
+				Print(u" { @0x%x%s }", bar & 0xfffffff0U,
+				    bar & 0x00000008U ? u" pf" : u"");
+				break;
+			    case 0x00000004U:
+				/* 64-bit address in memory space */
+				if (idx == 9)
+					error(u"bogus 64-bit PCI BAR");
+				++idx;
+				addr = pci_hdr[idx];
+				addr <<= 32;
+				addr |= bar & 0xfffffff0U;
+				Print(u" { @0x%lx%s }", addr,
+				    bar & 0x00000008U ? u" pf" : u"");
+				break;
+			    case 0x00000001U:
+			    case 0x00000003U:
+			    case 0x00000005U:
+			    case 0x00000007U:
+				/* address in I/O space */
+				Print(u" { \u2191""0x%x }", bar & 0xfffffffcU);
+				break;
+			    default:
+				error(u"unhandled 16-bit PCI BAR");
+			}
+		}
+		Output(u"\r\n");
 	}
 	FreePool(handles);
 }
@@ -520,7 +575,7 @@ static void prepare_to_hand_over(EFI_HANDLE image_handle)
 	UINT32 desc_ver;
 	EFI_STATUS status;
 	Output(u"exit UEFI\r\n");
-	WaitForSingleEvent(ST->ConIn->WaitForKey, 10000000ULL);
+	WaitForSingleEvent(ST->ConIn->WaitForKey, 30000000ULL);
 	/*
 	 * In order to exit boot services, we need to get the memory map
 	 * again, this time silently. =_=
