@@ -532,7 +532,7 @@ static Elf32_Addr load_stage2(void)
 	EFI_FILE_PROTOCOL *vol, *prog;
 	EFI_STATUS status;
 	Elf32_Ehdr ehdr;
-	Elf32_Phdr phdrs[MAX_PHDRS], *phdr;
+	Elf32_Phdr phdrs[MAX_PHDRS], *phdr, *prev_phdr;
 	UINT32 x1, x2, ph_cnt, ph_idx, entry;
 	status = BS->HandleProtocol(boot_media_handle,
 	    &gEfiSimpleFileSystemProtocolGuid, (void **)&fs);
@@ -591,8 +591,9 @@ static Elf32_Addr load_stage2(void)
 		phdr = &phdrs[ph_idx];
 		Elf32_Word type = phdr->p_type;
 		Elf32_Off off = phdr->p_offset;
-		EFI_PHYSICAL_ADDRESS paddr = phdr->p_paddr;
-		Elf32_Word filesz = phdr->p_filesz, memsz = phdr->p_memsz;
+		EFI_PHYSICAL_ADDRESS paddr = phdr->p_paddr, req_paddr = paddr;
+		Elf32_Word filesz = phdr->p_filesz, memsz = phdr->p_memsz,
+			   req_memsz = memsz;
 		UINTN pages;
 		phdr = &phdrs[ph_idx];
 		Print(u"  %5u 0x%08x 0x%08lx 0x%08x 0x%08x 0x%08x 0x%08x\r\n",
@@ -604,17 +605,40 @@ static Elf32_Addr load_stage2(void)
 			Output(u"  seg. file sz. > seg. mem. sz.!\r\n");
 			goto bad_elf;
 		}
-		pages = ((UINT64)memsz + EFI_PAGE_SIZE - 1) / EFI_PAGE_SIZE;
-		status = BS->AllocatePages(AllocateAddress,
-		    EfiRuntimeServicesData, pages, &paddr);
-		if (EFI_ERROR(status)) {
-			free_stage2_mem(phdrs, ph_idx);
-			error_with_status(u"cannot get mem. for ELF seg.",
-			    status);
+#ifdef BSD_COMPAT
+		/*
+		 * The kernel for FreeBSD 13.0 for i386 has a PT_LOAD header
+		 * (for .rodata) for a block of memory that starts in the
+		 * middle of a page, just after the memory from the previous
+		 * PT_LOAD header.
+		 */
+		if (paddr % EFI_PAGE_SIZE != 0 && ph_idx != 0) {
+			prev_phdr = &phdrs[ph_idx - 1];
+			if (paddr == prev_phdr->p_paddr + prev_phdr->p_memsz) {
+				req_paddr =
+				    (paddr + EFI_PAGE_SIZE - 1) &
+				    -(EFI_PHYSICAL_ADDRESS)EFI_PAGE_SIZE;
+				if (req_memsz < req_paddr - paddr)
+					req_memsz = 0;
+				else
+					req_memsz -= req_paddr - paddr;
+			}
 		}
-		seek_stage2(prog, vol, off);
-		read_stage2(prog, vol, filesz, (void *)paddr);
-		memset((char *)paddr + filesz, 0, memsz - filesz);
+#endif
+		if (req_memsz) {
+			pages = ((UINT64)req_memsz + EFI_PAGE_SIZE - 1)
+				    / EFI_PAGE_SIZE;
+			status = BS->AllocatePages(AllocateAddress,
+			    EfiRuntimeServicesData, pages, &req_paddr);
+			if (EFI_ERROR(status)) {
+				free_stage2_mem(phdrs, ph_idx);
+				error_with_status(u"cannot get mem. for "
+				    "ELF seg.", status);
+			}
+			seek_stage2(prog, vol, off);
+			read_stage2(prog, vol, filesz, (void *)paddr);
+			memset((char *)paddr + filesz, 0, memsz - filesz);
+		}
 	}
 	prog->Close(prog);
 	vol->Close(vol);

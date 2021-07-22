@@ -31,6 +31,9 @@
 run_stage2:
 	cli
 	leal	0x1000(%edx), %esp	/* switch to new stack */
+	xorq	%rax, %rax		/* push some dummy parameters to */
+	pushq	%rax			/* keep the FreeBSD kernel happy (?) */
+	pushq	%rax
 	pushq	%rcx			/* push ELF32 entry point */
 	pushq	%r8			/* push base mem. size (in KiB) */
 	movl	%edx, %edi
@@ -79,7 +82,7 @@ run_stage2:
 	orb	$0x01, %al		/* appears at ports 0x03d4 etc., */
 	movb	$0xc2, %dl		/* not 0x03b4 etc. */
 	outb	%al, %dx
-	retl	$4			/* jump to the stage2 entry point */
+	retl				/* jump to the stage2 entry point */
 
 	.balign 2
 .Lpm32_gdtr:

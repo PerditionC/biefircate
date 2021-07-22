@@ -38,7 +38,7 @@ CFLAGS = -pie -fPIC -ffreestanding -Os -Wall -mno-red-zone \
 ASFLAGS = -pie -fPIC -MMD
 CPPFLAGS = -I $(GNUEFISRCDIR)/inc -I $(GNUEFISRCDIR)/protocol \
 	   -I $(GNUEFISRCDIR)/inc/x86_64 \
-	   -DXV6_COMPAT
+	   -DXV6_COMPAT -DBSD_COMPAT
 LDFLAGS = $(CFLAGS) -nostdlib -ffreestanding -Wl,--entry,efi_main \
 	  -Wl,--subsystem,10 -Wl,--strip-all -Wl,-Map=$(@:.efi=.map)
 LIBEFI = gnu-efi/x86_64/lib/libefi.a
