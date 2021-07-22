@@ -302,6 +302,7 @@ static bool enable_legacy_vga(EFI_PCI_IO_PROTOCOL *io, UINT32 class_if,
 	EFI_STATUS status;
 	UINT64 enables;
 	*p_enables = 0;
+#if 0
 	switch (class_if & 0xffff0000UL) {
 	    case 0x03000000:  /* VGA */
 	    case 0x03010000:  /* XGA */
@@ -309,6 +310,7 @@ static bool enable_legacy_vga(EFI_PCI_IO_PROTOCOL *io, UINT32 class_if,
 	    default:
 		return false;
 	}
+#endif
 	switch (supports & (EFI_PCI_ATTRIBUTE_VGA_MEMORY |
 			    EFI_PCI_ATTRIBUTE_VGA_IO |
 			    EFI_PCI_ATTRIBUTE_VGA_IO_16)) {
@@ -399,6 +401,7 @@ static void find_pci(void)
 		    (class_if >> 8) & 0xffU);
 		if ((pci_hdr[3] >> 8 & 0xff) != 0)
 			continue;  /* skip if not a general device */
+#if 0
 		/*
 		 * If this is a VGA or XGA display controller, try to enable
 		 * the legacy memory & I/O port locations for the controller.
@@ -414,6 +417,7 @@ static void find_pci(void)
 				    attrs & ~0xffffffULL ? u'+' : u' ');
 			}
 		}
+#endif
 		/* Enumerate all BAR values. */
 		idx = 4 - 1;
 		while (++idx < 10) {
@@ -457,6 +461,26 @@ static void find_pci(void)
 			Output(u"\r\n");
 	}
 	FreePool(handles);
+#if 1
+	{
+		unsigned char i, v;
+		__asm volatile("cli");
+		__asm volatile("in %1, %0" : "=a" (v)
+		    : "d" ((uint16_t)0x3cc));
+		v |= 1;
+		__asm volatile("out %1, %0" :
+		    : "d" ((uint16_t)0x3c2), "a" (v));
+		for (i = 0; i <= 17; ++i) {
+			__asm volatile("cli");
+			__asm volatile("out %1, %0" :
+			    : "d" ((uint16_t)0x3d4), "a" (i));
+			__asm volatile("in %1, %0" : "=a" (v)
+			    : "d" ((uint16_t)0x3d5));
+			__asm volatile("sti");
+			Print(u" %02x", (UINT32)v);
+		}
+	}
+#endif
 }
 
 static Elf32_Addr alloc_trampoline(void)
