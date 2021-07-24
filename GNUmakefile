@@ -47,12 +47,12 @@ QEMUFLAGS = -m 224m -serial stdio
 QEMUFLAGSXV6 = $(QEMUFLAGS) -hdb xv6/fs.img
 
 ifneq "" "$(SBSIGN_MOK)"
-default: loader.signed.efi loader.efi
 LOADER = loader.signed.efi
 else
-default: loader.efi
 LOADER = loader.efi
 endif
+
+default: $(LOADER) hd.img hd.vdi
 .PHONY: default
 
 ifneq "" "$(SBSIGN_MOK)"

@@ -49,8 +49,8 @@ run_stage2:
 
 	lgdt	.Lpm32_gdtr-.LE(%rdi)	/* go to 32-bit protected mode */
 	pushq	$8
-	leaq	.Lpm32-.LE(%rdi), %rdi
-	pushq	%rdi
+	leaq	.Lpm32-.LE(%rdi), %rsi
+	pushq	%rsi
 	lretq
 
 	.code32
@@ -75,8 +75,14 @@ run_stage2:
 	movl	%ebx, %cr4
 	wbinvd
 	popl	%eax			/* set base mem. size in */
-	movw	%ax, 0x0413		/* BIOS data area */
-	popl	%ebx
+	popl	%ebx			/* BIOS data area */
+	movw	%ax, 0x0413
+#ifdef BSD_COMPAT			/* write out a dummy real mode */
+	leal	.Lvm16_idt-.LE(%edi), %esi /* interrupt vector table, */
+	xorl	%edi, %edi		/* to keep FreeBSD happy */
+	leal	((.Lvm16_idt_end-.Lvm16_idt+3)/4)(%edi), %ecx
+	rep movsl
+#endif
 	movw	$0x03cc, %dx		/* frob VGA miscellaneous output */
 	inb	%dx, %al		/* reg. --- make sure CRTC */
 	orb	$0x01, %al		/* appears at ports 0x03d4 etc., */
@@ -88,11 +94,44 @@ run_stage2:
 .Lpm32_gdtr:
 	.hword	.Lpm32_gdt_end-.Lpm32_gdt-1
 	.quad	.Lpm32_gdt-.LB
+
 	.balign	8
 .Lpm32_gdt = . - 8
 	.quad	0x00cf9a000000ffff	/* 32-bit protected mode code seg. */
 	.quad	0x00cf92000000ffff	/* 32-bit protected mode data seg. */
 .Lpm32_gdt_end:
 
+	.code16
+
+#ifdef BSD_COMPAT
+.Lvm16_idt = . - 0x12*4			/* dummy interrupt vector table &
+					   interrupt routines for FreeBSD */
+	.hword	.Lvm16_isr_0x12-.Lvm16_idt, 0
+
+.Lvm16_isr_0x12:
+	movw	%cs:0x0413, %ax
+	iretw
+
+	.org	.Lvm16_idt+0x15*4
+	.hword	.Lvm16_isr_0x15-.Lvm16_idt, 0
+
+.Lvm16_isr_0x15:
+	sti
+	cmpw	$0xe801, %ax
+	jnz	9f
+	movw	$2048, %ax
+	xorw	%bx, %bx
+	movw	%ax, %cx
+	movw	%bx, %dx
+	clc
+	lretw	$2
+9:
+	stc
+	lretw	$2
+
+.Lvm16_idt_end:
+#endif
+
+	.balign	8
 .LE:					/* end of trampoline to copy; must
 					   be 8-byte aligned w.r.t. .LB */
