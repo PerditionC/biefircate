@@ -97,39 +97,21 @@ hd.img: $(LOADER) biefist2.sys
 	$(RM) $@.tmp
 	dd if=/dev/zero of=$@.tmp bs=1048576 count=32
 	echo start=32K type=0B bootable | sfdisk $@.tmp
-	-sudo umount mnt
-	mkdir -p mnt
-	loopdev="`losetup -f`" && \
-	    sudo losetup -o32768 "$$loopdev" $@.tmp && \
-	    trap 'sudo losetup -d "$$loopdev"' EXIT ERR TERM QUIT && \
-	    sudo mkdosfs -v -F16 "$$loopdev" && \
-	    sudo mount -t vfat "$$loopdev" mnt && \
-	    sudo mkdir -p mnt/EFI/BOOT && \
-	    sudo cp $< mnt/EFI/BOOT/bootx64.efi && \
-	    sudo cp biefist2.sys mnt/biefist2.sys && \
-	    sync && \
-	    sudo sudo umount mnt
+	mkdosfs -v -F16 --offset 64 $@.tmp
+	mmd -i $@.tmp@@32K ::/EFI ::/EFI/BOOT
+	mcopy -i $@.tmp@@32K $< ::/EFI/BOOT/bootx64.efi
+	mcopy -i $@.tmp@@32K biefist2.sys ::/biefist2.sys
 	mv $@.tmp $@
-	rmdir mnt
 
 hd-xv6.img: $(LOADER) xv6.stamp
 	$(RM) $@.tmp
 	dd if=/dev/zero of=$@.tmp bs=1048576 count=32
 	echo start=32K type=0B bootable | sfdisk $@.tmp
-	-sudo umount mnt
-	mkdir -p mnt
-	loopdev="`losetup -f`" && \
-	    sudo losetup -o32768 "$$loopdev" $@.tmp && \
-	    trap 'sudo losetup -d "$$loopdev"' EXIT ERR TERM QUIT && \
-	    sudo mkdosfs -v -F16 "$$loopdev" && \
-	    sudo mount -t vfat "$$loopdev" mnt && \
-	    sudo mkdir -p mnt/EFI/BOOT && \
-	    sudo cp $< mnt/EFI/BOOT/bootx64.efi && \
-	    sudo cp xv6/kernel mnt/kernel.sys && \
-	    sync && \
-	    sudo sudo umount mnt
+	mkdosfs -v -F16 --offset 64 $@.tmp
+	mmd -i $@.tmp@@32K ::/EFI ::/EFI/BOOT
+	mcopy -i $@.tmp@@32K $< ::/EFI/BOOT/bootx64.efi
+	mcopy -i $@.tmp@@32K xv6/kernel ::/kernel.sys
 	mv $@.tmp $@
-	rmdir mnt
 
 distclean: clean
 	$(RM) config.cache
