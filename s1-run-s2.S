@@ -33,10 +33,14 @@ run_stage2:
 	leal	0x1000(%edx), %esp	/* switch to new stack */
 	pushq	%rcx			/* push ELF32 entry point */
 	pushq	%r8			/* push base mem. size (in KiB) */
+	movl	$0x0400, %edi		/* blank the BIOS data area */
+	movl	$(0x0600-0x0400)/8, %ecx
+	xorl	%eax, %eax
+	rep stosq
 	movl	%edx, %edi
 	pushq	%rdi			/* push trampoline address */
 	leaq	.LB(%rip), %rsi		/* copy trampoline to mem. < 4 GiB */
-	movq	$(.LE-.LB)/8, %rcx
+	movl	$(.LE-.LB)/8, %ecx
 	rep movsq
 	addl	%edx, .Lpm32_gdtr+2-.LE(%rdi) /* fix up GDTR value */
 	retq				/* jump to trampoline */
