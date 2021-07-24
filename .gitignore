@@ -3,6 +3,8 @@ config.cache
 *.so
 *.efi
 *.img
+*.vdi
 *.map
 *.stamp
+*.sys
 *~

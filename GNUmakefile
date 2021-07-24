@@ -125,7 +125,7 @@ endif
 .PHONY: distclean
 
 clean:
-	$(RM) *.[od] *.so *.efi *.img *.map *.stamp *~
+	$(RM) *.[od] *.so *.efi *.img *.vdi *.map *.stamp *~
 ifeq "$(conf_Separate_build_dir)" "yes"
 	$(RM) -r gnu-efi xv6
 else

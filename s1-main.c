@@ -86,6 +86,365 @@ static void process_efi_conf_tables(void)
 	Output(u"\r\n");
 }
 
+static void find_boot_media(void)
+{
+	EFI_STATUS status;
+	EFI_LOADED_IMAGE_PROTOCOL *li;
+	status = BS->HandleProtocol(LibImageHandle,
+	    &gEfiLoadedImageProtocolGuid, (void **)&li);
+	if (EFI_ERROR(status))
+		error_with_status(u"cannot get EFI_LOADED_IMAGE_PROTOCOL",
+		    status);
+	boot_media_handle = li->DeviceHandle;
+}
+
+static void test_if_secure_boot(void)
+{
+	UINT8 data = 0;
+	UINTN data_sz = sizeof(data);
+	EFI_STATUS status = RT->GetVariable(u"SecureBoot",
+	    &gEfiGlobalVariableGuid, NULL, &data_sz, &data);
+	if (!EFI_ERROR(status) && data)
+		secure_boot_p = TRUE;
+	Print(u"secure boot: %s\r\n", secure_boot_p ? u"yes" : u"no");
+}
+
+static bool enable_legacy_vga(EFI_PCI_IO_PROTOCOL *io, UINT32 class_if,
+			      UINT64 attrs, UINT64 supports, UINT64 *p_enables)
+{
+	EFI_STATUS status;
+	UINT64 enables;
+	*p_enables = 0;
+	switch (class_if & 0xffff0000UL) {
+	    case 0x03000000:  /* VGA */
+	    case 0x03010000:  /* XGA */
+		break;
+	    default:
+		return false;
+	}
+	switch (supports & (EFI_PCI_ATTRIBUTE_VGA_MEMORY |
+			    EFI_PCI_ATTRIBUTE_VGA_IO |
+			    EFI_PCI_ATTRIBUTE_VGA_IO_16)) {
+	    case EFI_PCI_ATTRIBUTE_VGA_MEMORY | EFI_PCI_ATTRIBUTE_VGA_IO:
+		enables = EFI_PCI_ATTRIBUTE_VGA_MEMORY |
+			  EFI_PCI_ATTRIBUTE_VGA_IO;
+		break;
+	    case EFI_PCI_ATTRIBUTE_VGA_MEMORY | EFI_PCI_ATTRIBUTE_VGA_IO_16:
+	    case EFI_PCI_ATTRIBUTE_VGA_MEMORY | EFI_PCI_ATTRIBUTE_VGA_IO_16
+					      | EFI_PCI_ATTRIBUTE_VGA_IO:
+		enables = EFI_PCI_ATTRIBUTE_VGA_MEMORY |
+			  EFI_PCI_ATTRIBUTE_VGA_IO_16;
+		break;
+	    default:
+		return false;
+	}
+	/*
+	 * If legacy VGA memory & I/O are already enabled, then there is
+	 * nothing more to do.
+	 */
+	if ((attrs | enables) == attrs)
+		return true;
+	/* Otherwise... */
+	status = io->Attributes(io, EfiPciIoAttributeOperationEnable,
+	    enables, NULL);
+	if (EFI_ERROR(status))
+		return false;
+	*p_enables = enables;
+	return true;
+}
+
+static bool process_one_pci_io(EFI_PCI_IO_PROTOCOL *io, bool try_enable_vga)
+{
+	UINTN seg, bus, dev, fn;
+	UINT64 attrs, supports, enables;
+	UINT32 pci_conf[6];  /* buffer for PCI id. etc., & for BARs */
+	UINT32 pci_id, class_if;
+	bool got_vga = false, got_bar = false;
+	unsigned idx;
+	EFI_STATUS status = io->GetLocation(io, &seg, &bus, &dev, &fn);
+	if (EFI_ERROR(status))
+		error_with_status(u"cannot get PCI ctrlr. locn.", status);
+	status = io->Attributes(io, EfiPciIoAttributeOperationGet, 0, &attrs);
+	if (EFI_ERROR(status))
+		error_with_status(u"cannot get PCI ctrlr. attrs.", status);
+	status = io->Attributes(io, EfiPciIoAttributeOperationSupported,
+	    0, &supports);
+	if (EFI_ERROR(status))
+		error_with_status(u"cannot get PCI ctrlr. attrs.", status);
+	status = io->Pci.Read(io, EfiPciIoWidthUint32, 0, 4, pci_conf);
+	if (EFI_ERROR(status))
+		error_with_status(u"cannot read PCI conf. sp.", status);
+	pci_id = pci_conf[0];
+	class_if = pci_conf[2];
+	Print(u"  %02x:%02x:%02x.%02x %04x:%04x %02x %02x %02x 0x%06lx%c "
+		 "0x%06lx%c 0x%06lx%c",
+	    seg, bus, dev, fn,
+	    (UINT32)(pci_id & 0xffffU), (UINT32)(pci_id >> 16),
+	    class_if >> 24, (class_if >> 16) & 0xffU,
+	    (class_if >> 8) & 0xffU,
+	    io->RomSize <= 0xffffffULL ? io->RomSize : 0xffffffULL,
+	    io->RomSize <= 0xffffffULL ? u' ' : u'+',
+	    supports & 0xffffffULL,
+	    supports & ~0xffffffULL ? u'+' : u' ',
+	    attrs & 0xffffffULL,
+	    attrs & ~0xffffffULL ? u'+' : u' ');
+	/* Skip further processing if this is not a general device. */
+	if ((pci_conf[3] >> 8 & 0xff) != 0) {
+		Output(u"\r\n");
+		return false;
+	}
+	/*
+	 * If this is a VGA or XGA display controller, try to enable
+	 * the legacy memory & I/O port locations for the controller.
+	 */
+	if (try_enable_vga &&
+	    enable_legacy_vga(io, class_if, attrs, supports, &enables)) {
+		got_vga = true;
+		attrs |= enables;
+		Print(u" -> 0x%06lx%c", attrs & 0xffffffULL,
+		    attrs & ~0xffffffULL ? u'+' : u' ');
+	}
+	Output(u"\r\n");
+	/* Enumerate all BAR values. */
+	status = io->Pci.Read(io, EfiPciIoWidthUint32, 4 * sizeof(UINT32),
+	    6, pci_conf);
+	if (EFI_ERROR(status))
+		error_with_status(u"cannot read PCI conf. sp.", status);
+	idx = 0U - 1;
+	while (++idx < 6) {
+		UINT32 bar = pci_conf[idx];
+		UINT64 addr;
+		if (!bar)
+			continue;
+		if (!got_bar) {
+			got_bar = true;
+			Output(u"    BAR:");
+		}
+		switch (bar & 0x00000007U) {
+		    case 0x00000000U:
+			/* 32-bit address in memory space */
+			Print(u" {@0x%x%s}", bar & 0xfffffff0U,
+			    bar & 0x00000008U ? u" pf" : u"");
+				break;
+		    case 0x00000004U:
+			/* 64-bit address in memory space */
+			if (idx == 9)
+				error(u"bogus 64-bit PCI BAR");
+			++idx;
+			addr = pci_conf[idx];
+			addr <<= 32;
+			addr |= bar & 0xfffffff0U;
+			Print(u" {@0x%lx%s}", addr,
+			    bar & 0x00000008U ? u" pf" : u"");
+			break;
+		    case 0x00000001U:
+		    case 0x00000003U:
+		    case 0x00000005U:
+		    case 0x00000007U:
+			/* address in I/O space */
+			Print(u" {\u2191""0x%x}", bar & 0xfffffffcU);
+			break;
+		    default:
+			error(u"unhandled 16-bit PCI BAR");
+		}
+	}
+	if (got_bar)
+		Output(u"\r\n");
+	return got_vga;
+}
+
+static void process_pci(void)
+{
+	EFI_HANDLE *handles;
+	UINTN num_handles, idx;
+	bool got_vga = false;
+	EFI_STATUS status = LibLocateHandle(ByProtocol,
+	    &gEfiPciIoProtocolGuid, NULL, &num_handles, &handles);
+	if (EFI_ERROR(status))
+	        error_with_status(u"no PCI devices found", status);
+	Print(u"PCI devices: %lu\r\n"
+	       "  locn.       PCI id.   class+IF ROM sz.   "
+		 "supports  attrs.\r\n", num_handles);
+	for (idx = 0; idx < num_handles; ++idx) {
+		EFI_HANDLE handle = handles[idx];
+		EFI_PCI_IO_PROTOCOL *io;
+		status = BS->HandleProtocol(handle,
+		    &gEfiPciIoProtocolGuid, (void **)&io);
+		if (EFI_ERROR(status))
+			error_with_status(u"cannot get EFI_PCI_IO_PROTOCOL",
+			    status);
+		got_vga = process_one_pci_io(io, !got_vga);
+	}
+	FreePool(handles);
+}
+
+static Elf32_Addr alloc_trampoline(void)
+{
+	EFI_PHYSICAL_ADDRESS addr = 0x100000000ULL;
+	EFI_STATUS status = BS->AllocatePages(AllocateMaxAddress,
+	    EfiLoaderData, 1, &addr);
+	if (EFI_ERROR(status))
+		error_with_status(u"cannot get mem. for trampoline & stk.",
+		    status);
+	Print(u"made space for trampoline & stk. @0x%lx\r\n", addr);
+	return (Elf32_Addr)addr;
+}
+
+#define STAGE2		u"biefist2.sys"
+#define STAGE2_ALT	u"kernel.sys"
+
+static void dump_stage2_info(EFI_FILE_PROTOCOL *prog, CONST CHAR16 *name)
+{
+	EFI_FILE_INFO *info = LibFileInfo(prog);
+	if (!info)
+		error(u"cannot get info on stage 2");
+	Print(u"stage2: %s  size: 0x%lx  attrs.: 0x%lx\r\n",
+	    name, info->FileSize, info->Attribute);
+	FreePool(info);
+}
+
+static void read_stage2(EFI_FILE_PROTOCOL *prog, EFI_FILE_PROTOCOL *vol,
+			UINTN size, void *buf)
+{
+	UINTN read_size = size;
+	EFI_STATUS status = prog->Read(prog, &read_size, buf);
+	if (EFI_ERROR(status)) {
+		prog->Close(prog);
+		vol->Close(vol);
+		error_with_status(u"cannot read stage 2", status);
+	}
+	if (read_size != size) {
+		prog->Close(prog);
+		vol->Close(vol);
+		error_with_status(u"short read from stage 2", status);
+	}
+}
+
+static void seek_stage2(EFI_FILE_PROTOCOL *prog, EFI_FILE_PROTOCOL *vol,
+			UINT64 pos)
+{
+	EFI_STATUS status = prog->SetPosition(prog, pos);
+	if (EFI_ERROR(status)) {
+		prog->Close(prog);
+		vol->Close(vol);
+		error_with_status(u"cannot seek into stage 2", status);
+	}
+}
+
+static void free_stage2_mem(const Elf32_Phdr *phdrs, UINT32 ph_cnt)
+{
+	const Elf32_Phdr *phdr = phdrs;
+	while (ph_cnt-- != 0) {
+		EFI_PHYSICAL_ADDRESS paddr = phdr->p_paddr;
+		UINTN pages =
+		  ((UINT64)phdrs->p_memsz + EFI_PAGE_SIZE - 1) / EFI_PAGE_SIZE;
+		BS->FreePages(paddr, pages);
+		++phdr;
+	}
+}
+
+static Elf32_Addr load_stage2(void)
+{
+	enum { MAX_PHDRS = 16 };
+	EFI_SIMPLE_FILE_SYSTEM_PROTOCOL *fs;
+	CHAR16 *name = STAGE2;
+	EFI_FILE_PROTOCOL *vol, *prog;
+	EFI_STATUS status;
+	Elf32_Ehdr ehdr;
+	Elf32_Phdr phdrs[MAX_PHDRS], *phdr;
+	UINT32 x1, x2, ph_cnt, ph_idx, entry;
+	status = BS->HandleProtocol(boot_media_handle,
+	    &gEfiSimpleFileSystemProtocolGuid, (void **)&fs);
+	if (EFI_ERROR(status))
+		error_with_status(u"cannot get "
+		    "EFI_SIMPLE_FILE_SYSTEM_PROTOCOL", status);
+	status = fs->OpenVolume(fs, &vol);
+	if (EFI_ERROR(status))
+		error_with_status(u"cannot get EFI_FILE_PROTOCOL", status);
+	status = vol->Open(vol, &prog, name, EFI_FILE_MODE_READ, 0);
+	if (EFI_ERROR(status)) {
+		name = STAGE2_ALT;
+		status = vol->Open(vol, &prog, name, EFI_FILE_MODE_READ, 0);
+	}
+	if (EFI_ERROR(status)) {
+		vol->Close(vol);
+		error_with_status(u"cannot open stage 2", status);
+	}
+	dump_stage2_info(prog, name);
+	read_stage2(prog, vol, sizeof ehdr, &ehdr);
+	if (ehdr.e_ident[EI_MAG0] != ELFMAG0 ||
+	    ehdr.e_ident[EI_MAG1] != ELFMAG1 ||
+	    ehdr.e_ident[EI_MAG2] != ELFMAG2 ||
+	    ehdr.e_ident[EI_MAG3] != ELFMAG3) {
+		Output(u"  not ELF file\r\n");
+		goto bad_elf;
+	}
+	x1 = ehdr.e_ident[EI_VERSION];
+	x2 = ehdr.e_version;
+	Print(u"  ELF ver.: %u / %u\r\n", x1, x2);
+	if (x1 != EV_CURRENT || x2 != EV_CURRENT)
+		goto bad_elf;
+	x1 = ehdr.e_ehsize;
+	x2 = ehdr.e_phentsize;
+	ph_cnt = ehdr.e_phnum;
+	Print(u"  ehdr sz.: 0x%x  phdr sz.: 0x%x  phdr cnt.: %u\r\n",
+	    x1, x2, ph_cnt);
+	if (x1 < sizeof(ehdr) || x2 != sizeof(*phdr))
+		goto bad_elf;
+	if (ph_cnt > MAX_PHDRS) {
+		Output(u"  too many phdrs.\r\n");
+		goto bad_elf;
+	}
+	x1 = ehdr.e_machine;
+	entry = ehdr.e_entry;
+	Print(u"  machine: 0x%x  entry: @0x%x\r\n", x1, entry);
+	if (x1 != EM_386) {
+		Output(u"  not x86-32 ELF\r\n");
+		goto bad_elf;
+	}
+	seek_stage2(prog, vol, ehdr.e_phoff);
+	read_stage2(prog, vol, ph_cnt * sizeof(*phdr), phdrs);
+	Output(u"  phdr# file off.  phy.addr.  virt.addr. type       "
+		  "file sz.   mem. sz.\r\n");
+	for (ph_idx = 0; ph_idx < ph_cnt; ++ph_idx) {
+		phdr = &phdrs[ph_idx];
+		Elf32_Word type = phdr->p_type;
+		Elf32_Off off = phdr->p_offset;
+		EFI_PHYSICAL_ADDRESS paddr = phdr->p_paddr;
+		Elf32_Word filesz = phdr->p_filesz, memsz = phdr->p_memsz;
+		UINTN pages;
+		phdr = &phdrs[ph_idx];
+		Print(u"  %5u 0x%08x 0x%08lx 0x%08x 0x%08x 0x%08x 0x%08x\r\n",
+		    ph_idx, off, paddr, phdr->p_vaddr, type, filesz, memsz);
+		if (type != PT_LOAD)
+			continue;
+		if (filesz > memsz) {
+			free_stage2_mem(phdrs, ph_idx);
+			Output(u"  seg. file sz. > seg. mem. sz.!\r\n");
+			goto bad_elf;
+		}
+		pages = ((UINT64)memsz + EFI_PAGE_SIZE - 1) / EFI_PAGE_SIZE;
+		status = BS->AllocatePages(AllocateAddress,
+		    EfiRuntimeServicesData, pages, &paddr);
+		if (EFI_ERROR(status)) {
+			free_stage2_mem(phdrs, ph_idx);
+			error_with_status(u"cannot get mem. for ELF seg.",
+			    status);
+		}
+		seek_stage2(prog, vol, off);
+		read_stage2(prog, vol, filesz, (void *)paddr);
+		memset((char *)paddr + filesz, 0, memsz - filesz);
+	}
+	prog->Close(prog);
+	vol->Close(vol);
+	return entry;
+bad_elf:
+	prog->Close(prog);
+	vol->Close(vol);
+	error(u"bad stage2");
+	return 0;
+}
+
 static unsigned process_memory_map(void)
 {
 	enum { BASE_MEM_MAX = 0xff000ULL };
@@ -273,359 +632,6 @@ static void fake_mp_table(unsigned base_kib)
 }
 #endif
 
-static void find_boot_media(void)
-{
-	EFI_STATUS status;
-	EFI_LOADED_IMAGE_PROTOCOL *li;
-	status = BS->HandleProtocol(LibImageHandle,
-	    &gEfiLoadedImageProtocolGuid, (void **)&li);
-	if (EFI_ERROR(status))
-		error_with_status(u"cannot get EFI_LOADED_IMAGE_PROTOCOL",
-		    status);
-	boot_media_handle = li->DeviceHandle;
-}
-
-static void test_if_secure_boot(void)
-{
-	UINT8 data = 0;
-	UINTN data_sz = sizeof(data);
-	EFI_STATUS status = RT->GetVariable(u"SecureBoot",
-	    &gEfiGlobalVariableGuid, NULL, &data_sz, &data);
-	if (!EFI_ERROR(status) && data)
-		secure_boot_p = TRUE;
-	Print(u"secure boot: %s\r\n", secure_boot_p ? u"yes" : u"no");
-}
-
-static bool enable_legacy_vga(EFI_PCI_IO_PROTOCOL *io, UINT32 class_if,
-			      UINT64 attrs, UINT64 supports, UINT64 *p_enables)
-{
-	EFI_STATUS status;
-	UINT64 enables;
-	*p_enables = 0;
-	switch (class_if & 0xffff0000UL) {
-	    case 0x03000000:  /* VGA */
-	    case 0x03010000:  /* XGA */
-		break;
-	    default:
-		return false;
-	}
-	switch (supports & (EFI_PCI_ATTRIBUTE_VGA_MEMORY |
-			    EFI_PCI_ATTRIBUTE_VGA_IO |
-			    EFI_PCI_ATTRIBUTE_VGA_IO_16)) {
-	    case EFI_PCI_ATTRIBUTE_VGA_MEMORY | EFI_PCI_ATTRIBUTE_VGA_IO:
-		enables = EFI_PCI_ATTRIBUTE_VGA_MEMORY |
-			  EFI_PCI_ATTRIBUTE_VGA_IO;
-		break;
-	    case EFI_PCI_ATTRIBUTE_VGA_MEMORY | EFI_PCI_ATTRIBUTE_VGA_IO_16:
-	    case EFI_PCI_ATTRIBUTE_VGA_MEMORY | EFI_PCI_ATTRIBUTE_VGA_IO_16
-					      | EFI_PCI_ATTRIBUTE_VGA_IO:
-		enables = EFI_PCI_ATTRIBUTE_VGA_MEMORY |
-			  EFI_PCI_ATTRIBUTE_VGA_IO_16;
-		break;
-	    default:
-		return false;
-	}
-	/*
-	 * If legacy VGA memory & I/O are already enabled, then there is
-	 * nothing more to do.
-	 */
-	if ((attrs | enables) == attrs)
-		return true;
-	/* Otherwise... */
-	status = io->Attributes(io, EfiPciIoAttributeOperationEnable,
-	    enables, NULL);
-	if (EFI_ERROR(status))
-		return false;
-	*p_enables = enables;
-	return true;
-}
-
-static void find_pci(void)
-{
-	EFI_HANDLE *handles;
-	UINTN num_handles, idx;
-	EFI_STATUS status = LibLocateHandle(ByProtocol,
-	    &gEfiPciIoProtocolGuid, NULL, &num_handles, &handles);
-	if (EFI_ERROR(status))
-	        error_with_status(u"no PCI devices found", status);
-	Print(u"PCI devices: %lu\r\n"
-	       "  locn.       attrs.    supports  PCI id.   ROM sz.   "
-		 "class+IF\r\n",
-	    num_handles);
-	for (idx = 0; idx < num_handles; ++idx) {
-		EFI_HANDLE handle = handles[idx];
-		EFI_PCI_IO_PROTOCOL *io;
-		UINTN seg, bus, dev, fn;
-		UINT64 attrs, supports, enables;
-		UINT32 pci_hdr[10], pci_id, class_if;
-		unsigned idx;
-		bool got_bar = false, got_vga = false;
-		status = BS->HandleProtocol(handle,
-		    &gEfiPciIoProtocolGuid, (void **)&io);
-		if (EFI_ERROR(status))
-			error_with_status(u"cannot get EFI_PCI_IO_PROTOCOL",
-			    status);
-		status = io->GetLocation(io, &seg, &bus, &dev, &fn);
-		if (EFI_ERROR(status))
-			error_with_status(u"cannot get PCI ctrlr. locn.",
-			    status);
-		status = io->Attributes(io, EfiPciIoAttributeOperationGet,
-		    0, &attrs);
-		if (EFI_ERROR(status))
-			error_with_status(u"cannot get PCI ctrlr. attrs.",
-			    status);
-		status = io->Attributes(io,
-		    EfiPciIoAttributeOperationSupported, 0, &supports);
-		if (EFI_ERROR(status))
-			error_with_status(u"cannot get PCI ctrlr. attrs.",
-			    status);
-		status = io->Pci.Read(io, EfiPciIoWidthUint32, 0, 10, pci_hdr);
-		if (EFI_ERROR(status))
-			error_with_status(u"cannot read PCI conf. sp.",
-			    status);
-		pci_id = pci_hdr[0];
-		class_if = pci_hdr[2];
-		Print(u"  %02x:%02x:%02x.%02x 0x%06lx%c 0x%06lx%c "
-			 "%04x:%04x 0x%06lx%c %02x %02x %02x\r\n",
-		    seg, bus, dev, fn,
-		    attrs & 0xffffffULL,
-		    attrs & ~0xffffffULL ? u'+' : u' ',
-		    supports & 0xffffffULL,
-		    supports & ~0xffffffULL ? u'+' : u' ',
-		    (UINT32)(pci_id & 0xffffU), (UINT32)(pci_id >> 16),
-		    io->RomSize <= 0xffffffULL ? io->RomSize : 0xffffffULL,
-		    io->RomSize <= 0xffffffULL ? u' ' : u'+',
-		    class_if >> 24, (class_if >> 16) & 0xffU,
-		    (class_if >> 8) & 0xffU);
-		if ((pci_hdr[3] >> 8 & 0xff) != 0)
-			continue;  /* skip if not a general device */
-		/*
-		 * If this is a VGA or XGA display controller, try to enable
-		 * the legacy memory & I/O port locations for the controller.
-		 */
-		if (!got_vga &&
-		    enable_legacy_vga(io, class_if, attrs, supports, &enables))
-		{
-			got_vga = true;
-			if ((attrs | enables) != attrs) {
-				attrs |= enables;
-				Print(u"           -> 0x%06lx%c\r\n",
-				    attrs & 0xffffffULL,
-				    attrs & ~0xffffffULL ? u'+' : u' ');
-			}
-		}
-		/* Enumerate all BAR values. */
-		idx = 4 - 1;
-		while (++idx < 10) {
-			UINT32 bar = pci_hdr[idx];
-			UINT64 addr;
-			if (!bar)
-				continue;
-			if (!got_bar) {
-				got_bar = true;
-				Output(u"    BAR:");
-			}
-			switch (bar & 0x00000007U) {
-			    case 0x00000000U:
-				/* 32-bit address in memory space */
-				Print(u" { @0x%x%s }", bar & 0xfffffff0U,
-				    bar & 0x00000008U ? u" pf" : u"");
-				break;
-			    case 0x00000004U:
-				/* 64-bit address in memory space */
-				if (idx == 9)
-					error(u"bogus 64-bit PCI BAR");
-				++idx;
-				addr = pci_hdr[idx];
-				addr <<= 32;
-				addr |= bar & 0xfffffff0U;
-				Print(u" { @0x%lx%s }", addr,
-				    bar & 0x00000008U ? u" pf" : u"");
-				break;
-			    case 0x00000001U:
-			    case 0x00000003U:
-			    case 0x00000005U:
-			    case 0x00000007U:
-				/* address in I/O space */
-				Print(u" { \u2191""0x%x }", bar & 0xfffffffcU);
-				break;
-			    default:
-				error(u"unhandled 16-bit PCI BAR");
-			}
-		}
-		if (got_bar)
-			Output(u"\r\n");
-	}
-	FreePool(handles);
-}
-
-static Elf32_Addr alloc_trampoline(void)
-{
-	EFI_PHYSICAL_ADDRESS addr = 0x100000000ULL;
-	EFI_STATUS status = BS->AllocatePages(AllocateMaxAddress,
-	    EfiLoaderData, 1, &addr);
-	if (EFI_ERROR(status))
-		error_with_status(u"cannot get mem. for trampoline & stk.",
-		    status);
-	Print(u"made space for trampoline & stk. @0x%lx\r\n", addr);
-	return (Elf32_Addr)addr;
-}
-
-#define STAGE2		u"biefist2.sys"
-#define STAGE2_ALT	u"kernel.sys"
-
-static void dump_stage2_info(EFI_FILE_PROTOCOL *prog, CONST CHAR16 *name)
-{
-	EFI_FILE_INFO *info = LibFileInfo(prog);
-	if (!info)
-		error(u"cannot get info on stage 2");
-	Print(u"stage2: %s  size: 0x%lx  attrs.: 0x%lx\r\n",
-	    name, info->FileSize, info->Attribute);
-	FreePool(info);
-}
-
-static void read_stage2(EFI_FILE_PROTOCOL *prog, EFI_FILE_PROTOCOL *vol,
-			UINTN size, void *buf)
-{
-	UINTN read_size = size;
-	EFI_STATUS status = prog->Read(prog, &read_size, buf);
-	if (EFI_ERROR(status)) {
-		prog->Close(prog);
-		vol->Close(vol);
-		error_with_status(u"cannot read stage 2", status);
-	}
-	if (read_size != size) {
-		prog->Close(prog);
-		vol->Close(vol);
-		error_with_status(u"short read from stage 2", status);
-	}
-}
-
-static void seek_stage2(EFI_FILE_PROTOCOL *prog, EFI_FILE_PROTOCOL *vol,
-			UINT64 pos)
-{
-	EFI_STATUS status = prog->SetPosition(prog, pos);
-	if (EFI_ERROR(status)) {
-		prog->Close(prog);
-		vol->Close(vol);
-		error_with_status(u"cannot seek into stage 2", status);
-	}
-}
-
-static void free_stage2_mem(const Elf32_Phdr *phdrs, UINT32 ph_cnt)
-{
-	const Elf32_Phdr *phdr = phdrs;
-	while (ph_cnt-- != 0) {
-		EFI_PHYSICAL_ADDRESS paddr = phdr->p_paddr;
-		UINTN pages =
-		  ((UINT64)phdrs->p_memsz + EFI_PAGE_SIZE - 1) / EFI_PAGE_SIZE;
-		BS->FreePages(paddr, pages);
-		++phdr;
-	}
-}
-
-static Elf32_Addr load_stage2(void)
-{
-	enum { MAX_PHDRS = 16 };
-	EFI_SIMPLE_FILE_SYSTEM_PROTOCOL *fs;
-	CHAR16 *name = STAGE2;
-	EFI_FILE_PROTOCOL *vol, *prog;
-	EFI_STATUS status;
-	Elf32_Ehdr ehdr;
-	Elf32_Phdr phdrs[MAX_PHDRS], *phdr;
-	UINT32 x1, x2, ph_cnt, ph_idx, entry;
-	status = BS->HandleProtocol(boot_media_handle,
-	    &gEfiSimpleFileSystemProtocolGuid, (void **)&fs);
-	if (EFI_ERROR(status))
-		error_with_status(u"cannot get "
-		    "EFI_SIMPLE_FILE_SYSTEM_PROTOCOL", status);
-	status = fs->OpenVolume(fs, &vol);
-	if (EFI_ERROR(status))
-		error_with_status(u"cannot get EFI_FILE_PROTOCOL", status);
-	status = vol->Open(vol, &prog, name, EFI_FILE_MODE_READ, 0);
-	if (EFI_ERROR(status)) {
-		name = STAGE2_ALT;
-		status = vol->Open(vol, &prog, name, EFI_FILE_MODE_READ, 0);
-	}
-	if (EFI_ERROR(status)) {
-		vol->Close(vol);
-		error_with_status(u"cannot open stage 2", status);
-	}
-	dump_stage2_info(prog, name);
-	read_stage2(prog, vol, sizeof ehdr, &ehdr);
-	if (ehdr.e_ident[EI_MAG0] != ELFMAG0 ||
-	    ehdr.e_ident[EI_MAG1] != ELFMAG1 ||
-	    ehdr.e_ident[EI_MAG2] != ELFMAG2 ||
-	    ehdr.e_ident[EI_MAG3] != ELFMAG3) {
-		Output(u"  not ELF file\r\n");
-		goto bad_elf;
-	}
-	x1 = ehdr.e_ident[EI_VERSION];
-	x2 = ehdr.e_version;
-	Print(u"  ELF ver.: %u / %u\r\n", x1, x2);
-	if (x1 != EV_CURRENT || x2 != EV_CURRENT)
-		goto bad_elf;
-	x1 = ehdr.e_ehsize;
-	x2 = ehdr.e_phentsize;
-	ph_cnt = ehdr.e_phnum;
-	Print(u"  ehdr sz.: 0x%x  phdr sz.: 0x%x  phdr cnt.: %u\r\n",
-	    x1, x2, ph_cnt);
-	if (x1 < sizeof(ehdr) || x2 != sizeof(*phdr))
-		goto bad_elf;
-	if (ph_cnt > MAX_PHDRS) {
-		Output(u"  too many phdrs.\r\n");
-		goto bad_elf;
-	}
-	x1 = ehdr.e_machine;
-	entry = ehdr.e_entry;
-	Print(u"  machine: 0x%x  entry: @0x%x\r\n", x1, entry);
-	if (x1 != EM_386) {
-		Output(u"  not x86-32 ELF\r\n");
-		goto bad_elf;
-	}
-	seek_stage2(prog, vol, ehdr.e_phoff);
-	read_stage2(prog, vol, ph_cnt * sizeof(*phdr), phdrs);
-	Output(u"  phdr# file off.  phy.addr.  virt.addr. type       "
-		  "file sz.   mem. sz.\r\n");
-	for (ph_idx = 0; ph_idx < ph_cnt; ++ph_idx) {
-		phdr = &phdrs[ph_idx];
-		Elf32_Word type = phdr->p_type;
-		Elf32_Off off = phdr->p_offset;
-		EFI_PHYSICAL_ADDRESS paddr = phdr->p_paddr;
-		Elf32_Word filesz = phdr->p_filesz, memsz = phdr->p_memsz;
-		UINTN pages;
-		phdr = &phdrs[ph_idx];
-		Print(u"  %5u 0x%08x 0x%08lx 0x%08x 0x%08x 0x%08x 0x%08x\r\n",
-		    ph_idx, off, paddr, phdr->p_vaddr, type, filesz, memsz);
-		if (type != PT_LOAD)
-			continue;
-		if (filesz > memsz) {
-			free_stage2_mem(phdrs, ph_idx);
-			Output(u"  seg. file sz. > seg. mem. sz.!\r\n");
-			goto bad_elf;
-		}
-		pages = ((UINT64)memsz + EFI_PAGE_SIZE - 1) / EFI_PAGE_SIZE;
-		status = BS->AllocatePages(AllocateAddress,
-		    EfiRuntimeServicesData, pages, &paddr);
-		if (EFI_ERROR(status)) {
-			free_stage2_mem(phdrs, ph_idx);
-			error_with_status(u"cannot get mem. for ELF seg.",
-			    status);
-		}
-		seek_stage2(prog, vol, off);
-		read_stage2(prog, vol, filesz, (void *)paddr);
-		memset((char *)paddr + filesz, 0, memsz - filesz);
-	}
-	prog->Close(prog);
-	vol->Close(vol);
-	return entry;
-bad_elf:
-	prog->Close(prog);
-	vol->Close(vol);
-	error(u"bad stage2");
-	return 0;
-}
-
 static void prepare_to_hand_over(EFI_HANDLE image_handle)
 {
 	EFI_MEMORY_DESCRIPTOR *descs;
@@ -653,15 +659,15 @@ EFI_STATUS efi_main(EFI_HANDLE image_handle, EFI_SYSTEM_TABLE *system_table)
 	InitializeLib(image_handle, system_table);
 	Output(u".:. biefircate " VERSION " .:.\r\n");
 	process_efi_conf_tables();
+	find_boot_media();
+	test_if_secure_boot();
+	process_pci();
+	trampoline = alloc_trampoline();
+	entry = load_stage2();
 	base_kib = process_memory_map();
 #ifdef XV6_COMPAT
 	fake_mp_table(base_kib);
 #endif
-	find_boot_media();
-	test_if_secure_boot();
-	find_pci();
-	trampoline = alloc_trampoline();
-	entry = load_stage2();
 	prepare_to_hand_over(image_handle);
 	run_stage2(entry, trampoline, base_kib);
 	return 0;
