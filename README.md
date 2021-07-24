@@ -2,8 +2,8 @@
 
 _very experimental_
 
- 1. &nbsp;`sudo apt-get install gcc-mingw-w64-x86-64'
- 2. &nbsp;`sudo apt-get install qemu-system-x86 ovmf dosfstools mtools`
+ 1. &nbsp;`sudo apt-get install gcc-mingw-w64-x86-64 dosfstools mtools`
+ 2. &nbsp;`sudo apt-get install qemu-system-x86 qemu-utils ovmf`
  3. &nbsp;`./configure`
  4. &nbsp;`make -j4`
  5. &nbsp;`make run-qemu-xv6`

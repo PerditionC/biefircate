@@ -103,6 +103,10 @@ hd.img: $(LOADER) biefist2.sys
 	mcopy -i $@.tmp@@32K biefist2.sys ::/biefist2.sys
 	mv $@.tmp $@
 
+hd.vdi: hd.img
+	qemu-img convert $< -O vdi $@.tmp
+	mv $@.tmp $@
+
 hd-xv6.img: $(LOADER) xv6.stamp
 	$(RM) $@.tmp
 	dd if=/dev/zero of=$@.tmp bs=1048576 count=32
