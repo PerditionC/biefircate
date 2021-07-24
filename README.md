@@ -2,10 +2,11 @@
 
 _very experimental_
 
- 1. &nbsp;`sudo apt-get install gcc-mingw-w64-x86-64 qemu-system-x86 ovmf`
- 2. &nbsp;`./configure`
- 3. &nbsp;`make -j4`
- 4. &nbsp;`make run-qemu-xv6`
+ 1. &nbsp;`sudo apt-get install gcc-mingw-w64-x86-64'
+ 2. &nbsp;`sudo apt-get install qemu-system-x86 ovmf dosfstools mtools`
+ 3. &nbsp;`./configure`
+ 4. &nbsp;`make -j4`
+ 5. &nbsp;`make run-qemu-xv6`
 
 This aims to run x86-16 or x86-32 code from an x86-64 UEFI environment.
 
