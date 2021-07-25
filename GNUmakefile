@@ -36,23 +36,32 @@ GNUEFISRCDIR := '$(abspath $(conf_Srcdir))'/gnu-efi
 CFLAGS = -pie -fPIC -ffreestanding -Os -Wall -mno-red-zone \
 	 -fno-stack-protector -MMD
 ASFLAGS = -pie -fPIC -MMD
+COMMON_CPPFLAGS = -DXV6_COMPAT
 CPPFLAGS = -I $(GNUEFISRCDIR)/inc -I $(GNUEFISRCDIR)/protocol \
-	   -I $(GNUEFISRCDIR)/inc/x86_64 \
-	   -DXV6_COMPAT
+	   -I $(GNUEFISRCDIR)/inc/x86_64 $(COMMON_CPPFLAGS)
 LDFLAGS = $(CFLAGS) -nostdlib -ffreestanding -Wl,--entry,efi_main \
 	  -Wl,--subsystem,10 -Wl,--strip-all -Wl,-Map=$(@:.efi=.map)
 LIBEFI = gnu-efi/x86_64/lib/libefi.a
 LDLIBS := $(LIBEFI) $(LDLIBS)
+
+S2CC = $(CC) -m32
+S2CFLAGS = -ffreestanding -Os -Wall -fno-stack-protector -MMD
+S2ASFLAGS = -MMD
+S2CPPFLAGS = $(COMMON_CPPFLAGS)
+S2LDFLAGS = $(S2CFLAGS) -nostdlib -ffreestanding -Wl,-Ttext=0x300000 \
+    -Wl,--strip-all -Wl,-Map=$(@:.sys=.map)
+S2LDLIBS =
+
 QEMUFLAGS = -m 224m -serial stdio
 QEMUFLAGSXV6 = $(QEMUFLAGS) -hdb xv6/fs.img
 
 ifneq "" "$(SBSIGN_MOK)"
-default: loader.signed.efi loader.efi
 LOADER = loader.signed.efi
 else
-default: loader.efi
 LOADER = loader.efi
 endif
+
+default: $(LOADER) biefist2.sys hd.img
 .PHONY: default
 
 ifneq "" "$(SBSIGN_MOK)"
@@ -64,13 +73,21 @@ endif
 loader.efi: s1-main.o s1-run-s2.o
 	$(CC) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
-%.o: %.c $(LIBEFI)
+s1-%.o: s1-%.c $(LIBEFI)
 	$(CC) $(CFLAGS) $(CPPFLAGS) -c -o $@ $<
 
-%.o: %.S $(LIBEFI)
+s1-%.o: s1-%.S $(LIBEFI)
 	$(CC) $(ASFLAGS) $(CPPFLAGS) -c -o $@ $<
 
 s1-main.o : CPPFLAGS += -DVERSION='"$(conf_Pkg_ver)"'
+
+biefist2.sys: s2-start.o
+	$(S2CC) $(S2LDFLAGS) -o $@.tmp $^ $(S2LDLIBS)
+	objcopy --output-target=elf32-i386 $@.tmp $@
+	$(RM) $@.tmp
+
+s2-%.o: s2-%.S
+	$(S2CC) $(S2ASFLAGS) $(S2CPPFLAGS) -c -o $@ $<
 
 # gnu-efi's Make.defaults has a bit of a bug in its setting of $(GCCVERSION)
 # & $(GCCMINOR): if $(CC) -dumpversion says something like `10-win32' it

@@ -33,8 +33,8 @@ run_stage2:
 	leal	0x1000(%edx), %esp	/* switch to new stack */
 	pushq	%rcx			/* push ELF32 entry point */
 	pushq	%r8			/* push base mem. size (in KiB) */
-	movl	$0x0400, %edi		/* blank the BIOS data area */
-	movl	$(0x0600-0x0400)/8, %ecx
+	xorl	%edi, %edi		/* blank the real mode interrupt */
+	movl	$0x0600/8, %ecx		/* vector table & BIOS data area */
 	xorl	%eax, %eax
 	rep stosq
 	movl	%edx, %edi
