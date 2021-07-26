@@ -61,7 +61,7 @@ else
 LOADER = loader.efi
 endif
 
-default: $(LOADER) biefist2.sys hd.img
+default: $(LOADER) biefist2.sys hd.img romdumper.efi
 .PHONY: default
 
 ifneq "" "$(SBSIGN_MOK)"
@@ -79,7 +79,13 @@ s1-%.o: s1-%.c $(LIBEFI)
 s1-%.o: s1-%.S $(LIBEFI)
 	$(CC) $(ASFLAGS) $(CPPFLAGS) -c -o $@ $<
 
-s1-main.o : CPPFLAGS += -DVERSION='"$(conf_Pkg_ver)"'
+romdumper.efi: romdumper.o
+	$(CC) $(LDFLAGS) -o $@ $^ $(LDLIBS)
+
+romdumper.o: romdumper.c $(LIBEFI)
+	$(CC) $(CFLAGS) $(CPPFLAGS) -c -o $@ $<
+
+s1-main.o romdumper.o : CPPFLAGS += -DVERSION='"$(conf_Pkg_ver)"'
 
 biefist2.sys: s2-start.o
 	$(S2CC) $(S2LDFLAGS) -o $@.tmp $^ $(S2LDLIBS)
