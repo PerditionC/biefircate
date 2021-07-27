@@ -172,13 +172,30 @@ static void dump_pci_roms(void)
 		Output(u"no PCI option ROMs to dump!\r\n");
 }
 
-#define OPT_ROM_OUT	u"0xc0000.dump"
+#define OPT_ROM_OUT	u"0x000C0000.dump"
 
 static void dump_opt_rom_area(void)
 {
 	EFI_PHYSICAL_ADDRESS start = 0xc0000ULL, end = 0x100000ULL;
 	Output(u"dumping option ROM area to " OPT_ROM_OUT "...");
 	dump_rom(OPT_ROM_OUT, (UINTN)(end - start), (void *)start);
+	Output(u" done\r\n");
+}
+
+static void dump_fv_area(void)
+{
+	enum { CHUNK = 0x10000UL };
+	EFI_PHYSICAL_ADDRESS start = 0xff800000ULL, end = 0x100000000ULL;
+	static unsigned char buf[CHUNK];
+	Output(u"dumping firmware volume area...");
+	while (start < end) {
+		CHAR16 name[2 + 16 + sizeof(u".dump") / sizeof(CHAR16)];
+		UnicodeSPrint(name, sizeof name, u"0x%08lx.dump", start);
+		memcpy(buf, (void *)start, CHUNK);
+		dump_rom(name, CHUNK, buf);
+		Output(u".");
+		start += CHUNK;
+	}
 	Output(u" done\r\n");
 }
 
@@ -189,6 +206,7 @@ EFI_STATUS efi_main(EFI_HANDLE image_handle, EFI_SYSTEM_TABLE *system_table)
 	find_boot_media();
 	dump_pci_roms();
 	dump_opt_rom_area();
+	dump_fv_area();
 	wait_and_exit(0);
 	return 0;
 }
