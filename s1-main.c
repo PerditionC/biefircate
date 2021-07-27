@@ -41,10 +41,12 @@
 extern EFI_HANDLE LibImageHandle;
 extern EFI_GUID gEfiLoadedImageProtocolGuid, gEfiGlobalVariableGuid;
 
-extern void run_stage2(Elf32_Addr, Elf32_Addr, unsigned);
+extern void run_stage2(Elf32_Addr entry, Elf32_Addr trampoline,
+		       unsigned base_kib, UINT16 vga_pci_locn);
 
 static BOOLEAN secure_boot_p = FALSE;
 static EFI_HANDLE boot_media_handle;
+static UINT16 vga_pci_locn = 0;
 
 static void wait_and_exit(EFI_STATUS status)
 {
@@ -122,6 +124,9 @@ static bool enable_legacy_vga(EFI_PCI_IO_PROTOCOL *io, UINT32 class_if,
 	    default:
 		return false;
 	}
+	if (!io->RomImage)
+		Output(u"    VGA/XGA device lacks option ROM?");
+	memcpy((void *)0x10000, io->RomImage, io->RomSize);
 	switch (supports & (EFI_PCI_ATTRIBUTE_VGA_MEMORY |
 			    EFI_PCI_ATTRIBUTE_VGA_IO |
 			    EFI_PCI_ATTRIBUTE_VGA_IO_16)) {
@@ -176,7 +181,7 @@ static bool process_one_pci_io(EFI_PCI_IO_PROTOCOL *io, bool try_enable_vga)
 		error_with_status(u"cannot read PCI conf. sp.", status);
 	pci_id = pci_conf[0];
 	class_if = pci_conf[2];
-	Print(u"  %02x:%02x:%02x.%02x %04x:%04x %02x %02x %02x 0x%06lx%c "
+	Print(u"  %04x:%02x:%02x.%x %04x:%04x %02x %02x %02x 0x%06lx%c "
 		 "0x%06lx%c 0x%06lx%c",
 	    seg, bus, dev, fn,
 	    (UINT32)(pci_id & 0xffffU), (UINT32)(pci_id >> 16),
@@ -196,10 +201,12 @@ static bool process_one_pci_io(EFI_PCI_IO_PROTOCOL *io, bool try_enable_vga)
 	/*
 	 * If this is a VGA or XGA display controller, try to enable
 	 * the legacy memory & I/O port locations for the controller.
+	 * Also remember the device's location.
 	 */
 	if (try_enable_vga &&
 	    enable_legacy_vga(io, class_if, attrs, supports, &enables)) {
 		got_vga = true;
+		vga_pci_locn = bus << 8 | dev << 3 | fn;
 		attrs |= enables;
 		Print(u" -> 0x%06lx%c", attrs & 0xffffffULL,
 		    attrs & ~0xffffffULL ? u'+' : u' ');
@@ -263,7 +270,7 @@ static void process_pci(void)
 	if (EFI_ERROR(status))
 	        error_with_status(u"no PCI devices found", status);
 	Print(u"PCI devices: %lu\r\n"
-	       "  locn.       PCI id.   class+IF ROM sz.   "
+	       "  locn.        PCI id.   class+IF ROM sz.   "
 		 "supports  attrs.\r\n", num_handles);
 	for (idx = 0; idx < num_handles; ++idx) {
 		EFI_HANDLE handle = handles[idx];
@@ -273,9 +280,11 @@ static void process_pci(void)
 		if (EFI_ERROR(status))
 			error_with_status(u"cannot get EFI_PCI_IO_PROTOCOL",
 			    status);
-		got_vga = process_one_pci_io(io, !got_vga);
+		got_vga |= process_one_pci_io(io, !got_vga);
 	}
 	FreePool(handles);
+	if (!got_vga)
+		error(u"no usable VGA/XGA controller?");
 }
 
 static Elf32_Addr alloc_trampoline(void)
@@ -495,7 +504,7 @@ static unsigned process_memory_map(void)
 		++i;
 	i = (i * EFI_PAGE_SIZE) / 1024U;
 	Print(u"base mem. avail.: %u KiB\r\n", (UINT32)i);
-	if (i < 128)
+	if (i < 192)
 		error(u"too little base mem.!");
 	return i;
 }
@@ -669,6 +678,6 @@ EFI_STATUS efi_main(EFI_HANDLE image_handle, EFI_SYSTEM_TABLE *system_table)
 	fake_mp_table(base_kib);
 #endif
 	prepare_to_hand_over(image_handle);
-	run_stage2(entry, trampoline, base_kib);
+	run_stage2(entry, trampoline, base_kib, vga_pci_locn);
 	return 0;
 }

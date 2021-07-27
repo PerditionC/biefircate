@@ -34,18 +34,18 @@ _start:
 	movl	$0x0400, %esp
 	movzwl	0x0413, %edi
 	shll	$10, %edi
-	subl	$vga_init_end-vga_init_start, %edi
+	subl	$vga_init_trampoline_end-vga_init_trampoline_start, %edi
 	movl	%edi, %eax
 	or	%eax, gdt16+8+2
-	movl	$vga_init_start, %esi
-	movl	$(vga_init_end-vga_init_start)/4, %ecx
+	movl	$vga_init_trampoline_start, %esi
+	movl	$(vga_init_trampoline_end-vga_init_trampoline_start)/4, %ecx
 	cld
 	rep movsd
 	shrl	$4, %eax
-	movw	%ax, vga_init_seg-vga_init_end(%edi)
+	movw	%ax, vga_init_trampoline_seg-vga_init_trampoline_end(%edi)
 	lgdt	gdtr16
 	lidt	idtrrm16
-	ljmpw	$8, $trampoline-vga_init_start
+	ljmpw	$8, $0
 
 	.section .rodata, "a"
 
@@ -62,17 +62,7 @@ idtrrm16:
 
 	.balign	16
 	.code16
-vga_init_start:
-	/*
-	 * Include the SeaVGABIOS code here.  This will be copied to base
-	 * memory.
-	 *
-	 * NOTE: the SeaVGABIOS code is released under the GNU LGPL v3.
-	 */
-	.incbin	"/usr/share/seabios/vgabios-stdvga.bin"
-
-	.balign	16
-trampoline:
+vga_init_trampoline_start:
 	movw	$0x10, %ax		/* prime segment descriptor caches */
 	movw	%ax, %ds
 	movw	%ax, %es
@@ -82,8 +72,8 @@ trampoline:
 	movl	%cr0, %eax		/* switch to real mode */
 	andb	$~0x01, %al
 	movl	%eax, %cr0
-	ljmpw	$0, $cont-vga_init_start
-vga_init_seg = . - 2
+	ljmpw	$0, $cont-vga_init_trampoline_start
+vga_init_trampoline_seg = . - 2
 cont:
 	xorw	%ax, %ax		/* really set up segments */
 	movw	%ax, %ds
@@ -91,10 +81,11 @@ cont:
 	movw	%ax, %ss
 	movw	%ax, %fs
 	movw	%ax, %gs
-	pushw	%cs			/* call SeaVGABIOS */
-	callw	vga_init_start+3
+	movw	4(%ebp), %ax		/* get VGA controller's PCI locn. */
+	xorw	%bx, %bx		/* clear PnP card select no. (?) */
+	callw	$0x1000, $3		/* call the option ROM code */
 	movw	$0x0003, %ax		/* try to set 80 * 25 screen mode */
 	int	$0x10
 	hlt
 	.balign	16
-vga_init_end:
+vga_init_trampoline_end:

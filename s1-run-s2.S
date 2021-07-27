@@ -31,7 +31,9 @@
 run_stage2:
 	cli
 	leal	0x1000(%edx), %esp	/* switch to new stack */
-	pushq	%rcx			/* push ELF32 entry point */
+	pushq	%r9			/* push VGA controller's PCI locn. */
+	movl	%ecx, %ecx		/* push ELF32 entry point, & a */
+	pushq	%rcx			/* boot param. ver. no. of 0 */
 	pushq	%r8			/* push base mem. size (in KiB) */
 	xorl	%edi, %edi		/* blank the real mode interrupt */
 	movl	$0x0600/8, %ecx		/* vector table & BIOS data area */
@@ -83,7 +85,8 @@ run_stage2:
 	orb	$0x01, %al		/* appears at ports 0x03d4 etc., */
 	movb	$0xc2, %dl		/* not 0x03b4 etc. */
 	outb	%al, %dx
-	retl	$4			/* jump to the stage2 entry point */
+	leal	4(%esp), %ebp		/* point %ebp to the boot params. */
+	retl				/* jump to the stage2 entry point */
 
 	.balign 2
 .Lpm32_gdtr:
