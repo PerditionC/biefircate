@@ -38,7 +38,7 @@ CFLAGS = -pie -fPIC -ffreestanding -Os -Wall -mno-red-zone \
 ASFLAGS = -pie -fPIC -MMD
 COMMON_CPPFLAGS = -DXV6_COMPAT
 CPPFLAGS = -I $(GNUEFISRCDIR)/inc -I $(GNUEFISRCDIR)/protocol \
-	   -I $(GNUEFISRCDIR)/inc/x86_64 $(COMMON_CPPFLAGS)
+	   -I $(GNUEFISRCDIR)/inc/x86_64 -I $(conf_Srcdir) $(COMMON_CPPFLAGS)
 LDFLAGS = $(CFLAGS) -nostdlib -ffreestanding -Wl,--entry,efi_main \
 	  -Wl,--subsystem,10 -Wl,--strip-all -Wl,-Map=$(@:.efi=.map)
 LIBEFI = gnu-efi/x86_64/lib/libefi.a
@@ -70,13 +70,15 @@ loader.signed.efi: loader.efi
 	       --output $@ $<
 endif
 
-loader.efi: s1-main.o s1-run-s2.o
+loader.efi: stage1/main.o stage1/run-stage2.o
 	$(CC) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
-s1-%.o: s1-%.c $(LIBEFI)
+stage1/%.o: stage1/%.c $(LIBEFI)
+	mkdir -p $(@D)
 	$(CC) $(CFLAGS) $(CPPFLAGS) -c -o $@ $<
 
-s1-%.o: s1-%.S $(LIBEFI)
+stage1/%.o: stage1/%.S $(LIBEFI)
+	mkdir -p $(@D)
 	$(CC) $(ASFLAGS) $(CPPFLAGS) -c -o $@ $<
 
 romdumper.efi: romdumper.o
@@ -85,14 +87,15 @@ romdumper.efi: romdumper.o
 romdumper.o: romdumper.c $(LIBEFI)
 	$(CC) $(CFLAGS) $(CPPFLAGS) -c -o $@ $<
 
-s1-main.o romdumper.o : CPPFLAGS += -DVERSION='"$(conf_Pkg_ver)"'
+stage1/main.o romdumper.o : CPPFLAGS += -DVERSION='"$(conf_Pkg_ver)"'
 
-biefist2.sys: s2-start.o
+biefist2.sys: stage2/start.o
 	$(S2CC) $(S2LDFLAGS) -o $@.tmp $^ $(S2LDLIBS)
 	objcopy --output-target=elf32-i386 $@.tmp $@
 	$(RM) $@.tmp
 
-s2-%.o: s2-%.S
+stage2/%.o: stage2/%.S
+	mkdir -p $(@D)
 	$(S2CC) $(S2ASFLAGS) $(S2CPPFLAGS) -c -o $@ $<
 
 # gnu-efi's Make.defaults has a bit of a bug in its setting of $(GCCVERSION)
@@ -148,9 +151,16 @@ endif
 .PHONY: distclean
 
 clean:
-	$(RM) *.[od] *.so *.efi *.img *.vdi *.map *.stamp *~
+	set -e; \
+	for d in . stage1 stage2; do \
+		if test -d "$$d"; then \
+			(cd "$$d" && \
+			 $(RM) *.[od] *.so *.efi *.img *.vdi *.map *.stamp \
+			       *.sys *~); \
+		fi; \
+	done
 ifeq "$(conf_Separate_build_dir)" "yes"
-	$(RM) -r gnu-efi xv6
+	$(RM) -r stage1 stage2 gnu-efi xv6
 else
 	$(MAKE) -C gnu-efi clean
 	$(MAKE) -C xv6 clean
@@ -166,4 +176,4 @@ run-qemu-xv6: hd-xv6.img xv6.stamp
 	    $(QEMUFLAGSXV6)
 .PHONY: run-qemu
 
--include *.d
+-include *.d stage1/*.d stage2/*.d

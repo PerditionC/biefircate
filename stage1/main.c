@@ -41,6 +41,7 @@
 extern EFI_HANDLE LibImageHandle;
 extern EFI_GUID gEfiLoadedImageProtocolGuid, gEfiGlobalVariableGuid;
 
+extern void bmem_init(void);
 extern void run_stage2(Elf32_Addr entry, Elf32_Addr trampoline,
 		       unsigned base_kib, UINT16 vga_pci_locn);
 
