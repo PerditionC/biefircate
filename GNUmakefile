@@ -35,7 +35,8 @@ endif
 GNUEFISRCDIR := '$(abspath $(conf_Srcdir))'/gnu-efi
 CFLAGS = -pie -fPIC -ffreestanding -Os -Wall -mno-red-zone \
 	 -fno-stack-protector -MMD
-ASFLAGS = -pie -fPIC -MMD
+AS = nasm
+ASFLAGS = -f win64 -MD $(@:.o=.d)
 COMMON_CPPFLAGS = -DXV6_COMPAT
 CPPFLAGS = -I $(GNUEFISRCDIR)/inc -I $(GNUEFISRCDIR)/protocol \
 	   -I $(GNUEFISRCDIR)/inc/x86_64 -I $(conf_Srcdir) $(COMMON_CPPFLAGS)
@@ -46,7 +47,8 @@ LDLIBS := $(LIBEFI) $(LDLIBS)
 
 S2CC = $(CC) -m32
 S2CFLAGS = -ffreestanding -Os -Wall -fno-stack-protector -MMD
-S2ASFLAGS = -MMD
+S2AS = nasm
+S2ASFLAGS = -f win32 -MD $(@:.o=.d)
 S2CPPFLAGS = $(COMMON_CPPFLAGS)
 S2LDFLAGS = $(S2CFLAGS) -nostdlib -ffreestanding -Wl,-Ttext=0x300000 \
     -Wl,--strip-all -Wl,-Map=$(@:.sys=.map)
@@ -70,16 +72,16 @@ loader.signed.efi: loader.efi
 	       --output $@ $<
 endif
 
-loader.efi: stage1/main.o stage1/run-stage2.o
+loader.efi: stage1/main.o stage1/bmem.o stage1/run-stage2.o stage1/util.o
 	$(CC) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
 stage1/%.o: stage1/%.c $(LIBEFI)
 	mkdir -p $(@D)
 	$(CC) $(CFLAGS) $(CPPFLAGS) -c -o $@ $<
 
-stage1/%.o: stage1/%.S $(LIBEFI)
+stage1/%.o: stage1/%.asm $(LIBEFI)
 	mkdir -p $(@D)
-	$(CC) $(ASFLAGS) $(CPPFLAGS) -c -o $@ $<
+	$(AS) $(ASFLAGS) $(CPPFLAGS) -o $@ $<
 
 romdumper.efi: romdumper.o
 	$(CC) $(LDFLAGS) -o $@ $^ $(LDLIBS)
@@ -89,14 +91,17 @@ romdumper.o: romdumper.c $(LIBEFI)
 
 stage1/main.o romdumper.o : CPPFLAGS += -DVERSION='"$(conf_Pkg_ver)"'
 
+# For stage 2, we build .o files as Win32 COFF files, link then into a COFF
+# file, & convert the COFF output to ELF as a last step.  This is rather
+# stupid, but it does work.
 biefist2.sys: stage2/start.o
 	$(S2CC) $(S2LDFLAGS) -o $@.tmp $^ $(S2LDLIBS)
 	objcopy --output-target=elf32-i386 $@.tmp $@
 	$(RM) $@.tmp
 
-stage2/%.o: stage2/%.S
+stage2/%.o: stage2/%.asm
 	mkdir -p $(@D)
-	$(S2CC) $(S2ASFLAGS) $(S2CPPFLAGS) -c -o $@ $<
+	$(S2AS) $(S2ASFLAGS) $(S2CPPFLAGS) -o $@ $<
 
 # gnu-efi's Make.defaults has a bit of a bug in its setting of $(GCCVERSION)
 # & $(GCCMINOR): if $(CC) -dumpversion says something like `10-win32' it

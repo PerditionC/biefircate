@@ -33,6 +33,7 @@
 #include <efilib.h>
 #include <stdbool.h>
 #include <string.h>
+#include "stage1/stage1.h"
 #include "elf.h"
 #ifdef XV6_COMPAT
 #   include "mp.h"
@@ -43,30 +44,12 @@ extern EFI_GUID gEfiLoadedImageProtocolGuid, gEfiGlobalVariableGuid;
 
 extern void bmem_init(void);
 extern void run_stage2(Elf32_Addr entry, Elf32_Addr trampoline,
-		       unsigned base_kib, UINT16 vga_pci_locn);
+		       unsigned base_kib, uint16_t ebda_seg,
+		       uint16_t vga_pci_locn);
 
 static BOOLEAN secure_boot_p = FALSE;
 static EFI_HANDLE boot_media_handle;
-static UINT16 vga_pci_locn = 0;
-
-static void wait_and_exit(EFI_STATUS status)
-{
-	Output(u"press a key to exit\r\n");
-	WaitForSingleEvent(ST->ConIn->WaitForKey, 0);
-	Exit(status, 0, NULL);
-}
-
-static void error_with_status(IN CONST CHAR16 *msg, EFI_STATUS status)
-{
-	Print(u"error: %s: %d\r\n", msg, (INT32)status);
-	wait_and_exit(status);
-}
-
-static void error(IN CONST CHAR16 *msg)
-{
-	Print(u"error: %s\r\n", msg);
-	wait_and_exit(EFI_ABORTED);
-}
+static uint16_t ebda_seg = 0, vga_pci_locn = 0;
 
 static void process_efi_conf_tables(void)
 {
@@ -455,61 +438,6 @@ bad_elf:
 	return 0;
 }
 
-static unsigned process_memory_map(void)
-{
-	enum { BASE_MEM_MAX = 0xff000ULL };
-	EFI_MEMORY_DESCRIPTOR *desc, *descs;
-	UINTN num_entries = 0, map_key, desc_sz;
-	UINT32 desc_ver;
-	unsigned i;
-	char avail[BASE_MEM_MAX / EFI_PAGE_SIZE];
-	descs = LibMemoryMap(&num_entries, &map_key, &desc_sz, &desc_ver);
-	if (!num_entries || !descs)
-		error(u"cannot get mem. map!");
-	memset(avail, 0, sizeof avail);
-	Output(u"memory map below 16 MiB:\r\n"
-		"  start    end       type attrs\r\n");
-	desc = descs;
-	while (num_entries-- != 0) {
-		EFI_PHYSICAL_ADDRESS start, end;
-		start = desc->PhysicalStart;
-		if (start <= 0xffffffUL) {
-			end = start + desc->NumberOfPages * EFI_PAGE_SIZE;
-			Print(u"  0x%06lx 0x%06lx%c %4u 0x%016lx\r\n", start,
-			    end > 0x1000000ULL ? (UINT64)0x1000000ULL - 1
-					       : end - 1,
-			    end > 0x1000000ULL ? u'+' : u' ',
-			    (UINT32)desc->Type, desc->Attribute);
-		}
-		if (start < BASE_MEM_MAX) {
-			switch (desc->Type) {
-			    case EfiConventionalMemory:
-			    case EfiLoaderCode:
-			    case EfiLoaderData:
-			    case EfiBootServicesCode:
-			    case EfiBootServicesData:
-				while (start < end && start < BASE_MEM_MAX) {
-					avail[start / EFI_PAGE_SIZE] = 1;
-					start += EFI_PAGE_SIZE;
-				}
-			    default:
-				;
-			}
-		}
-		/* :-| */
-		desc = (EFI_MEMORY_DESCRIPTOR *)((char *)desc + desc_sz);
-	}
-	FreePool(descs);
-	i = 0;
-	while (i < sizeof avail && avail[i])
-		++i;
-	i = (i * EFI_PAGE_SIZE) / 1024U;
-	Print(u"base mem. avail.: %u KiB\r\n", (UINT32)i);
-	if (i < 192)
-		error(u"too little base mem.!");
-	return i;
-}
-
 #ifdef XV6_COMPAT
 static uint64_t rdmsr(uint32_t idx)
 {
@@ -544,7 +472,7 @@ static void update_cksum(uint8_t *buf, size_t n, uint8_t *p_cksum)
 	*p_cksum = cksum;
 }
 
-static void fake_mp_table(unsigned base_kib)
+static void fake_mp_table(void)
 {
 	/*
 	 * MIT's Xv6 teaching OS --- to be precise, the x86 version at
@@ -562,6 +490,7 @@ static void fake_mp_table(unsigned base_kib)
 	static const char flt_sig[4] = "_MP_", conf_sig[4] = "PCMP",
 			  oem_id[8] = "BOCHSCPU", prod_id[12] = "0.1         ";
 	typedef struct __attribute__((packed)) {
+		unsigned char ebda_kib, ebda_reserved[15];
 		intel_mp_flt_t flt;
 		intel_mp_conf_hdr_t conf;
 		intel_mp_cpu_t cpu;
@@ -571,28 +500,22 @@ static void fake_mp_table(unsigned base_kib)
 		mp_bundle_t s;
 		uint8_t b[sizeof(mp_bundle_t)];
 	} mp_bundle_union_t;
-	EFI_PHYSICAL_ADDRESS mp_addr =
-	    (EFI_PHYSICAL_ADDRESS)(base_kib - 1) << 10;
-	EFI_PHYSICAL_ADDRESS pg_addr =
-	    mp_addr & -(EFI_PHYSICAL_ADDRESS)EFI_PAGE_SIZE;
-	mp_bundle_union_t *u = (mp_bundle_union_t *)mp_addr;
 	uint32_t cpu_sig, cpu_features;
 	/* Get the local APIC address & APIC version. */
 	uintptr_t lapic_addr = rdmsr(0x1b) & 0x000ffffffffff000ULL;
 	volatile uint32_t *lapic = (volatile uint32_t *)lapic_addr;
 	/* Get the pointer to the I/O APIC. */
 	volatile uint32_t *ioapic = (volatile uint32_t *)IOAPIC_ADDR;
+	/* Allocat base memory for the MP tables. */
+	mp_bundle_union_t *u = bmem_alloc(sizeof(mp_bundle_t), PARA_SIZE);
 	/*
-	 * Call dibs on the 1 KiB (or more) of space at the end of
-	 * conventional memory, so that the UEFI runtime will not try to
-	 * do anything with it.
+	 * Fill in the EBDA length.  FIXME: allow the EBDA to hold more than
+	 * just the MP tables.
 	 */
-	EFI_STATUS status = BS->AllocatePages(AllocateAddress,
-	    EfiLoaderData, 1, &pg_addr);
-	if (EFI_ERROR(status))
-		error_with_status(u"cannot get mem. for MP tables", status);
+	u->s.ebda_kib = 1;
+	memset(u->s.ebda_reserved, 0, 15);
 	/* Fill up the MP floating pointer structure. */
-	Print(u"placing MP tables @0x%x\r\n", mp_addr);
+	Print(u"placing MP tables @0x%x\r\n", (uintptr_t)u);
 	memcpy(u->s.flt.sig, flt_sig, sizeof flt_sig);
 	u->s.flt.mp_conf_addr = (uint32_t)(uintptr_t)&u->s.conf;
 	u->s.flt.len = sizeof(u->s.flt);
@@ -600,7 +523,8 @@ static void fake_mp_table(unsigned base_kib)
 	u->s.flt.features[0] = u->s.flt.features[2] =
 	    u->s.flt.features[3] = u->s.flt.features[4] = 0;
 	u->s.flt.features[1] = MP_FEAT1_IMCRP;
-	update_cksum(u->b, sizeof(u->s.flt), &u->s.flt.cksum);
+	update_cksum(u->b + offsetof(mp_bundle_t, flt), sizeof(u->s.flt),
+	    &u->s.flt.cksum);
 	/*
 	 * Fill up the MP configuration table header (except for the
 	 * checksum).
@@ -636,9 +560,11 @@ static void fake_mp_table(unsigned base_kib)
 	u->s.ioapic.ic_flags = MP_IOAPIC_EN;
 	u->s.ioapic.ic_addr = (uint32_t)IOAPIC_ADDR;
 	/* Compute the checksum for the MP configuration table. */
-	update_cksum(u->b + sizeof(u->s.flt),
+	update_cksum(u->b + offsetof(mp_bundle_t, conf),
 		     sizeof(u->s.conf) + sizeof(u->s.cpu) +
 		     sizeof(u->s.ioapic), &u->s.conf.cksum);
+	/* Set the EBDA segment. */
+	ebda_seg = (uint16_t)((uintptr_t)u / PARA_SIZE);
 }
 #endif
 
@@ -668,17 +594,18 @@ EFI_STATUS efi_main(EFI_HANDLE image_handle, EFI_SYSTEM_TABLE *system_table)
 	Elf32_Addr trampoline, entry;
 	InitializeLib(image_handle, system_table);
 	Output(u".:. biefircate " VERSION " .:.\r\n");
+	bmem_init();
 	process_efi_conf_tables();
 	find_boot_media();
 	test_if_secure_boot();
 	process_pci();
 	trampoline = alloc_trampoline();
 	entry = load_stage2();
-	base_kib = process_memory_map();
 #ifdef XV6_COMPAT
-	fake_mp_table(base_kib);
+	fake_mp_table();
 #endif
+	base_kib = bmem_fini();
 	prepare_to_hand_over(image_handle);
-	run_stage2(entry, trampoline, base_kib, vga_pci_locn);
+	run_stage2(entry, trampoline, base_kib, ebda_seg, vga_pci_locn);
 	return 0;
 }

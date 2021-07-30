@@ -27,65 +27,41 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-	.section .text, "a"
+#define GNU_EFI_USE_MS_ABI
 
-	.globl	_start
-_start:
-	movl	$0x0400, %esp
-	movzwl	0x0413, %edi
-	shll	$10, %edi
-	subl	$vga_init_trampoline_end-vga_init_trampoline_start, %edi
-	movl	%edi, %eax
-	or	%eax, gdt16+8+2
-	movl	$vga_init_trampoline_start, %esi
-	movl	$(vga_init_trampoline_end-vga_init_trampoline_start)/4, %ecx
-	cld
-	rep movsd
-	shrl	$4, %eax
-	movw	%ax, vga_init_trampoline_seg-vga_init_trampoline_end(%edi)
-	lgdt	gdtr16
-	lidt	idtrrm16
-	ljmpw	$8, $0
+#include <efi.h>
+#include <efilib.h>
+#include <stdbool.h>
+#include <string.h>
 
-	.section .rodata, "a"
+__attribute__((noreturn)) static void wait_and_exit(EFI_STATUS status)
+{
+	Output(u"press a key to exit\r\n");
+	WaitForSingleEvent(ST->ConIn->WaitForKey, 0);
+	Exit(status, 0, NULL);
+	for (;;);
+}
 
-	.balign	8
-gdt16 = . - 8
-	.quad	0x008f9a000000ffff	/* 16-bit protected mode code seg. */
-	.quad	0x008f92000000ffff	/* 16-bit protected data code seg. */
-gdt16_end:
-gdtr16:	.hword	gdt16_end-gdt16-1
-	.long	gdt16
-idtrrm16:
-	.hword	0x100*4-1
-	.long	0
+__attribute__((noreturn)) void
+error_with_status(IN CONST CHAR16 *msg, EFI_STATUS status)
+{
+	Print(u"error: %s: %d\r\n", msg, (INT32)status);
+	wait_and_exit(status);
+}
 
-	.balign	16
-	.code16
-vga_init_trampoline_start:
-	movw	$0x10, %ax		/* prime segment descriptor caches */
-	movw	%ax, %ds
-	movw	%ax, %es
-	movw	%ax, %ss
-	movw	%ax, %fs
-	movw	%ax, %gs
-	movl	%cr0, %eax		/* switch to real mode */
-	andb	$~0x01, %al
-	movl	%eax, %cr0
-	ljmpw	$0, $cont-vga_init_trampoline_start
-vga_init_trampoline_seg = . - 2
-cont:
-	xorw	%ax, %ax		/* really set up segments */
-	movw	%ax, %ds
-	movw	%ax, %es
-	movw	%ax, %ss
-	movw	%ax, %fs
-	movw	%ax, %gs
-	movw	4(%ebp), %ax		/* get VGA controller's PCI locn. */
-	xorw	%bx, %bx		/* clear PnP card select no. (?) */
-	callw	$0x1000, $3		/* call the option ROM code */
-	movw	$0x0003, %ax		/* try to set 80 * 25 screen mode */
-	int	$0x10
-	hlt
-	.balign	16
-vga_init_trampoline_end:
+__attribute__((noreturn)) void error(IN CONST CHAR16 *msg)
+{
+	Print(u"error: %s\r\n", msg);
+	wait_and_exit(EFI_ABORTED);
+}
+
+EFI_MEMORY_DESCRIPTOR *get_mem_map(UINTN *p_num_ents, UINTN *p_map_key,
+    UINTN *p_desc_sz)
+{
+	UINT32 desc_ver;  /* discarded */
+	EFI_MEMORY_DESCRIPTOR *descs = LibMemoryMap(p_num_ents, p_map_key,
+	    p_desc_sz, &desc_ver);
+	if (!descs || !*p_num_ents)
+		error(u"cannot get mem. map!");
+	return descs;
+}
