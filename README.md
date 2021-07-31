@@ -2,7 +2,8 @@
 
 _very experimental_
 
- 1. &nbsp;`sudo apt-get install gcc-mingw-w64-x86-64 dosfstools mtools`
+ 1. &nbsp;`sudo apt-get install gcc-mingw-w64-x86-64 gcc-multilib`
+ 2. &nbsp;`sudo apt-get install dosfstools mtools`
  2. &nbsp;`sudo apt-get install qemu-system-x86 qemu-utils ovmf`
  3. &nbsp;`./configure`
  4. &nbsp;`make -j4 hd-xv6.img`

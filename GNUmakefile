@@ -38,21 +38,20 @@ CFLAGS = -pie -fPIC -ffreestanding -Os -Wall -mno-red-zone \
 AS = nasm
 ASFLAGS = -f win64 -MD $(@:.o=.d)
 COMMON_CPPFLAGS = -DXV6_COMPAT
-CPPFLAGS = -I $(GNUEFISRCDIR)/inc -I $(GNUEFISRCDIR)/protocol \
-	   -I $(GNUEFISRCDIR)/inc/x86_64 -I $(conf_Srcdir) $(COMMON_CPPFLAGS)
-LDFLAGS = $(CFLAGS) -nostdlib -ffreestanding -Wl,--entry,efi_main \
+CPPFLAGS += -I $(GNUEFISRCDIR)/inc -I $(GNUEFISRCDIR)/protocol \
+	    -I $(GNUEFISRCDIR)/inc/x86_64 -I $(conf_Srcdir) $(COMMON_CPPFLAGS)
+LDFLAGS += $(CFLAGS) -nostdlib -ffreestanding -Wl,--entry,efi_main \
 	  -Wl,--subsystem,10 -Wl,--strip-all -Wl,-Map=$(@:.efi=.map)
 LIBEFI = gnu-efi/x86_64/lib/libefi.a
 LDLIBS := $(LIBEFI) $(LDLIBS)
 
-S2CC = $(CC) -m32
-S2CFLAGS = -ffreestanding -Os -Wall -fno-stack-protector -MMD
-S2AS = nasm
-S2ASFLAGS = -f win32 -MD $(@:.o=.d)
-S2CPPFLAGS = $(COMMON_CPPFLAGS)
-S2LDFLAGS = $(S2CFLAGS) -nostdlib -ffreestanding -Wl,-Ttext=0x300000 \
-    -Wl,--strip-all -Wl,-Map=$(@:.sys=.map)
-S2LDLIBS =
+CFLAGS2 += -ffreestanding -Os -Wall -fno-stack-protector -MMD
+AS2 = nasm
+ASFLAGS2 = -f elf32 -MD $(@:.o=.d)
+CPPFLAGS2 += $(COMMON_CPPFLAGS)
+LDFLAGS2 += $(CFLAGS2) -static -nostdlib -ffreestanding \
+    -Wl,-Ttext-segment=0x300000 -Wl,--strip-all -Wl,-Map=$(@:.sys=.map) \
+    -Wl,--build-id=none
 
 QEMUFLAGS = -m 224m -serial stdio
 QEMUFLAGSXV6 = $(QEMUFLAGS) -hdb xv6/fs.img
@@ -91,17 +90,12 @@ romdumper.o: romdumper.c $(LIBEFI)
 
 stage1/main.o romdumper.o : CPPFLAGS += -DVERSION='"$(conf_Pkg_ver)"'
 
-# For stage 2, we build .o files as Win32 COFF files, link then into a COFF
-# file, & convert the COFF output to ELF as a last step.  This is rather
-# stupid, but it does work.
 biefist2.sys: stage2/start.o
-	$(S2CC) $(S2LDFLAGS) -o $@.tmp $^ $(S2LDLIBS)
-	objcopy --output-target=elf32-i386 $@.tmp $@
-	$(RM) $@.tmp
+	$(CC2) $(LDFLAGS2) -o $@ $^ $(LDLIBS2)
 
 stage2/%.o: stage2/%.asm
 	mkdir -p $(@D)
-	$(S2AS) $(S2ASFLAGS) $(S2CPPFLAGS) -o $@ $<
+	$(AS2) $(ASFLAGS2) $(CPPFLAGS2) -o $@ $<
 
 # gnu-efi's Make.defaults has a bit of a bug in its setting of $(GCCVERSION)
 # & $(GCCMINOR): if $(CC) -dumpversion says something like `10-win32' it

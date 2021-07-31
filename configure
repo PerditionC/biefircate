@@ -32,9 +32,12 @@ if test \! -e "$us"/lolwutconf/configure.inc; then
 	git submodule update
 fi
 . "$us"/lolwutconf/configure.inc
-conf_begin --host=x86_64-w64-mingw32 --host-exec=: ${1+"$@"}
-conf_mod app.build c versioning
+conf_begin --host=x86_64-w64-mingw32 --host-exec=: \
+	   --host2=i686-linux-gnu ${1+"$@"}
+conf_mod app.build c c2 versioning
 conf_c_chk_macro __x86_64__
+conf_c_chk_macro __WIN64__
+conf_c2_chk_macro __i686__
 conf_appb_probe_exists nasm
 conf_versioning_use_git_date biefircate
 conf_end

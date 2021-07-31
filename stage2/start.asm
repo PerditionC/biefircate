@@ -41,7 +41,7 @@ _start:
 	lidt	[idtrrm16]
 	jmp	8:0
 
-	section .rdata
+	section .rodata
 
 	align	8
 gdt16 equ	$-8
