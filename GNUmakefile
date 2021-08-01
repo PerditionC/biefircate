@@ -45,7 +45,7 @@ LDFLAGS += $(CFLAGS) -nostdlib -ffreestanding -Wl,--entry,efi_main \
 LIBEFI = gnu-efi/x86_64/lib/libefi.a
 LDLIBS := $(LIBEFI) $(LDLIBS)
 
-CFLAGS2 += -ffreestanding -Os -Wall -fno-stack-protector -MMD
+CFLAGS2 += -mregparm=3 -ffreestanding -Os -Wall -fno-stack-protector -MMD
 AS2 = nasm
 ASFLAGS2 = -f elf32 -MD $(@:.o=.d)
 CPPFLAGS2 += $(COMMON_CPPFLAGS)
@@ -71,7 +71,8 @@ loader.signed.efi: loader.efi
 	       --output $@ $<
 endif
 
-loader.efi: stage1/main.o stage1/bmem.o stage1/run-stage2.o stage1/util.o
+loader.efi: stage1/main.o stage1/bmem.o stage1/bparm.o stage1/run-stage2.o \
+	    stage1/util.o
 	$(CC) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
 stage1/%.o: stage1/%.c $(LIBEFI)

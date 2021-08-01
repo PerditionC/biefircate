@@ -27,7 +27,13 @@
 
 	section	.text
 
-VGA_INIT_SEG equ 0x60
+%define MAGIC32(a, b, c, d) \
+	(((a) & 0xff)	    | \
+	 ((b) & 0xff) <<  8 | \
+	 ((c) & 0xff) << 16 | \
+	 ((d) & 0xff) << 24)
+
+VGA_INIT_SEG equ 0x1000
 
 	global	_start
 _start:
@@ -75,9 +81,18 @@ cont:
 	mov	ss, ax
 	mov	fs, ax
 	mov	gs, ax
-	mov	ax, [ebp+8]		; plug in VGA option ROM segment
-	mov	[cs:orom_seg-LB], ax
-	mov	ax, [ebp+4]		; get VGA controller's PCI locn.
+	jmp	find
+next:
+	mov	ebp, [ebp]
+find:
+					; look for a "PCID" boot param. with
+					; an option ROM
+	cmp	dword [ebp+8], MAGIC32('P', 'C', 'I', 'D')
+	jnz	next
+	mov	cx, [ebp+0x1c]
+	jcxz	next
+	mov	[cs:orom_seg-LB], cx	; plug in VGA option ROM segment
+	mov	ax, [ebp+0x10]		; get VGA controller's PCI locn.
 	xor	bx, bx			; clear PnP card select no. (?)
 	call	0:3			; call the option ROM code
 orom_seg equ	$-2

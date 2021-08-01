@@ -27,10 +27,6 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#define GNU_EFI_USE_MS_ABI
-
-#include <efi.h>
-#include <efilib.h>
 #include <stdbool.h>
 #include <string.h>
 #include "stage1/stage1.h"
@@ -45,11 +41,11 @@ extern EFI_GUID gEfiLoadedImageProtocolGuid, gEfiGlobalVariableGuid;
 extern void bmem_init(void);
 extern void run_stage2(Elf32_Addr entry, Elf32_Addr trampoline,
 		       unsigned base_kib, uint16_t temp_ebda_seg,
-		       uint16_t vga_pci_locn, uint16_t vga_orom_copy_seg);
+		       bparm_t *bparm);
 
 static BOOLEAN secure_boot_p = FALSE;
 static EFI_HANDLE boot_media_handle;
-static uint16_t temp_ebda_seg = 0, vga_pci_locn = 0, vga_orom_copy_seg = 0;
+static uint16_t temp_ebda_seg = 0;
 
 static void process_efi_conf_tables(void)
 {
@@ -141,9 +137,14 @@ static bool enable_legacy_vga(EFI_PCI_IO_PROTOCOL *io, UINT32 class_if,
 	return true;
 }
 
+static uint16_t addr_to_rm_seg(uintptr_t p)
+{
+	return (uint16_t)(p / PARA_SIZE);
+}
+
 static uint16_t ptr_to_rm_seg(void *p)
 {
-	return (uint16_t)((uintptr_t)p / PARA_SIZE);
+	return addr_to_rm_seg((uintptr_t)p);
 }
 
 static uint16_t put_opt_rom_in_bmem(EFI_PCI_IO_PROTOCOL *io)
@@ -171,6 +172,7 @@ static bool process_one_pci_io(EFI_PCI_IO_PROTOCOL *io, bool try_enable_vga)
 	UINT32 pci_id, class_if;
 	bool got_vga = false, got_bar = false;
 	unsigned idx;
+	bdat_pci_dev_t *bd;
 	EFI_STATUS status = io->GetLocation(io, &seg, &bus, &dev, &fn);
 	if (EFI_ERROR(status))
 		error_with_status(u"cannot get PCI ctrlr. locn.", status);
@@ -203,6 +205,12 @@ static bool process_one_pci_io(EFI_PCI_IO_PROTOCOL *io, bool try_enable_vga)
 		Output(u"\r\n");
 		return false;
 	}
+	/* Add a boot parameter for this PCI device. */
+	bd = bparm_add(BP_PCID, sizeof(bdat_pci_dev_t));
+	bd->pci_locn = seg << 16 | bus << 8 | dev << 3 | fn;
+	bd->pci_id = pci_id;
+	bd->class_if = class_if;
+	bd->orom_seg = 0;
 	/*
 	 * If this is a VGA or XGA display controller, try to enable
 	 * the legacy memory & I/O port locations for the controller.
@@ -211,11 +219,10 @@ static bool process_one_pci_io(EFI_PCI_IO_PROTOCOL *io, bool try_enable_vga)
 	if (try_enable_vga &&
 	    enable_legacy_vga(io, class_if, attrs, supports, &enables)) {
 		got_vga = true;
-		vga_pci_locn = bus << 8 | dev << 3 | fn;
 		attrs |= enables;
 		Print(u" VGA -> 0x%lx%c\r\n", attrs & 0xffffffULL,
 		    attrs & ~0xffffffULL ? u'+' : u' ');
-		vga_orom_copy_seg = put_opt_rom_in_bmem(io);
+		bd->orom_seg = put_opt_rom_in_bmem(io);
 	} else
 		Output(u"\r\n");
 	/* Enumerate all BAR values. */
@@ -591,12 +598,23 @@ static void fake_mp_table(void)
 }
 #endif
 
-static void prepare_to_hand_over(EFI_HANDLE image_handle)
+static unsigned prepare_to_hand_over(EFI_HANDLE image_handle)
 {
+	bdat_bmem_t *bd;
+	uint32_t boottime_bmem_bot, runtime_bmem_top;
 	EFI_MEMORY_DESCRIPTOR *descs;
 	UINTN num_entries = 0, map_key, desc_sz;
 	UINT32 desc_ver;
 	EFI_STATUS status;
+	/*
+	 * Wrap up base memory handling.  Add a boot parameter to tell the
+	 * bootloader about base memory availability at boot time & run time.
+	 */
+	bd = bparm_add(BP_BMEM, sizeof(bdat_bmem_t));
+	bmem_fini(&boottime_bmem_bot, &runtime_bmem_top);
+	bd->boottime_bmem_bot_seg = addr_to_rm_seg(boottime_bmem_bot);
+	bd->runtime_bmem_top_seg = addr_to_rm_seg(runtime_bmem_top);
+	/* Say we are exiting UEFI. */
 	Output(u"exit UEFI\r\n");
 	WaitForSingleEvent(ST->ConIn->WaitForKey, 30000000ULL);
 	/*
@@ -609,12 +627,13 @@ static void prepare_to_hand_over(EFI_HANDLE image_handle)
 	status = BS->ExitBootServices(image_handle, map_key);
 	if (EFI_ERROR(status))
 		error_with_status(u"cannot exit UEFI", status);
+	return runtime_bmem_top / KIBYTE;
 }
 
 EFI_STATUS efi_main(EFI_HANDLE image_handle, EFI_SYSTEM_TABLE *system_table)
 {
-	unsigned base_kib;
 	Elf32_Addr trampoline, entry;
+	unsigned base_kib;
 	InitializeLib(image_handle, system_table);
 	Output(u".:. biefircate " VERSION " .:.\r\n");
 	bmem_init();
@@ -627,9 +646,7 @@ EFI_STATUS efi_main(EFI_HANDLE image_handle, EFI_SYSTEM_TABLE *system_table)
 #ifdef XV6_COMPAT
 	fake_mp_table();
 #endif
-	base_kib = bmem_fini();
-	prepare_to_hand_over(image_handle);
-	run_stage2(entry, trampoline, base_kib, temp_ebda_seg, vga_pci_locn,
-	    vga_orom_copy_seg);
+	base_kib = prepare_to_hand_over(image_handle);
+	run_stage2(entry, trampoline, base_kib, temp_ebda_seg, bparm_get());
 	return 0;
 }

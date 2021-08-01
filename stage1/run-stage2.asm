@@ -34,13 +34,12 @@ run_stage2:
 	; edx -> space for 32-bit trampoline
 	; r8d = size of base memory block starting at address 0, in KiB
 	; r9d = real mode segment of temporary EBDA
-	; [rsp+8+0x20] = VGA controller's PCI locn. (<bus, device, function>)
-	; [rsp+8+0x28] = real mode seg. of copy of VGA controller's option ROM
+	; [rsp+8+0x20] -> boot parameters
 	cli
-	mov	eax, [rsp+8+0x20]	; get VGA's PCI location
-	mov	ebx, [rsp+8+0x28]	; get VGA option ROM address
+	mov	ebp, [rsp+8+0x20]	; get boot parameters --- ebp should
+					; remain unchanged all the way to
+					; stage 2
 	lea	esp, [edx+0x1000]	; switch to new stack
-	push	rax			; push VGA's PCI locn. & opt. ROM addr.
 	mov	[esp+4], ebx
 	mov	ecx, ecx		; push ELF32 entry point
 	push	rcx
@@ -96,7 +95,6 @@ Lpm32:
 	or	al, 0b00000001		; ports 0x03d4 etc. not 0x03b4 etc.
 	mov	dl, 0xc2
 	out	dx, al
-	lea	ebp, [esp+4]		; point ebp to the boot parameters
 	ret				; jump to stage 2 entry point
 
 	align	2

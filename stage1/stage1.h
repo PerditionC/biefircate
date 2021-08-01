@@ -34,13 +34,20 @@
 #include <efi.h>
 #include <efilib.h>
 #include <inttypes.h>
+#include <stdbool.h>
+#include "bparm.h"
 
 /* bmem.c functions. */
 
 extern void bmem_init(void);
 extern void *bmem_alloc(UINTN, UINTN);
 extern void *bmem_alloc_boottime(UINTN, UINTN);
-extern unsigned bmem_fini(void);
+extern void bmem_fini(uint32_t *, uint32_t *);
+
+/* bparm.c functions. */
+
+extern void *bparm_add(uint32_t, uint32_t);
+extern bparm_t *bparm_get(void);
 
 /* util.c functions. */
 

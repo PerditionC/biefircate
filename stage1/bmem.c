@@ -55,15 +55,24 @@ typedef struct {
 static UINTN num_blks = 0;
 static blk_info_t blk[MAX_BMEM_BLKS];
 /*
+ * Variable to keep track of the start of base memory that is available at
+ * boot time.  The area below boottime_bmem_bot may be filled with boot
+ * parameters or other ephemera.  The stage 2 bootloader can use the memory
+ * from boottime_bmem_not up to runtime_bmem_top (below) as a scratch area,
+ * & later free up the memory below boottime_bmem_bot.
+ */
+static uint32_t boottime_bmem_bot = EFI_PAGE_SIZE;
+/*
  * Variable to keep track of the size of the base memory starting at address
  * 0 that will be available at run time.
  */
-static UINT32 runtime_bmem_top = 0;
+static uint32_t runtime_bmem_top = 0;
 
 /* Check if we have enough base memory left. */
 static void bmem_check_enough(void)
 {
-	if (runtime_bmem_top < 192 * KIBYTE)
+	if (runtime_bmem_top < 192 * KIBYTE ||
+	    boottime_bmem_bot > runtime_bmem_top - 128 * KIBYTE)
 		error(u"not enough base mem.!");
 }
 
@@ -228,10 +237,12 @@ void *bmem_alloc_boottime(UINTN size, UINTN align)
 			continue;
 		if (bend - astart < size)
 			continue;
-		if (astart > runtime_bmem_top)
+		if (astart >= runtime_bmem_top)
 			error(u"cannot alloc. for boot time from base mem.!");
 		/* Success! */
 		aend = astart + size;
+		if (boottime_bmem_bot < aend)
+			boottime_bmem_bot = aend;
 		if (aend != bend)
 			blk[blk_idx].start = aend;
 		else {
@@ -247,10 +258,13 @@ void *bmem_alloc_boottime(UINTN size, UINTN align)
 }
 
 /* Wrap up base memory allocation. */
-unsigned bmem_fini(void)
+void bmem_fini(uint32_t *p_boottime_bmem_bot, uint32_t *p_runtime_bmem_top)
 {
-	UINT32 top = runtime_bmem_top & -KIBYTE;
-	Print(u"base mem. blk. @0 ends at @0x%x\r\n", top);
+	boottime_bmem_bot = (boottime_bmem_bot + PARA_SIZE - 1) & -PARA_SIZE;
+	runtime_bmem_top &= -KIBYTE;
+	Print(u"base mem. at boottime: @0x%x~@0x%x\r\n",
+	    boottime_bmem_bot, runtime_bmem_top - 1);
 	bmem_check_enough();
-	return top / KIBYTE;
+	*p_boottime_bmem_bot = boottime_bmem_bot;
+	*p_runtime_bmem_top = runtime_bmem_top;
 }

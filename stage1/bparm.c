@@ -27,36 +27,38 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+/* Routines for passing boot parameters to the stage 2 bootloader. */
+
+#include <stdlib.h>
+#include <string.h>
 #include "stage1/stage1.h"
 
-__attribute__((noreturn)) static void wait_and_exit(EFI_STATUS status)
+static bparm_t *bp_head = NULL, *bp_tail = NULL;
+
+/*
+ * Add a boot parameter node with the given type & a data field of the given
+ * size.  Return a pointer to the data field, which the caller should then
+ * fill with the actual data.
+ */
+void *bparm_add(uint32_t type, uint32_t size)
 {
-	Output(u"press a key to exit\r\n");
-	WaitForSingleEvent(ST->ConIn->WaitForKey, 0);
-	Exit(status, 0, NULL);
-	for (;;);
+	bparm_t *bp = bmem_alloc_boottime(sizeof(bparm_t) + size,
+					  __BIGGEST_ALIGNMENT__);
+	if (!bp_head)
+		bp_head = bp_tail = bp;
+	else {
+		bp_tail->next = bp;
+		bp_tail = bp;
+	}
+	bp->next = NULL;
+	bp->type = type;
+	bp->size = size;
+	memset(bp->u, 0, size);
+	return bp->u;
 }
 
-__attribute__((noreturn)) void
-error_with_status(IN CONST CHAR16 *msg, EFI_STATUS status)
+/* Return the linked list of boot parameters built up. */
+bparm_t *bparm_get(void)
 {
-	Print(u"error: %s: %d\r\n", msg, (INT32)status);
-	wait_and_exit(status);
-}
-
-__attribute__((noreturn)) void error(IN CONST CHAR16 *msg)
-{
-	Print(u"error: %s\r\n", msg);
-	wait_and_exit(EFI_ABORTED);
-}
-
-EFI_MEMORY_DESCRIPTOR *get_mem_map(UINTN *p_num_ents, UINTN *p_map_key,
-    UINTN *p_desc_sz)
-{
-	UINT32 desc_ver;  /* discarded */
-	EFI_MEMORY_DESCRIPTOR *descs = LibMemoryMap(p_num_ents, p_map_key,
-	    p_desc_sz, &desc_ver);
-	if (!descs || !*p_num_ents)
-		error(u"cannot get mem. map!");
-	return descs;
+	return bp_head;
 }
