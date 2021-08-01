@@ -44,12 +44,12 @@ extern EFI_GUID gEfiLoadedImageProtocolGuid, gEfiGlobalVariableGuid;
 
 extern void bmem_init(void);
 extern void run_stage2(Elf32_Addr entry, Elf32_Addr trampoline,
-		       unsigned base_kib, uint16_t ebda_seg,
-		       uint16_t vga_pci_locn);
+		       unsigned base_kib, uint16_t temp_ebda_seg,
+		       uint16_t vga_pci_locn, uint16_t vga_orom_copy_seg);
 
 static BOOLEAN secure_boot_p = FALSE;
 static EFI_HANDLE boot_media_handle;
-static uint16_t ebda_seg = 0, vga_pci_locn = 0;
+static uint16_t temp_ebda_seg = 0, vga_pci_locn = 0, vga_orom_copy_seg = 0;
 
 static void process_efi_conf_tables(void)
 {
@@ -110,7 +110,6 @@ static bool enable_legacy_vga(EFI_PCI_IO_PROTOCOL *io, UINT32 class_if,
 	}
 	if (!io->RomImage)
 		Output(u"    VGA/XGA device lacks option ROM?");
-	memcpy((void *)0x10000, io->RomImage, io->RomSize);
 	switch (supports & (EFI_PCI_ATTRIBUTE_VGA_MEMORY |
 			    EFI_PCI_ATTRIBUTE_VGA_IO |
 			    EFI_PCI_ATTRIBUTE_VGA_IO_16)) {
@@ -140,6 +139,28 @@ static bool enable_legacy_vga(EFI_PCI_IO_PROTOCOL *io, UINT32 class_if,
 		return false;
 	*p_enables = enables;
 	return true;
+}
+
+static uint16_t ptr_to_rm_seg(void *p)
+{
+	return (uint16_t)((uintptr_t)p / PARA_SIZE);
+}
+
+static uint16_t put_opt_rom_in_bmem(EFI_PCI_IO_PROTOCOL *io)
+{
+	void *orom = io->RomImage, *orom_copy;
+	UINT64 sz = io->RomSize;
+	if (sz < BMEM_MAX_ADDR &&
+	    (uintptr_t)orom <= BMEM_MAX_ADDR - sz &&
+	    (uintptr_t)orom % (2 * KIBYTE) == 0) {
+		Print(u"    option ROM: @0x%lx\r\n", orom);
+		return ptr_to_rm_seg(orom);
+	}
+	orom_copy = bmem_alloc(sz, 2 * KIBYTE);
+	memcpy(orom_copy, orom, sz);
+	Print(u"    option ROM: @0x%lx (copied from @0x%lx)\r\n",
+	    orom_copy, orom);
+	return ptr_to_rm_seg(orom_copy);
 }
 
 static bool process_one_pci_io(EFI_PCI_IO_PROTOCOL *io, bool try_enable_vga)
@@ -192,10 +213,11 @@ static bool process_one_pci_io(EFI_PCI_IO_PROTOCOL *io, bool try_enable_vga)
 		got_vga = true;
 		vga_pci_locn = bus << 8 | dev << 3 | fn;
 		attrs |= enables;
-		Print(u" -> 0x%06lx%c", attrs & 0xffffffULL,
+		Print(u" VGA -> 0x%lx%c\r\n", attrs & 0xffffffULL,
 		    attrs & ~0xffffffULL ? u'+' : u' ');
-	}
-	Output(u"\r\n");
+		vga_orom_copy_seg = put_opt_rom_in_bmem(io);
+	} else
+		Output(u"\r\n");
 	/* Enumerate all BAR values. */
 	status = io->Pci.Read(io, EfiPciIoWidthUint32, 4 * sizeof(UINT32),
 	    6, pci_conf);
@@ -487,8 +509,7 @@ static void fake_mp_table(void)
 	 * will obtain the actual multiprocessor setup by other means, such
 	 * as ACPI tables.
 	 */
-	static const char flt_sig[4] = "_MP_", conf_sig[4] = "PCMP",
-			  oem_id[8] = "BOCHSCPU", prod_id[12] = "0.1         ";
+	static const char oem_id[8] = "BOCHSCPU", prod_id[12] = "0.1         ";
 	typedef struct __attribute__((packed)) {
 		unsigned char ebda_kib, ebda_reserved[15];
 		intel_mp_flt_t flt;
@@ -506,17 +527,19 @@ static void fake_mp_table(void)
 	volatile uint32_t *lapic = (volatile uint32_t *)lapic_addr;
 	/* Get the pointer to the I/O APIC. */
 	volatile uint32_t *ioapic = (volatile uint32_t *)IOAPIC_ADDR;
-	/* Allocat base memory for the MP tables. */
-	mp_bundle_union_t *u = bmem_alloc(sizeof(mp_bundle_t), PARA_SIZE);
 	/*
-	 * Fill in the EBDA length.  FIXME: allow the EBDA to hold more than
-	 * just the MP tables.
+	 * Allocate base memory for the MP tables, which will go into a
+	 * temporary Extended BIOS Data Area (EBDA).  The MP tables are
+	 * expected to be used only at boot time, not run time.
 	 */
+	mp_bundle_union_t *u = bmem_alloc_boottime(sizeof(mp_bundle_t),
+						   PARA_SIZE);
+	/* Fill in the length of the temporary EBDA. */
 	u->s.ebda_kib = 1;
 	memset(u->s.ebda_reserved, 0, 15);
 	/* Fill up the MP floating pointer structure. */
 	Print(u"placing MP tables @0x%x\r\n", (uintptr_t)u);
-	memcpy(u->s.flt.sig, flt_sig, sizeof flt_sig);
+	u->s.flt.sig = MAGIC32('_', 'M', 'P', '_');
 	u->s.flt.mp_conf_addr = (uint32_t)(uintptr_t)&u->s.conf;
 	u->s.flt.len = sizeof(u->s.flt);
 	u->s.flt.spec_rev = 4;
@@ -529,7 +552,7 @@ static void fake_mp_table(void)
 	 * Fill up the MP configuration table header (except for the
 	 * checksum).
 	 */
-	memcpy(u->s.conf.sig, conf_sig, sizeof conf_sig);
+	u->s.conf.sig = MAGIC32('P', 'C', 'M', 'P');
 	u->s.conf.base_tbl_len = sizeof(u->s.conf) + sizeof(u->s.cpu) +
 				 sizeof(u->s.ioapic);
 	u->s.conf.spec_rev = 4;
@@ -563,8 +586,8 @@ static void fake_mp_table(void)
 	update_cksum(u->b + offsetof(mp_bundle_t, conf),
 		     sizeof(u->s.conf) + sizeof(u->s.cpu) +
 		     sizeof(u->s.ioapic), &u->s.conf.cksum);
-	/* Set the EBDA segment. */
-	ebda_seg = (uint16_t)((uintptr_t)u / PARA_SIZE);
+	/* Set the temporary EBDA segment. */
+	temp_ebda_seg = (uint16_t)((uintptr_t)u / PARA_SIZE);
 }
 #endif
 
@@ -606,6 +629,7 @@ EFI_STATUS efi_main(EFI_HANDLE image_handle, EFI_SYSTEM_TABLE *system_table)
 #endif
 	base_kib = bmem_fini();
 	prepare_to_hand_over(image_handle);
-	run_stage2(entry, trampoline, base_kib, ebda_seg, vga_pci_locn);
+	run_stage2(entry, trampoline, base_kib, temp_ebda_seg, vga_pci_locn,
+	    vga_orom_copy_seg);
 	return 0;
 }

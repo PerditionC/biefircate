@@ -42,7 +42,7 @@
 
 /* MP floating pointer structure. */
 typedef struct __attribute__((packed)) {
-	char sig[4];			/* "_MP_" signature */
+	uint32_t sig;			/* "_MP_" signature */
 	uint32_t mp_conf_addr;		/* addr. of MP conf. table */
 	uint8_t len;			/* length of this table */
 	uint8_t spec_rev;		/* MP spec. ver. no. */
@@ -54,7 +54,7 @@ typedef struct __attribute__((packed)) {
 
 /* MP configuration table header. */
 typedef struct __attribute__((packed)) {
-	char sig[4];			/* "PCMP" signature */
+	uint32_t sig;			/* "PCMP" signature */
 	uint16_t base_tbl_len;		/* length of base conf. table */
 	uint8_t spec_rev;		/* MP spec. ver. no. */
 	uint8_t cksum;			/* checksum */

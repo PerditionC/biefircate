@@ -33,15 +33,18 @@ run_stage2:
 	; ecx = ELF entry point for stage 2
 	; edx -> space for 32-bit trampoline
 	; r8d = size of base memory block starting at address 0, in KiB
-	; r9d = segment of EBDA
+	; r9d = real mode segment of temporary EBDA
 	; [rsp+8+0x20] = VGA controller's PCI locn. (<bus, device, function>)
+	; [rsp+8+0x28] = real mode seg. of copy of VGA controller's option ROM
 	cli
 	mov	eax, [rsp+8+0x20]	; get VGA's PCI location
+	mov	ebx, [rsp+8+0x28]	; get VGA option ROM address
 	lea	esp, [edx+0x1000]	; switch to new stack
-	push	rax			; push VGA's PCI location
+	push	rax			; push VGA's PCI locn. & opt. ROM addr.
+	mov	[esp+4], ebx
 	mov	ecx, ecx		; push ELF32 entry point
 	push	rcx
-	push	r8			; push base mem. size & EBDA seg.
+	push	r8			; push base mem. size & temp. EBDA seg.
 	mov	[esp+4], r9d
 	xor	edi, edi		; clear the real mode interrupt
 	mov	ecx, 0x0600/8		; vector table & BIOS data area
@@ -56,7 +59,7 @@ run_stage2:
 	retq				; jump to trampoline
 
 	align	8
-LB:					; start of trampoline to copy
+LB:					; <<< start of trampoline to copy >>>
 	lgdt	[Lpm32_gdtr-LE+rdi]	; go to 32-bit protected mode
 	push	8
 	lea	rdi, [Lpm32-LE+rdi]
@@ -106,5 +109,5 @@ Lpm32_gdt equ	$-8
 	dq	0x00cf92000000ffff	; 32-bit protected mode data seg.
 Lpm32_gdt_end:
 
-LE:					; end of trampoline to copy; must be
-					; 8-byte aligned w.r.t. LB
+LE:					; <<< end of trampoline to copy >>>
+					; must be 8-byte aligned w.r.t. LB

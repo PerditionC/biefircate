@@ -45,7 +45,6 @@
  * through this module instead of going directly to UEFI.
  */
 
-#define BMEM_MAX_ADDR	0x100000ULL
 #define MAX_BMEM_BLKS	(BMEM_MAX_ADDR / EFI_PAGE_SIZE / 2)
 
 typedef struct {
@@ -60,6 +59,13 @@ static blk_info_t blk[MAX_BMEM_BLKS];
  * 0 that will be available at run time.
  */
 static UINT32 runtime_bmem_top = 0;
+
+/* Check if we have enough base memory left. */
+static void bmem_check_enough(void)
+{
+	if (runtime_bmem_top < 192 * KIBYTE)
+		error(u"not enough base mem.!");
+}
 
 /* Initialize base memory allocation. */
 void bmem_init(void)
@@ -92,10 +98,14 @@ void bmem_init(void)
 		}
 		page_count /= 2;
 	} while (page_count);
-	/* Group the available base memory into blocks for ease of tracking. */
+	/*
+	 * Group the available base memory into blocks for ease of tracking. 
+	 * Do not count the page at address 0, even if we successfull
+	 * allocated it.
+	 */
 	Output(u"avail. base mem. blocks:");
 	start = BMEM_MAX_ADDR;
-	for (idx = 0; idx < BMEM_MAX_ADDR / EFI_PAGE_SIZE; ++idx) {
+	for (idx = 1; idx < BMEM_MAX_ADDR / EFI_PAGE_SIZE; ++idx) {
 		if (bvec_test(&avail, idx)) {
 			if (start == BMEM_MAX_ADDR)
 				start = (UINT32)idx * EFI_PAGE_SIZE;
@@ -161,11 +171,12 @@ void bmem_init(void)
 	if (idx < (192 * KIBYTE) / EFI_PAGE_SIZE)
 		error(u"not enough base mem.!");
 	runtime_bmem_top = (UINT32)idx * EFI_PAGE_SIZE;
+	bmem_check_enough();
 }
 
 /*
- * Allocate base memory.  `align' gives the requested alignment, which should
- * be a power of 2.
+ * Allocate base memory for use at run time.  `align' gives the requested
+ * alignment, which should be a power of 2.
  */
 void *bmem_alloc(UINTN size, UINTN align)
 {
@@ -197,10 +208,49 @@ void *bmem_alloc(UINTN size, UINTN align)
 	error(u"cannot alloc. from base mem.!");
 }
 
+/*
+ * Allocate base memory, but only for use at boot time.  This is mainly used
+ * for boot parameters & other information which are to be consumed by the
+ * stage 2 bootloader at startup.  `align' gives the requested alignment,
+ * which should be a power of 2.
+ */
+void *bmem_alloc_boottime(UINTN size, UINTN align)
+{
+	UINTN blk_idx;
+	/* Try to allocate from lower-addressed blocks first. */
+	for (blk_idx = 0; blk_idx < num_blks; ++blk_idx) {
+		UINT32 bstart = blk[blk_idx].start, bend = blk[blk_idx].end;
+		UINT32 astart, aend;
+		if (bend - bstart < size)
+			continue;
+		astart = (bstart + (UINT32)align - 1) & -(UINT32)align;
+		if (astart > bend)
+			continue;
+		if (bend - astart < size)
+			continue;
+		if (astart > runtime_bmem_top)
+			error(u"cannot alloc. for boot time from base mem.!");
+		/* Success! */
+		aend = astart + size;
+		if (aend != bend)
+			blk[blk_idx].start = aend;
+		else {
+			while (blk_idx < num_blks - 1) {
+				blk[blk_idx] = blk[blk_idx + 1];
+				++blk_idx;
+			}
+			--num_blks;
+		}
+		return (void *)(EFI_PHYSICAL_ADDRESS)astart;
+	}
+	error(u"cannot alloc. for boot time from base mem.!");
+}
+
 /* Wrap up base memory allocation. */
 unsigned bmem_fini(void)
 {
 	UINT32 top = runtime_bmem_top & -KIBYTE;
 	Print(u"base mem. blk. @0 ends at @0x%x\r\n", top);
+	bmem_check_enough();
 	return top / KIBYTE;
 }

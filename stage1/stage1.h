@@ -33,11 +33,13 @@
 #define GNU_EFI_USE_MS_ABI
 #include <efi.h>
 #include <efilib.h>
+#include <inttypes.h>
 
 /* bmem.c functions. */
 
 extern void bmem_init(void);
 extern void *bmem_alloc(UINTN, UINTN);
+extern void *bmem_alloc_boottime(UINTN, UINTN);
 extern unsigned bmem_fini(void);
 
 /* util.c functions. */
@@ -51,6 +53,8 @@ extern EFI_MEMORY_DESCRIPTOR *get_mem_map(UINTN *, UINTN *, UINTN *);
 
 #define PARA_SIZE	0x10UL		/* no. of bytes in a paragraph */
 #define KIBYTE		1024UL		/* no. of bytes in a KiB */
+#define BMEM_MAX_ADDR	0x100000ULL	/* end of base memory, i.e. the
+					   1 MiB mark */
 
 /* Define a bit vector type for storing the given number of bits. */
 #define BVEC_TYPE(num_ents) \
@@ -88,5 +92,12 @@ static inline void bvec_clear(void *bvec, UINT32 idx)
 	     (ent_iter); \
 	     --(ent_iter), \
 	     (desc) = (EFI_MEMORY_DESCRIPTOR *)((char *)(desc) + (desc_sz)))
+
+/* Fabricate a 32-bit magic number from 4 characters. */
+#define MAGIC32(a, b, c, d) \
+	((uint32_t)(unsigned char)(a)	    | \
+	 (uint32_t)(unsigned char)(b) <<  8 | \
+	 (uint32_t)(unsigned char)(c) << 16 | \
+	 (uint32_t)(unsigned char)(d) << 24)
 
 #endif

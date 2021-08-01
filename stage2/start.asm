@@ -75,9 +75,12 @@ cont:
 	mov	ss, ax
 	mov	fs, ax
 	mov	gs, ax
+	mov	ax, [ebp+8]		; plug in VGA option ROM segment
+	mov	[cs:orom_seg-LB], ax
 	mov	ax, [ebp+4]		; get VGA controller's PCI locn.
 	xor	bx, bx			; clear PnP card select no. (?)
-	call	0x1000:3		; call the option ROM code
+	call	0:3			; call the option ROM code
+orom_seg equ	$-2
 	mov	ax, 0x0003		; try to set 80 * 25 screen mode
 	int	0x10
 	hlt				; snooze
