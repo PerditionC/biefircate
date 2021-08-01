@@ -98,7 +98,20 @@ find:
 orom_seg equ	$-2
 	mov	ax, 0x0003		; try to set 80 * 25 screen mode
 	int	0x10
+	mov	si, msg-LB
+say:
+	cs lodsb
+	test	al, al
+	jz	stop
+	mov	ah, 0xe
+	mov	bx, 0x0007
+	int	0x10
+	jmp	say
+stop:
+	cli
 	hlt				; snooze
+
+msg:	db	"Hello world from int 0x10!", 13, 10, 0
 
 	align	16
 LE:
