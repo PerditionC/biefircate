@@ -52,7 +52,7 @@ typedef struct {
 } blk_info_t;
 
 /* Variables to keep track of available base memory blocks. */
-static UINTN num_blks = 0;
+static UINT32 num_blks = 0;
 static blk_info_t blk[MAX_BMEM_BLKS];
 /*
  * Variable to keep track of the start of base memory that is available at
@@ -155,6 +155,7 @@ void bmem_init(void)
 		    case EfiLoaderData:
 		    case EfiBootServicesCode:
 		    case EfiBootServicesData:
+		    case EfiConventionalMemory:
 			start = desc->PhysicalStart;
 			if (start >= BMEM_MAX_ADDR)
 				break;

@@ -43,6 +43,9 @@ extern void run_stage2(Elf32_Addr entry, Elf32_Addr trampoline,
 		       unsigned base_kib, uint16_t temp_ebda_seg,
 		       bparm_t *bparm);
 
+static EFI_GUID gEfiFirmwareVolume2ProtocolGuid =
+		    { 0x220e73b6, 0x6bdb, 0x4413,
+		      { 0x84, 0x05, 0xb9, 0x74, 0xb1, 0x08, 0x61, 0x9a } };
 static BOOLEAN secure_boot_p = FALSE;
 static EFI_HANDLE boot_media_handle;
 static uint16_t temp_ebda_seg = 0;
@@ -91,6 +94,18 @@ static void test_if_secure_boot(void)
 	Print(u"secure boot: %s\r\n", secure_boot_p ? u"yes" : u"no");
 }
 
+static void find_efi_fvs(void)
+{
+	EFI_HANDLE *handles;
+	UINTN num_handles;
+	EFI_STATUS status = LibLocateHandle(ByProtocol,
+	    &gEfiFirmwareVolume2ProtocolGuid, NULL, &num_handles, &handles);
+	if (EFI_ERROR(status) || !num_handles)
+		Output(u"no EFI firmware volumes avail.?\r\n");
+	Print(u"EFI firmware volumes: %lu\r\n", num_handles);
+	FreePool(handles);
+}
+
 static bool enable_legacy_vga(EFI_PCI_IO_PROTOCOL *io, UINT32 class_if,
 			      UINT64 attrs, UINT64 supports, UINT64 *p_enables)
 {
@@ -105,7 +120,7 @@ static bool enable_legacy_vga(EFI_PCI_IO_PROTOCOL *io, UINT32 class_if,
 		return false;
 	}
 	if (!io->RomImage)
-		Output(u"    VGA/XGA device lacks option ROM?");
+		error(u"VGA/XGA device lacks option ROM?");
 	switch (supports & (EFI_PCI_ATTRIBUTE_VGA_MEMORY |
 			    EFI_PCI_ATTRIBUTE_VGA_IO |
 			    EFI_PCI_ATTRIBUTE_VGA_IO_16)) {
@@ -151,6 +166,8 @@ static uint16_t put_opt_rom_in_bmem(EFI_PCI_IO_PROTOCOL *io)
 {
 	void *orom = io->RomImage, *orom_copy;
 	UINT64 sz = io->RomSize;
+	if (!sz || !orom)
+		return 0;
 	if (sz < BMEM_MAX_ADDR &&
 	    (uintptr_t)orom <= BMEM_MAX_ADDR - sz &&
 	    (uintptr_t)orom % (2 * KIBYTE) == 0) {
@@ -220,11 +237,11 @@ static bool process_one_pci_io(EFI_PCI_IO_PROTOCOL *io, bool try_enable_vga)
 	    enable_legacy_vga(io, class_if, attrs, supports, &enables)) {
 		got_vga = true;
 		attrs |= enables;
-		Print(u" VGA -> 0x%lx%c\r\n", attrs & 0xffffffULL,
+		Print(u" VGA -> 0x%lx%c", attrs & 0xffffffULL,
 		    attrs & ~0xffffffULL ? u'+' : u' ');
-		bd->orom_seg = put_opt_rom_in_bmem(io);
 	} else
 		Output(u"\r\n");
+	bd->orom_seg = put_opt_rom_in_bmem(io);
 	/* Enumerate all BAR values. */
 	status = io->Pci.Read(io, EfiPciIoWidthUint32, 4 * sizeof(UINT32),
 	    6, pci_conf);
@@ -280,7 +297,7 @@ static void process_pci(void)
 	bool got_vga = false;
 	EFI_STATUS status = LibLocateHandle(ByProtocol,
 	    &gEfiPciIoProtocolGuid, NULL, &num_handles, &handles);
-	if (EFI_ERROR(status))
+	if (EFI_ERROR(status) || !num_handles)
 	        error_with_status(u"no PCI devices found", status);
 	Print(u"PCI devices: %lu\r\n"
 	       "  locn.        PCI id.   class+IF ROM sz.   "
@@ -640,6 +657,7 @@ EFI_STATUS efi_main(EFI_HANDLE image_handle, EFI_SYSTEM_TABLE *system_table)
 	process_efi_conf_tables();
 	find_boot_media();
 	test_if_secure_boot();
+	find_efi_fvs();
 	process_pci();
 	trampoline = alloc_trampoline();
 	entry = load_stage2();

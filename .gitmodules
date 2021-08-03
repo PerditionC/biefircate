@@ -1,6 +1,6 @@
 [submodule "lolwutconf"]
 	path = lolwutconf
-	url = https://github.com/tkchia/lolwutconf.git
+	url = https://gitlab.com/tkchia/lolwutconf.git
 [submodule "gnu-efi"]
 	path = gnu-efi
 	url = https://git.code.sf.net/p/gnu-efi/code
