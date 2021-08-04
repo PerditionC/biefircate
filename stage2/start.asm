@@ -91,11 +91,13 @@ find:
 	jnz	next
 	mov	cx, [ebp+0x1c]
 	jcxz	next
-	mov	[cs:orom_seg-LB], cx	; plug in VGA option ROM segment
+	mov	[cs:orom_seg_1-LB], cx	; plug in VGA option ROM segment
+	mov	[cs:orom_seg_2-LB], cx
 	mov	ax, [ebp+0x10]		; get VGA controller's PCI locn.
-	xor	bx, bx			; clear PnP card select no. (?)
+	mov	bx, 0			; set the dest. seg. for the opt. ROM
+orom_seg_1 equ	$-2
 	call	0:3			; call the option ROM code
-orom_seg equ	$-2
+orom_seg_2 equ	$-2
 	mov	ax, 0x0003		; try to set 80 * 25 screen mode
 	int	0x10
 	mov	si, msg-LB

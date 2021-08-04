@@ -46,7 +46,9 @@ typedef struct __attribute__((packed)) {
 	uint32_t class_if;		/* class, subclass, prog. IF, &
 					   rev. id. */
 	uint16_t orom_seg;		/* real mode segment where option ROM
-					   is (or has been copied to) */
+					   is (or has been copied to); 0 if
+					   no option ROM */
+	uint16_t orom_sz_m1;		/* option ROM size minus 1 */
 } bdat_pci_dev_t;
 
 /*

@@ -114,13 +114,14 @@ static bool enable_legacy_vga(EFI_PCI_IO_PROTOCOL *io, UINT32 class_if,
 	*p_enables = 0;
 	switch (class_if & 0xffff0000UL) {
 	    case 0x03000000:  /* VGA */
+		Output(u" VGA");
+		break;
 	    case 0x03010000:  /* XGA */
+		Output(u" XGA");
 		break;
 	    default:
 		return false;
 	}
-	if (!io->RomImage)
-		error(u"VGA/XGA device lacks option ROM?");
 	switch (supports & (EFI_PCI_ATTRIBUTE_VGA_MEMORY |
 			    EFI_PCI_ATTRIBUTE_VGA_IO |
 			    EFI_PCI_ATTRIBUTE_VGA_IO_16)) {
@@ -162,34 +163,43 @@ static uint16_t ptr_to_rm_seg(void *p)
 	return addr_to_rm_seg((uintptr_t)p);
 }
 
-static uint16_t put_opt_rom_in_bmem(EFI_PCI_IO_PROTOCOL *io)
+static void put_opt_rom_in_bmem(bdat_pci_dev_t *bd, EFI_PCI_IO_PROTOCOL *io)
 {
 	void *orom = io->RomImage, *orom_copy;
 	UINT64 sz = io->RomSize;
+	bd->orom_seg = bd->orom_sz_m1 = 0;
 	if (!sz || !orom)
-		return 0;
+		return;
+	if (sz > 64 * KIBYTE) {
+		Print(u"    option ROM too large, skipping\r\n");
+		return;
+	}
 	if (sz < BMEM_MAX_ADDR &&
 	    (uintptr_t)orom <= BMEM_MAX_ADDR - sz &&
-	    (uintptr_t)orom % (2 * KIBYTE) == 0) {
+	    (uintptr_t)orom % (2 * KIBYTE) == 0)
+	{
 		Print(u"    option ROM: @0x%lx\r\n", orom);
-		return ptr_to_rm_seg(orom);
+		bd->orom_seg = ptr_to_rm_seg(orom);
+		bd->orom_sz_m1 = sz - 1;
 	}
 	orom_copy = bmem_alloc(sz, 2 * KIBYTE);
 	memcpy(orom_copy, orom, sz);
 	Print(u"    option ROM: @0x%lx (copied from @0x%lx)\r\n",
 	    orom_copy, orom);
-	return ptr_to_rm_seg(orom_copy);
+	bd->orom_seg = ptr_to_rm_seg(orom_copy);
+	bd->orom_sz_m1 = sz - 1;
 }
 
-static bool process_one_pci_io(EFI_PCI_IO_PROTOCOL *io, bool try_enable_vga)
+static bdat_pci_dev_t *process_one_pci_io(EFI_PCI_IO_PROTOCOL *io,
+					  bool try_enable_vga)
 {
 	UINTN seg, bus, dev, fn;
 	UINT64 attrs, supports, enables;
 	UINT32 pci_conf[6];  /* buffer for PCI id. etc., & for BARs */
 	UINT32 pci_id, class_if;
-	bool got_vga = false, got_bar = false;
+	bool got_bar = false;
 	unsigned idx;
-	bdat_pci_dev_t *bd;
+	bdat_pci_dev_t *bd, *vga = NULL;
 	EFI_STATUS status = io->GetLocation(io, &seg, &bus, &dev, &fn);
 	if (EFI_ERROR(status))
 		error_with_status(u"cannot get PCI ctrlr. locn.", status);
@@ -227,21 +237,20 @@ static bool process_one_pci_io(EFI_PCI_IO_PROTOCOL *io, bool try_enable_vga)
 	bd->pci_locn = seg << 16 | bus << 8 | dev << 3 | fn;
 	bd->pci_id = pci_id;
 	bd->class_if = class_if;
-	bd->orom_seg = 0;
 	/*
-	 * If this is a VGA or XGA display controller, try to enable
-	 * the legacy memory & I/O port locations for the controller.
-	 * Also remember the device's location.
+	 * If this is a VGA or XGA display controller, try to enable the
+	 * legacy memory & I/O port locations for the controller.  Also
+	 * remember the device's location.
 	 */
 	if (try_enable_vga &&
 	    enable_legacy_vga(io, class_if, attrs, supports, &enables)) {
-		got_vga = true;
+		vga = bd;
 		attrs |= enables;
-		Print(u" VGA -> 0x%lx%c", attrs & 0xffffffULL,
+		Print(u" -> 0x%lx%c", attrs & 0xffffffULL,
 		    attrs & ~0xffffffULL ? u'+' : u' ');
-	} else
-		Output(u"\r\n");
-	bd->orom_seg = put_opt_rom_in_bmem(io);
+	}
+	Output(u"\r\n");
+	put_opt_rom_in_bmem(bd, io);
 	/* Enumerate all BAR values. */
 	status = io->Pci.Read(io, EfiPciIoWidthUint32, 4 * sizeof(UINT32),
 	    6, pci_conf);
@@ -287,14 +296,14 @@ static bool process_one_pci_io(EFI_PCI_IO_PROTOCOL *io, bool try_enable_vga)
 	}
 	if (got_bar)
 		Output(u"\r\n");
-	return got_vga;
+	return vga;
 }
 
 static void process_pci(void)
 {
 	EFI_HANDLE *handles;
 	UINTN num_handles, idx;
-	bool got_vga = false;
+	bdat_pci_dev_t *vga = NULL;
 	EFI_STATUS status = LibLocateHandle(ByProtocol,
 	    &gEfiPciIoProtocolGuid, NULL, &num_handles, &handles);
 	if (EFI_ERROR(status) || !num_handles)
@@ -310,11 +319,17 @@ static void process_pci(void)
 		if (EFI_ERROR(status))
 			error_with_status(u"cannot get EFI_PCI_IO_PROTOCOL",
 			    status);
-		got_vga |= process_one_pci_io(io, !got_vga);
+		if (!vga)
+			vga = process_one_pci_io(io, true);
+		else
+			process_one_pci_io(io, false);
 	}
 	FreePool(handles);
-	if (!got_vga)
+	if (!vga)
 		error(u"no usable VGA/XGA controller?");
+	if (!vga->orom_seg)
+		error(u"VGA/XGA device lacks option ROM?");
+		/* TODO: fish out suitable option ROM from firmware volumes */
 }
 
 static Elf32_Addr alloc_trampoline(void)
@@ -329,8 +344,9 @@ static Elf32_Addr alloc_trampoline(void)
 	return (Elf32_Addr)addr;
 }
 
-#define STAGE2		u"biefist2.sys"
-#define STAGE2_ALT	u"kernel.sys"
+#define STAGE2		u"EFI\\biefirc\\stage2.sys"
+#define STAGE2_ALT	u"biefist2.sys"
+#define STAGE2_ALT_ALT	u"kernel.sys"
 
 static void dump_stage2_info(EFI_FILE_PROTOCOL *prog, CONST CHAR16 *name)
 {
@@ -403,6 +419,10 @@ static Elf32_Addr load_stage2(void)
 	status = vol->Open(vol, &prog, name, EFI_FILE_MODE_READ, 0);
 	if (EFI_ERROR(status)) {
 		name = STAGE2_ALT;
+		status = vol->Open(vol, &prog, name, EFI_FILE_MODE_READ, 0);
+	}
+	if (EFI_ERROR(status)) {
+		name = STAGE2_ALT_ALT;
 		status = vol->Open(vol, &prog, name, EFI_FILE_MODE_READ, 0);
 	}
 	if (EFI_ERROR(status)) {
