@@ -57,21 +57,22 @@ QEMUFLAGS = -m 224m -serial stdio
 QEMUFLAGSXV6 = $(QEMUFLAGS) -hdb xv6/fs.img
 
 ifneq "" "$(SBSIGN_MOK)"
-LOADER = loader.signed.efi
+STAGE1 = stage1.signed.efi
 else
-LOADER = loader.efi
+STAGE1 = stage1.efi
 endif
+STAGE2 = stage2.sys
 
-default: $(LOADER) biefist2.sys hd.img romdumper.efi
+default: $(STAGE1) $(STAGE2) hd.img romdumper.efi
 .PHONY: default
 
 ifneq "" "$(SBSIGN_MOK)"
-loader.signed.efi: loader.efi
+stage1.signed.efi: stage1.efi
 	sbsign --key $(SBSIGN_MOK:=.key) --cert $(SBSIGN_MOK:=.crt) \
 	       --output $@ $<
 endif
 
-loader.efi: stage1/main.o stage1/bmem.o stage1/bparm.o stage1/run-stage2.o \
+stage1.efi: stage1/main.o stage1/bmem.o stage1/bparm.o stage1/run-stage2.o \
 	    stage1/util.o
 	$(CC) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
@@ -91,7 +92,7 @@ romdumper.o: romdumper.c $(LIBEFI)
 
 stage1/main.o romdumper.o : CPPFLAGS += -DVERSION='"$(conf_Pkg_ver)"'
 
-biefist2.sys: stage2/start.o
+$(STAGE2): stage2/start.o
 	$(CC2) $(LDFLAGS2) -o $@ $^ $(LDLIBS2)
 
 stage2/%.o: stage2/%.asm
@@ -119,21 +120,21 @@ endif
 	$(MAKE) -C xv6 kernel fs.img
 	>$@
 
-hd.img: $(LOADER) biefist2.sys
+hd.img: $(STAGE1) $(STAGE2)
 	$(RM) $@.tmp
 	dd if=/dev/zero of=$@.tmp bs=1048576 count=32
 	echo start=32K type=0B bootable | sfdisk $@.tmp
 	mkdosfs -v -F16 --offset 64 $@.tmp
-	mmd -i $@.tmp@@32K ::/EFI ::/EFI/BOOT
+	mmd -i $@.tmp@@32K ::/EFI ::/EFI/BOOT ::/EFI/biefirc
 	mcopy -i $@.tmp@@32K $< ::/EFI/BOOT/bootx64.efi
-	mcopy -i $@.tmp@@32K biefist2.sys ::/biefist2.sys
+	mcopy -i $@.tmp@@32K $(STAGE2) ::/EFI/biefirc/
 	mv $@.tmp $@
 
 hd.vdi: hd.img
 	qemu-img convert $< -O vdi $@.tmp
 	mv $@.tmp $@
 
-hd-xv6.img: $(LOADER) xv6.stamp
+hd-xv6.img: $(STAGE1) xv6.stamp
 	$(RM) $@.tmp
 	dd if=/dev/zero of=$@.tmp bs=1048576 count=32
 	echo start=32K type=0B bootable | sfdisk $@.tmp
