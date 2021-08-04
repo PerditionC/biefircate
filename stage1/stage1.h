@@ -36,6 +36,7 @@
 #include <inttypes.h>
 #include <stdbool.h>
 #include "bparm.h"
+#include "elf.h"
 
 /* bmem.c functions. */
 
@@ -55,6 +56,16 @@ extern __attribute__((noreturn)) void error_with_status(IN CONST CHAR16 *,
 							EFI_STATUS);
 extern __attribute__((noreturn)) void error(IN CONST CHAR16 *);
 extern EFI_MEMORY_DESCRIPTOR *get_mem_map(UINTN *, UINTN *, UINTN *);
+
+/* pci.h functions. */
+
+extern void process_pci(void);
+
+/* run-stage2.asm functions. */
+
+extern void run_stage2(Elf32_Addr entry, Elf32_Addr trampoline,
+		       unsigned base_kib, uint16_t temp_ebda_seg,
+		       bparm_t *bparm);
 
 /* Macros, inline functions, & other definitions. */
 
@@ -88,6 +99,21 @@ static inline void bvec_clear(void *bvec, UINT32 idx)
 {
 	__asm volatile("btrl %1, %a0"
 	    : : "p" (bvec), "r" (idx) : "cc", "memory");
+}
+
+/*
+ * Convert a paragraph-aligned real mode linear address to a real mode
+ * segment value.
+ */
+static inline uint16_t addr_to_rm_seg(uintptr_t p)
+{
+	return (uint16_t)(p / PARA_SIZE);
+}
+
+/* Ditto. */
+static inline uint16_t ptr_to_rm_seg(void *p)
+{
+	return addr_to_rm_seg((uintptr_t)p);
 }
 
 /*
