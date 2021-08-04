@@ -72,8 +72,8 @@ stage1.signed.efi: stage1.efi
 	       --output $@ $<
 endif
 
-stage1.efi: stage1/main.o stage1/bmem.o stage1/bparm.o stage1/pci.o \
-	    stage1/run-stage2.o stage1/util.o
+stage1.efi: stage1/main.o stage1/bmem.o stage1/bparm.o stage1/fv.o \
+	    stage1/pci.o stage1/run-stage2.o stage1/util.o
 	$(CC) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
 stage1/%.o: stage1/%.c $(LIBEFI)

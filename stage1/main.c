@@ -37,12 +37,15 @@
 extern EFI_HANDLE LibImageHandle;
 extern EFI_GUID gEfiLoadedImageProtocolGuid, gEfiGlobalVariableGuid;
 
-static EFI_GUID gEfiFirmwareVolume2ProtocolGuid =
-		    { 0x220e73b6, 0x6bdb, 0x4413,
-		      { 0x84, 0x05, 0xb9, 0x74, 0xb1, 0x08, 0x61, 0x9a } };
 static BOOLEAN secure_boot_p = FALSE;
 static EFI_HANDLE boot_media_handle;
 static uint16_t temp_ebda_seg = 0;
+
+static void init(void)
+{
+	bmem_init();
+	fv_init();
+}
 
 static void process_efi_conf_tables(void)
 {
@@ -86,18 +89,6 @@ static void test_if_secure_boot(void)
 	if (!EFI_ERROR(status) && data)
 		secure_boot_p = TRUE;
 	Print(u"secure boot: %s\r\n", secure_boot_p ? u"yes" : u"no");
-}
-
-static void find_efi_fvs(void)
-{
-	EFI_HANDLE *handles;
-	UINTN num_handles;
-	EFI_STATUS status = LibLocateHandle(ByProtocol,
-	    &gEfiFirmwareVolume2ProtocolGuid, NULL, &num_handles, &handles);
-	if (EFI_ERROR(status) || !num_handles)
-		Output(u"no EFI firmware volumes avail.?\r\n");
-	Print(u"EFI firmware volumes: %lu\r\n", num_handles);
-	FreePool(handles);
 }
 
 static Elf32_Addr alloc_trampoline(void)
@@ -411,6 +402,8 @@ static unsigned prepare_to_hand_over(EFI_HANDLE image_handle)
 	UINTN num_entries = 0, map_key, desc_sz;
 	UINT32 desc_ver;
 	EFI_STATUS status;
+	/* Wrap up firmware volume handling. */
+	fv_fini();
 	/*
 	 * Wrap up base memory handling.  Add a boot parameter to tell the
 	 * bootloader about base memory availability at boot time & run time.
@@ -441,11 +434,10 @@ EFI_STATUS efi_main(EFI_HANDLE image_handle, EFI_SYSTEM_TABLE *system_table)
 	unsigned base_kib;
 	InitializeLib(image_handle, system_table);
 	Output(u".:. biefircate " VERSION " .:.\r\n");
-	bmem_init();
+	init();
 	process_efi_conf_tables();
 	find_boot_media();
 	test_if_secure_boot();
-	find_efi_fvs();
 	process_pci();
 	trampoline = alloc_trampoline();
 	entry = load_stage2();
