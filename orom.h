@@ -28,66 +28,50 @@
  */
 
 /*
- * Definitions for the boot protocol for passing information from the UEFI
- * bootloader to the stage 2 bootloader.
+ * Definitions for dealing with PC-AT compatible PCI option ROMs (a.k.a.
+ * expansion ROMs).
  *
  * This header file needs to work in both 32-bit & 64-bit compilation modes.
  */
 
-#ifndef H_BOOT_PARAM
-#define H_BOOT_PARAM
+#ifndef H_OROM
+#define H_OROM
 
 #include <inttypes.h>
 #include "common.h"
 
-/* "PCID" boot data, describing a single PCI device. */
+/* Option ROM header. */
 typedef struct __attribute__((packed)) {
-	uint32_t pci_locn;		/* PCI segment, bus, device, fn. */
+	uint16_t sig;			/* 0x55 0xaa signature */
+	uint8_t reserved[0x16];		/* reserved */
+	uint16_t pcir_off;		/* pointer to PCI Data Structure */
+} orom_hdr_t;
+
+/* PCI Data Structure. */
+typedef struct __attribute__((packed)) {
+	uint32_t sig;			/* "PCIR" signature */
 	uint32_t pci_id;		/* vendor & device id. */
-	uint32_t class_if;		/* class, subclass, prog. IF, &
-					   rev. id. */
-	uint16_t orom_seg;		/* real mode segment where option ROM
-					   is (or has been copied to); 0 if
-					   no option ROM */
-	uint16_t orom_flags;		/* flags describing the option ROM */
-	uint32_t orom_sz;		/* option ROM size */
-} bdat_pci_dev_t;
+	uint16_t dev_ids_off;		/* ptr. to list of more device ids. */
+	uint16_t pcir_sz;		/* size of this structure */
+	uint8_t pcir_rev;		/* PCI spec. revision level */
+	uint8_t class_if[3];		/* class code */
+	uint16_t orom_sz_hkib;		/* ROM image len. (0x200-byte units) */
+	uint16_t vendor_rev;		/* vendor revision level */
+	uint8_t type;			/* code type */
+	uint8_t flags;			/* last image indicator */
+	uint16_t max_rt_sz_hkib;	/* max. image len. at run time (0x200-
+					   -byte units) */
+	/* ... */
+} orom_pcir_t;
 
-/* bdat_pci_dev_t::orom_flags bit fields. */
-#define BD_PCI_OROM_PCI3 0x0001U	/* option ROM is PCI 3.0 compliant */
-
-/*
- * "bMEM" boot data, describing base memory availability at boot time &
- * run time.
- */
-typedef struct __attribute__((packed)) {
-	uint16_t boottime_bmem_bot_seg;	/* real mode seg. for start of
-					   base mem. avail. to stage 2 at
-					   boot time; stage 2 can free up
-					   the mem. at [0, boottime_bmem_bot
-					   * PARA_SIZE - 1) once it consumes
-					   boot params. */
-	uint16_t runtime_bmem_top_seg;	/* real mode seg. for end of base
-					   mem. avail. at run time */
-} bdat_bmem_t;
-
-/* Node type for linked list of boot parameters. */
-struct __attribute__((packed)) bparm {
-	struct bparm *next;	/* pointer to next boot param. node */
-#   ifndef __x86_64__
-	uint32_t reserved;
-#   endif
-	uint32_t type;			/* "PCID", etc. */
-	uint32_t size;			/* size of boot param. data only */
-	union {				/* boot param. data */
-		bdat_pci_dev_t pci_dev;
-		bdat_bmem_t bmem;
-	} u[];
-};
-
-typedef struct bparm bparm_t;
-
-#define BP_PCID		MAGIC32('P', 'C', 'I', 'D')
-#define BP_BMEM		MAGIC32('b', 'M', 'E', 'M')
+/* orom_pcir_t::sig value. */
+#define PCIR_SIG_PCIR		MAGIC32('P', 'C', 'I', 'R')
+/* orom_pcir_t::type values. */
+#define PCIR_TYP_PCAT		0x00	/* PC-AT compatible option ROM */
+#define PCIR_TYP_EFI		0x03	/* UEFI option ROM */
+/* orom_pcir_t::flags bit field. */
+#define PCIR_FLAGS_LAST_IMAGE	0x80U
+/* Minimum size of a PCI Data Structure. */
+#define PCIR_MIN_SZ		offsetof(orom_pcir_t, max_rt_sz_hkib)
 
 #endif

@@ -30,6 +30,7 @@
 #include <stdbool.h>
 #include <string.h>
 #include "stage1/stage1.h"
+#include "orom.h"
 
 static bool enable_legacy_vga(EFI_PCI_IO_PROTOCOL *io, UINT32 class_if,
 			      UINT64 attrs, UINT64 supports, UINT64 *p_enables)
@@ -78,31 +79,65 @@ static bool enable_legacy_vga(EFI_PCI_IO_PROTOCOL *io, UINT32 class_if,
 	return true;
 }
 
-static void put_opt_rom_in_bmem(bdat_pci_dev_t *bd, EFI_PCI_IO_PROTOCOL *io)
+static const orom_pcir_t *orom_find_pcir(const void *orom, uint64_t sz)
+{
+	const orom_hdr_t *hdr = orom;
+	uint16_t pcir_off, pcir_sz, orom_sz_hkib;
+	const orom_pcir_t *pcir;
+	if (sz < HKIBYTE)
+		return NULL;
+	if (hdr->sig != 0xaa55U)
+		return NULL;
+	pcir_off = hdr->pcir_off;
+	if (!pcir_off)
+		return NULL;
+	if (pcir_off > sz - PCIR_MIN_SZ)
+		return NULL;
+	pcir = (const orom_pcir_t *)((const char *)orom + pcir_off);
+	if (pcir->sig != PCIR_SIG_PCIR)
+		return NULL;
+	pcir_sz = pcir->pcir_sz;
+	if (pcir_sz < PCIR_MIN_SZ || pcir_sz > sz - pcir_off)
+		return NULL;
+	if (pcir->type != PCIR_TYP_PCAT) {
+		Print(u"    option ROM via EFI_PCI_IO_PROTOCOL not "
+			   "PC-AT compatible\r\n");
+		return NULL;
+	}
+	orom_sz_hkib = pcir->orom_sz_hkib;
+	if (!orom_sz_hkib || orom_sz_hkib > sz / HKIBYTE)
+		return NULL;
+	return pcir;
+}
+
+static void get_orom_from_pci_io(bdat_pci_dev_t *bd, EFI_PCI_IO_PROTOCOL *io)
 {
 	void *orom = io->RomImage, *orom_copy;
-	UINT64 sz = io->RomSize;
-	bd->orom_seg = bd->orom_sz_m1 = 0;
+	uint64_t sz = io->RomSize;
+	const orom_pcir_t *pcir;
+	bd->orom_seg = bd->orom_flags = bd->orom_sz = 0;
 	if (!sz || !orom)
 		return;
-	if (sz > 64 * KIBYTE) {
-		Print(u"    option ROM too large, skipping\r\n");
+	pcir = orom_find_pcir(orom, sz);
+	if (!pcir)
 		return;
-	}
-	if (sz < BMEM_MAX_ADDR &&
-	    (uintptr_t)orom <= BMEM_MAX_ADDR - sz &&
+	if (pcir->pcir_rev >= 3)
+		bd->orom_flags = BD_PCI_OROM_PCI3;
+	sz = (uint64_t)pcir->orom_sz_hkib * HKIBYTE;
+	if ((uintptr_t)orom <= BMEM_MAX_ADDR - sz &&
 	    (uintptr_t)orom % (2 * KIBYTE) == 0)
 	{
-		Print(u"    option ROM: @0x%lx\r\n", orom);
+		Print(u"    option ROM: @0x%lx~@0x%lx\r\n", orom,
+		    (char *)orom + sz - 1);
 		bd->orom_seg = ptr_to_rm_seg(orom);
-		bd->orom_sz_m1 = sz - 1;
+		bd->orom_sz = sz;
 	}
 	orom_copy = bmem_alloc(sz, 2 * KIBYTE);
 	memcpy(orom_copy, orom, sz);
-	Print(u"    option ROM: @0x%lx (copied from @0x%lx)\r\n",
-	    orom_copy, orom);
+	Print(u"    option ROM: @0x%lx~@0x%lx (copied from @0x%lx)\r\n",
+	    orom_copy, (char *)orom_copy + sz - 1, orom);
 	bd->orom_seg = ptr_to_rm_seg(orom_copy);
-	bd->orom_sz_m1 = sz - 1;
+	bd->orom_sz = sz;
 }
 
 static bdat_pci_dev_t *process_one_pci_io(EFI_PCI_IO_PROTOCOL *io,
@@ -165,7 +200,11 @@ static bdat_pci_dev_t *process_one_pci_io(EFI_PCI_IO_PROTOCOL *io,
 		    attrs & ~0xffffffULL ? u'+' : u' ');
 	}
 	Output(u"\r\n");
-	put_opt_rom_in_bmem(bd, io);
+	/*
+	 * TODO: if *io does not provide a usable option ROM, fish out a
+	 * suitable option ROM from firmware volumes.
+	 */
+	get_orom_from_pci_io(bd, io);
 	/* Enumerate all BAR values. */
 	status = io->Pci.Read(io, EfiPciIoWidthUint32, 4 * sizeof(UINT32),
 	    6, pci_conf);
@@ -244,5 +283,4 @@ void process_pci(void)
 		error(u"no usable VGA/XGA controller?");
 	if (!vga->orom_seg)
 		error(u"VGA/XGA device lacks option ROM?");
-		/* TODO: fish out suitable option ROM from firmware volumes */
 }

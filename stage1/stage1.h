@@ -50,6 +50,11 @@ extern void bmem_fini(uint32_t *, uint32_t *);
 extern void *bparm_add(uint32_t, uint32_t);
 extern bparm_t *bparm_get(void);
 
+/* fv.c functions. */
+
+extern void fv_init(void);
+extern void fv_fini(void);
+
 /* util.c functions. */
 
 extern __attribute__((noreturn)) void error_with_status(IN CONST CHAR16 *,
@@ -71,6 +76,7 @@ extern void run_stage2(Elf32_Addr entry, Elf32_Addr trampoline,
 
 #define PARA_SIZE	0x10UL		/* no. of bytes in a paragraph */
 #define KIBYTE		1024UL		/* no. of bytes in a KiB */
+#define HKIBYTE		(KIBYTE / 2)	/* no. of bytes in half a KiB */
 #define BMEM_MAX_ADDR	0x100000ULL	/* end of base memory, i.e. the
 					   1 MiB mark */
 

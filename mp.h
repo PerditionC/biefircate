@@ -39,6 +39,7 @@
 #define H_MP
 
 #include <inttypes.h>
+#include "common.h"
 
 /* MP floating pointer structure. */
 typedef struct __attribute__((packed)) {
