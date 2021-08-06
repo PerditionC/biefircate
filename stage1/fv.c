@@ -68,7 +68,7 @@ static void fv_add_hash_entry(uint32_t pci_id, uint32_t class_if,
 }
 
 static void fv_cache_rimg(const void *rimg, uint32_t sz,
-    const rimg_pcir_t *pcir, const void *rom_end)
+    const rimg_pcir_t *pcir)
 {
 	uint32_t class_if = (uint32_t)pcir->class_if[2] << 24 |
 			    (uint32_t)pcir->class_if[1] << 16 |
@@ -77,11 +77,12 @@ static void fv_cache_rimg(const void *rimg, uint32_t sz,
 	uint16_t vendor = pci_id_vendor(pci_id_0);
 	const uint16_t *dev_ids;
 	uint16_t dev;
+	const void *rimg_end = (const char *)rimg + sz;
 	void *rimg_copy = AllocatePool(sz);
 	if (!rimg_copy)
 		error(u"no mem. to cache ROM img.!");
 	memcpy(rimg_copy, rimg, sz);
-	dev_ids = rimg_pcir_find_dev_id_list(pcir, rom_end);
+	dev_ids = rimg_pcir_find_dev_id_list(pcir, rimg_end);
 	Print(u"      cache ROM img. @0x%lx~@0x%lx for %04x:%04x%s "
 		     "%02x %02x %02x\r\n",
 	    rimg_copy, (char *)rimg_copy + sz - 1,
@@ -103,7 +104,6 @@ static void fv_gather_rimgs_for_one_sxn(const void *rom, UINTN rom_sz,
     const EFI_GUID *p_guid, UINTN instance)
 {
 	const void *rom_left = rom;
-	const void *rom_end = (const uint8_t *)rom + rom_sz;
 	uint64_t rom_left_sz = rom_sz, found_sz = 0;
 	uint32_t this_sz;
 	const rimg_pcir_t *found_pcir = NULL, *pcir;
@@ -129,7 +129,7 @@ static void fv_gather_rimgs_for_one_sxn(const void *rom, UINTN rom_sz,
 		if ((pcir->flags & PCIR_FLAGS_LAST_IMAGE) != 0) {
 			if (found_rimg) {
 				fv_cache_rimg(found_rimg, found_sz,
-					      found_pcir, rom_end);
+					      found_pcir);
 				found_rimg = NULL;
 			}
 		}

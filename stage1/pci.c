@@ -79,41 +79,38 @@ static bool enable_legacy_vga(EFI_PCI_IO_PROTOCOL *io, UINT32 class_if,
 	return true;
 }
 
-const uint16_t *rimg_pcir_find_dev_ids(const rimg_pcir_t *pcir,
-    const void *rom_end)
-{
-	if (pcir->pcir_rev < 3)
-		return NULL;
-}
-
-const rimg_pcir_t *rimg_find_pcir(const void *rimg, uint64_t sz)
+const rimg_pcir_t *rimg_find_pcir(const void *rimg, uint64_t rom_sz)
 {
 	const rimg_hdr_t *hdr = rimg;
 	uint16_t pcir_off, pcir_sz, rimg_sz_hkib;
+	uint64_t rimg_sz;
 	const rimg_pcir_t *pcir;
-	if (sz < HKIBYTE)
+	if (rom_sz < HKIBYTE)
 		return NULL;
 	if (hdr->sig != 0xaa55U)
 		return NULL;
 	pcir_off = hdr->pcir_off;
 	if (!pcir_off)
 		return NULL;
-	if (pcir_off > sz - PCIR_MIN_SZ)
+	if (pcir_off > rom_sz - PCIR_MIN_SZ)
 		return NULL;
 	pcir = (const rimg_pcir_t *)((const char *)rimg + pcir_off);
 	if (pcir->sig != PCIR_SIG_PCIR)
 		return NULL;
 	pcir_sz = pcir->pcir_sz;
-	if (pcir_sz < PCIR_MIN_SZ || pcir_sz > sz - pcir_off)
+	if (pcir_sz < PCIR_MIN_SZ || pcir_sz > rom_sz - pcir_off)
 		return NULL;
 	rimg_sz_hkib = pcir->rimg_sz_hkib;
-	if (!rimg_sz_hkib || rimg_sz_hkib > sz / HKIBYTE)
+	if (!rimg_sz_hkib || rimg_sz_hkib > rom_sz / HKIBYTE)
+		return NULL;
+	rimg_sz = rimg_sz_hkib * HKIBYTE;
+	if (pcir_off > rimg_sz - PCIR_MIN_SZ || pcir_sz > rimg_sz - pcir_off)
 		return NULL;
 	return pcir;
 }
 
 const uint16_t *rimg_pcir_find_dev_id_list(const rimg_pcir_t *pcir,
-    const void *rom_end)
+    const void *rimg_end)
 {
 	/* FIXME: too much casting... */
 	const uint8_t *dev_ids, *p;
@@ -123,8 +120,8 @@ const uint16_t *rimg_pcir_find_dev_id_list(const rimg_pcir_t *pcir,
 		return NULL;
 	dev_ids = p = (const uint8_t *)pcir + pcir->dev_ids_off;
 	do {
-		if (p >= (const uint8_t *)rom_end ||
-		    p + 1 >= (const uint8_t *)rom_end) {
+		if (p >= (const uint8_t *)rimg_end ||
+		    p + 1 >= (const uint8_t *)rimg_end) {
 			warn(u"ROM image's Device List Pointer overshoots "
 			      "ROM end!  ignoring");
 			return NULL;
