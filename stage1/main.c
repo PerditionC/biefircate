@@ -57,13 +57,8 @@ static void process_efi_conf_tables(void)
 		const EFI_GUID *vguid = &cft->VendorGuid;
 		if (i % 2 == 0)
 			Output(u"\r\n");
-		Print(u"  %08x-%04x-%04x-%02x%02x-"
-			 "%02x%02x%02x%02x%02x%02x",
-		    vguid->Data1, (UINT32)vguid->Data2, (UINT32)vguid->Data3,
-		    (UINT32)vguid->Data4[0], (UINT32)vguid->Data4[1],
-		    (UINT32)vguid->Data4[2], (UINT32)vguid->Data4[3],
-		    (UINT32)vguid->Data4[4], (UINT32)vguid->Data4[5],
-		    (UINT32)vguid->Data4[6], (UINT32)vguid->Data4[7]);
+		Output(u"  ");
+		print_guid(vguid);
 	}
 	Output(u"\r\n");
 }

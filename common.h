@@ -27,13 +27,6 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-/*
- * Definitions for the boot protocol for passing information from the UEFI
- * bootloader to the stage 2 bootloader.
- *
- * This header file needs to work in both 32-bit & 64-bit compilation modes.
- */
-
 #ifndef H_COMMON
 #define H_COMMON
 

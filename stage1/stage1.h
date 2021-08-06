@@ -37,6 +37,7 @@
 #include <stdbool.h>
 #include "bparm.h"
 #include "elf.h"
+#include "pci.h"
 
 /* bmem.c functions. */
 
@@ -53,6 +54,7 @@ extern bparm_t *bparm_get(void);
 /* fv.c functions. */
 
 extern void fv_init(void);
+extern bool fv_find_rimg(uint32_t, uint32_t, void **, uint32_t *);
 extern void fv_fini(void);
 
 /* util.c functions. */
@@ -60,10 +62,14 @@ extern void fv_fini(void);
 extern __attribute__((noreturn)) void error_with_status(IN CONST CHAR16 *,
 							EFI_STATUS);
 extern __attribute__((noreturn)) void error(IN CONST CHAR16 *);
+extern void warn(IN CONST CHAR16 *);
+extern void print_guid(const EFI_GUID *);
 extern EFI_MEMORY_DESCRIPTOR *get_mem_map(UINTN *, UINTN *, UINTN *);
 
 /* pci.h functions. */
 
+extern const rimg_pcir_t *rimg_find_pcir(const void *, uint64_t);
+const uint16_t *rimg_pcir_find_dev_id_list(const rimg_pcir_t *, const void *);
 extern void process_pci(void);
 
 /* run-stage2.asm functions. */
@@ -131,12 +137,5 @@ static inline uint16_t ptr_to_rm_seg(void *p)
 	     (ent_iter); \
 	     --(ent_iter), \
 	     (desc) = (EFI_MEMORY_DESCRIPTOR *)((char *)(desc) + (desc_sz)))
-
-/* Fabricate a 32-bit magic number from 4 characters. */
-#define MAGIC32(a, b, c, d) \
-	((uint32_t)(unsigned char)(a)	    | \
-	 (uint32_t)(unsigned char)(b) <<  8 | \
-	 (uint32_t)(unsigned char)(c) << 16 | \
-	 (uint32_t)(unsigned char)(d) << 24)
 
 #endif

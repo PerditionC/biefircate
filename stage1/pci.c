@@ -30,7 +30,7 @@
 #include <stdbool.h>
 #include <string.h>
 #include "stage1/stage1.h"
-#include "orom.h"
+#include "pci.h"
 
 static bool enable_legacy_vga(EFI_PCI_IO_PROTOCOL *io, UINT32 class_if,
 			      UINT64 attrs, UINT64 supports, UINT64 *p_enables)
@@ -79,11 +79,18 @@ static bool enable_legacy_vga(EFI_PCI_IO_PROTOCOL *io, UINT32 class_if,
 	return true;
 }
 
-static const orom_pcir_t *orom_find_pcir(const void *orom, uint64_t sz)
+const uint16_t *rimg_pcir_find_dev_ids(const rimg_pcir_t *pcir,
+    const void *rom_end)
 {
-	const orom_hdr_t *hdr = orom;
-	uint16_t pcir_off, pcir_sz, orom_sz_hkib;
-	const orom_pcir_t *pcir;
+	if (pcir->pcir_rev < 3)
+		return NULL;
+}
+
+const rimg_pcir_t *rimg_find_pcir(const void *rimg, uint64_t sz)
+{
+	const rimg_hdr_t *hdr = rimg;
+	uint16_t pcir_off, pcir_sz, rimg_sz_hkib;
+	const rimg_pcir_t *pcir;
 	if (sz < HKIBYTE)
 		return NULL;
 	if (hdr->sig != 0xaa55U)
@@ -93,51 +100,88 @@ static const orom_pcir_t *orom_find_pcir(const void *orom, uint64_t sz)
 		return NULL;
 	if (pcir_off > sz - PCIR_MIN_SZ)
 		return NULL;
-	pcir = (const orom_pcir_t *)((const char *)orom + pcir_off);
+	pcir = (const rimg_pcir_t *)((const char *)rimg + pcir_off);
 	if (pcir->sig != PCIR_SIG_PCIR)
 		return NULL;
 	pcir_sz = pcir->pcir_sz;
 	if (pcir_sz < PCIR_MIN_SZ || pcir_sz > sz - pcir_off)
 		return NULL;
-	if (pcir->type != PCIR_TYP_PCAT) {
-		Print(u"    option ROM via EFI_PCI_IO_PROTOCOL not "
-			   "PC-AT compatible\r\n");
-		return NULL;
-	}
-	orom_sz_hkib = pcir->orom_sz_hkib;
-	if (!orom_sz_hkib || orom_sz_hkib > sz / HKIBYTE)
+	rimg_sz_hkib = pcir->rimg_sz_hkib;
+	if (!rimg_sz_hkib || rimg_sz_hkib > sz / HKIBYTE)
 		return NULL;
 	return pcir;
 }
 
-static void get_orom_from_pci_io(bdat_pci_dev_t *bd, EFI_PCI_IO_PROTOCOL *io)
+const uint16_t *rimg_pcir_find_dev_id_list(const rimg_pcir_t *pcir,
+    const void *rom_end)
 {
-	void *orom = io->RomImage, *orom_copy;
-	uint64_t sz = io->RomSize;
-	const orom_pcir_t *pcir;
-	bd->orom_seg = bd->orom_flags = bd->orom_sz = 0;
-	if (!sz || !orom)
+	/* FIXME: too much casting... */
+	const uint8_t *dev_ids, *p;
+	if (pcir->pcir_rev < 3)
+		return NULL;
+	if (!pcir->dev_ids_off)
+		return NULL;
+	dev_ids = p = (const uint8_t *)pcir + pcir->dev_ids_off;
+	do {
+		if (p >= (const uint8_t *)rom_end ||
+		    p + 1 >= (const uint8_t *)rom_end) {
+			warn(u"ROM image's Device List Pointer overshoots "
+			      "ROM end!  ignoring");
+			return NULL;
+		}
+		p += 2;
+	} while (p[-2] != 0 || p[-1] != 0);
+	return (const uint16_t *)dev_ids;
+}
+
+static void get_rimg(bdat_pci_dev_t *bd, void *rimg, uint32_t sz)
+{
+	void *rimg_copy;
+	if ((uintptr_t)rimg <= BMEM_MAX_ADDR - sz &&
+	    (uintptr_t)rimg % (2 * KIBYTE) == 0)
+	{
+		Print(u"    ROM img.: @0x%lx~@0x%lx\r\n", rimg,
+		    (char *)rimg + sz - 1);
+		bd->rimg_seg = ptr_to_rm_seg(rimg);
+		bd->rimg_sz = sz;
+	}
+	rimg_copy = bmem_alloc(sz, 2 * KIBYTE);
+	memcpy(rimg_copy, rimg, sz);
+	Print(u"    ROM img.: @0x%lx~@0x%lx (copied from @0x%lx)\r\n",
+	    rimg_copy, (char *)rimg_copy + sz - 1, rimg);
+	bd->rimg_seg = ptr_to_rm_seg(rimg_copy);
+	bd->rimg_sz = sz;
+}
+
+static void get_rimg_from_fvs(bdat_pci_dev_t *bd)
+{
+	void *rimg;
+	uint32_t sz;
+	if (fv_find_rimg(bd->pci_id, bd->class_if, &rimg, &sz))
+		get_rimg(bd, rimg, sz);
+}
+
+static void get_rimg_from_pci_io(bdat_pci_dev_t *bd, EFI_PCI_IO_PROTOCOL *io)
+{
+	void *rimg = io->RomImage;
+	uint64_t rsz = io->RomSize;
+	uint32_t isz;
+	const rimg_pcir_t *pcir;
+	bd->rimg_seg = bd->rimg_flags = bd->rimg_sz = 0;
+	if (!rsz || !rimg)
 		return;
-	pcir = orom_find_pcir(orom, sz);
+	pcir = rimg_find_pcir(rimg, rsz);
 	if (!pcir)
 		return;
-	if (pcir->pcir_rev >= 3)
-		bd->orom_flags = BD_PCI_OROM_PCI3;
-	sz = (uint64_t)pcir->orom_sz_hkib * HKIBYTE;
-	if ((uintptr_t)orom <= BMEM_MAX_ADDR - sz &&
-	    (uintptr_t)orom % (2 * KIBYTE) == 0)
-	{
-		Print(u"    option ROM: @0x%lx~@0x%lx\r\n", orom,
-		    (char *)orom + sz - 1);
-		bd->orom_seg = ptr_to_rm_seg(orom);
-		bd->orom_sz = sz;
+	if (pcir->type != PCIR_TYP_PCAT) {
+		Print(u"    ROM img. via EFI_PCI_IO_PROTOCOL not "
+			   "PC-AT compatible\r\n");
+		return;
 	}
-	orom_copy = bmem_alloc(sz, 2 * KIBYTE);
-	memcpy(orom_copy, orom, sz);
-	Print(u"    option ROM: @0x%lx~@0x%lx (copied from @0x%lx)\r\n",
-	    orom_copy, (char *)orom_copy + sz - 1, orom);
-	bd->orom_seg = ptr_to_rm_seg(orom_copy);
-	bd->orom_sz = sz;
+	if (pcir->pcir_rev >= 3)
+		bd->rimg_flags = BD_PCI_RIMG_PCI3;
+	isz = (uint64_t)pcir->rimg_sz_hkib * HKIBYTE;
+	get_rimg(bd, rimg, isz);
 }
 
 static bdat_pci_dev_t *process_one_pci_io(EFI_PCI_IO_PROTOCOL *io,
@@ -164,11 +208,11 @@ static bdat_pci_dev_t *process_one_pci_io(EFI_PCI_IO_PROTOCOL *io,
 	if (EFI_ERROR(status))
 		error_with_status(u"cannot read PCI conf. sp.", status);
 	pci_id = pci_conf[0];
-	class_if = pci_conf[2];
+	class_if = pci_conf[2] & 0xffffff00U;
 	Print(u"  %04x:%02x:%02x.%x %04x:%04x %02x %02x %02x 0x%06lx%c "
 		 "0x%06lx%c 0x%06lx%c",
 	    seg, bus, dev, fn,
-	    (UINT32)(pci_id & 0xffffU), (UINT32)(pci_id >> 16),
+	    (UINT32)pci_id_vendor(pci_id), (UINT32)pci_id_dev(pci_id),
 	    class_if >> 24, (class_if >> 16) & 0xffU,
 	    (class_if >> 8) & 0xffU,
 	    io->RomSize <= 0xffffffULL ? io->RomSize : 0xffffffULL,
@@ -200,11 +244,9 @@ static bdat_pci_dev_t *process_one_pci_io(EFI_PCI_IO_PROTOCOL *io,
 		    attrs & ~0xffffffULL ? u'+' : u' ');
 	}
 	Output(u"\r\n");
-	/*
-	 * TODO: if *io does not provide a usable option ROM, fish out a
-	 * suitable option ROM from firmware volumes.
-	 */
-	get_orom_from_pci_io(bd, io);
+	get_rimg_from_pci_io(bd, io);
+	if (!bd->rimg_seg)
+		get_rimg_from_fvs(bd);
 	/* Enumerate all BAR values. */
 	status = io->Pci.Read(io, EfiPciIoWidthUint32, 4 * sizeof(UINT32),
 	    6, pci_conf);
@@ -281,6 +323,6 @@ void process_pci(void)
 	FreePool(handles);
 	if (!vga)
 		error(u"no usable VGA/XGA controller?");
-	if (!vga->orom_seg)
+	if (!vga->rimg_seg)
 		error(u"VGA/XGA device lacks option ROM?");
 }

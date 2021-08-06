@@ -29,25 +29,40 @@
 
 #include "stage1/stage1.h"
 
-__attribute__((noreturn)) static void wait_and_exit(EFI_STATUS status)
+__attribute__((noreturn)) static void wait_and_exit(void)
 {
 	Output(u"press a key to exit\r\n");
 	WaitForSingleEvent(ST->ConIn->WaitForKey, 0);
-	Exit(status, 0, NULL);
+	Exit(0, 0, NULL);
 	for (;;);
 }
 
 __attribute__((noreturn)) void
 error_with_status(IN CONST CHAR16 *msg, EFI_STATUS status)
 {
-	Print(u"error: %s: %d\r\n", msg, (INT32)status);
-	wait_and_exit(status);
+	Print(u"%Eerror: %s: %d%N\r\n", msg, (INT32)status);
+	wait_and_exit();
 }
 
 __attribute__((noreturn)) void error(IN CONST CHAR16 *msg)
 {
-	Print(u"error: %s\r\n", msg);
-	wait_and_exit(EFI_ABORTED);
+	Print(u"%Eerror: %s%N\r\n", msg);
+	wait_and_exit();
+}
+
+void warn(IN CONST CHAR16 *msg)
+{
+	Print(u"%Hwarning: %s%N\r\n", msg);
+}
+
+void print_guid(const EFI_GUID *p_guid)
+{
+	Print(u"%08x-%04x-%04x-%02x%02x-%02x%02x%02x%02x%02x%02x",
+	    p_guid->Data1, (UINT32)p_guid->Data2, (UINT32)p_guid->Data3,
+	    (UINT32)p_guid->Data4[0], (UINT32)p_guid->Data4[1],
+	    (UINT32)p_guid->Data4[2], (UINT32)p_guid->Data4[3],
+	    (UINT32)p_guid->Data4[4], (UINT32)p_guid->Data4[5],
+	    (UINT32)p_guid->Data4[6], (UINT32)p_guid->Data4[7]);
 }
 
 EFI_MEMORY_DESCRIPTOR *get_mem_map(UINTN *p_num_ents, UINTN *p_map_key,

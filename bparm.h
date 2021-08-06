@@ -46,15 +46,15 @@ typedef struct __attribute__((packed)) {
 	uint32_t pci_id;		/* vendor & device id. */
 	uint32_t class_if;		/* class, subclass, prog. IF, &
 					   rev. id. */
-	uint16_t orom_seg;		/* real mode segment where option ROM
-					   is (or has been copied to); 0 if
-					   no option ROM */
-	uint16_t orom_flags;		/* flags describing the option ROM */
-	uint32_t orom_sz;		/* option ROM size */
+	uint16_t rimg_seg;		/* real mode segment where option
+					   ROM image is (or has been copied
+					   to); 0 if no ROM image */
+	uint16_t rimg_flags;		/* flags describing the ROM image */
+	uint32_t rimg_sz;		/* ROM image size */
 } bdat_pci_dev_t;
 
-/* bdat_pci_dev_t::orom_flags bit fields. */
-#define BD_PCI_OROM_PCI3 0x0001U	/* option ROM is PCI 3.0 compliant */
+/* bdat_pci_dev_t::rimg_flags bit fields. */
+#define BD_PCI_RIMG_PCI3 0x0001U	/* ROM image is PCI 3.0 compliant */
 
 /*
  * "bMEM" boot data, describing base memory availability at boot time &
