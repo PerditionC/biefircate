@@ -292,6 +292,12 @@ static bdat_pci_dev_t *process_one_pci_io(EFI_PCI_IO_PROTOCOL *io,
 	return vga;
 }
 
+/*
+ * Go through all the PCI devices as reported by UEFI.  Try to see if any
+ * devices have legacy option ROM images associated with them, & copy the
+ * ROM images out to base memory.  Add boot parameters for the PCI devices
+ * & their ROM images.
+ */
 void process_pci(void)
 {
 	EFI_HANDLE *handles;

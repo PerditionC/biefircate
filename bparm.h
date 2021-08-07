@@ -65,11 +65,32 @@ typedef struct __attribute__((packed)) {
 					   base mem. avail. to stage 2 at
 					   boot time; stage 2 can free up
 					   the mem. at [0, boottime_bmem_bot
-					   * PARA_SIZE - 1) once it consumes
+					   * PARA_SIZE - 1] once it consumes
 					   boot params. */
 	uint16_t runtime_bmem_top_seg;	/* real mode seg. for end of base
 					   mem. avail. at run time */
 } bdat_bmem_t;
+
+/* "MRNG" boot data, describing a single memory address range at run time. */
+typedef struct __attribute__((packed)) {
+	uint64_t start;
+	uint64_t len;
+	uint32_t e820_type;
+	uint32_t e820_ext_attr;
+} bdat_mem_range_t;
+
+/*
+ * Address range types, in the manner of BIOS int 0x15, ax = 0xe820.  These
+ * go into bdat_mem_range_t::e820_type.  The names are taken from the Linux
+ * 5.9.14 kernel code.
+ */
+#define E820_RAM	1U		/* available memory */
+#define E820_RESERVED	2U		/* reserved memory */
+#define E820_ACPI	3U		/* ACPI reclaimable */
+#define E820_NVS	4U		/* ACPI NVS */
+#define E820_UNUSABLE	5U		/* bad memory */
+#define E820_DISABLED	6U		/* disabled memory (ACPI 6.3) */
+#define E820_PMEM	7U		/* persistent memory (ACPI 6.3) */
 
 /* Node type for linked list of boot parameters. */
 struct __attribute__((packed)) bparm {
@@ -82,6 +103,7 @@ struct __attribute__((packed)) bparm {
 	union {				/* boot param. data */
 		bdat_pci_dev_t pci_dev;
 		bdat_bmem_t bmem;
+		bdat_mem_range_t mem_range;
 	} u[];
 };
 
@@ -89,5 +111,6 @@ typedef struct bparm bparm_t;
 
 #define BP_PCID		MAGIC32('P', 'C', 'I', 'D')
 #define BP_BMEM		MAGIC32('b', 'M', 'E', 'M')
+#define BP_MRNG		MAGIC32('M', 'R', 'N', 'G')
 
 #endif

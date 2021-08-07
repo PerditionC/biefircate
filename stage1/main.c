@@ -389,34 +389,102 @@ static void fake_mp_table(void)
 }
 #endif
 
+static void get_time(EFI_TIME *when)
+{
+	EFI_STATUS status = RT->GetTime(when, NULL);
+	if (EFI_ERROR(status))
+		error_with_status(u"cannot get time", status);
+}
+
+static void wait_for_time_change(void)
+{
+	EFI_TIME then, now;
+	get_time(&then);
+	do {
+		hlt();
+		get_time(&now);
+	} while (now.Second == then.Second &&
+		 now.Nanosecond == then.Nanosecond);
+}
+
+static void wait_for_one_second(void)
+{
+	EFI_TIME then, now;
+	UINT64 then_ns, now_ns;
+	get_time(&then);
+	then_ns = 1000000000ULL * then.Second + then.Nanosecond;
+	do {
+		hlt();
+		get_time(&now);
+		now_ns = 1000000000ULL * now.Second + now.Nanosecond;
+		if (now.Minute != then.Minute)
+			now_ns += 60000000000ULL;
+	} while (now_ns < then_ns + 1000000000ULL);
+}
+
 static unsigned prepare_to_hand_over(EFI_HANDLE image_handle)
 {
+	enum { EfiPersistentMemory = EfiPalCode + 1 };
 	bdat_bmem_t *bd;
 	uint32_t boottime_bmem_bot, runtime_bmem_top;
-	EFI_MEMORY_DESCRIPTOR *descs;
-	UINTN num_entries = 0, map_key, desc_sz;
-	UINT32 desc_ver;
+	EFI_MEMORY_DESCRIPTOR *descs, *desc;
+	UINTN num_ents = 0, map_key, desc_sz, ent_iter;
 	EFI_STATUS status;
 	/* Wrap up firmware volume handling. */
 	fv_fini();
+	/* Say we are about to exit UEFI. */
+	Output(u"exit UEFI\r\n");
 	/*
-	 * Wrap up base memory handling.  Add a boot parameter to tell the
-	 * bootloader about base memory availability at boot time & run time.
+	 * Add information about blocks of extended memory (above the 1 MiB
+	 * mark) to the boot parameters.
+	 */
+	descs = get_mem_map(&num_ents, &map_key, &desc_sz);
+	FOR_EACH_MEM_DESC(desc, descs, desc_sz, num_ents, ent_iter) {
+		EFI_PHYSICAL_ADDRESS start = desc->PhysicalStart, end;
+		uint32_t e820_type;
+		end = start + desc->NumberOfPages * EFI_PAGE_SIZE;
+		if (end <= BMEM_MAX_ADDR && end != 0)
+			continue;
+		if (start < BMEM_MAX_ADDR)
+			start = BMEM_MAX_ADDR;
+		switch (desc->Type) {
+		    case EfiLoaderCode:
+		    case EfiLoaderData:
+		    case EfiBootServicesCode:
+		    case EfiBootServicesData:
+		    case EfiConventionalMemory:
+			e820_type = E820_RAM;	break;
+		    case EfiACPIReclaimMemory:
+			e820_type = E820_ACPI;  break;
+		    case EfiACPIMemoryNVS:
+			e820_type = E820_NVS;   break;
+		    case EfiPersistentMemory:
+			e820_type = E820_PMEM;  break;
+		    default:
+			e820_type = E820_RESERVED;
+		}
+		bparm_add_mem_range(start, end - start, e820_type, 1U);
+	}
+	/*
+	 * Wrap up base memory handling.  Add boot parameters to tell the
+	 * bootloader about base memory availability at boot time & run
+	 * time.
+	 *
+	 * We can only do this after adding the boot parameters for the map
+	 * of extended memory, because these latter parameters will
+	 * themselves be allocated in base memory (via bmem.c).
 	 */
 	bd = bparm_add(BP_BMEM, sizeof(bdat_bmem_t));
-	bmem_fini(&boottime_bmem_bot, &runtime_bmem_top);
+	bmem_fini(descs, num_ents, desc_sz,
+	    &boottime_bmem_bot, &runtime_bmem_top);
 	bd->boottime_bmem_bot_seg = addr_to_rm_seg(boottime_bmem_bot);
 	bd->runtime_bmem_top_seg = addr_to_rm_seg(runtime_bmem_top);
-	/* Say we are exiting UEFI. */
-	Output(u"exit UEFI\r\n");
-	WaitForSingleEvent(ST->ConIn->WaitForKey, 30000000ULL);
-	/*
-	 * In order to exit boot services, we need to get the memory map
-	 * again, this time silently. =_=
-	 */
-	descs = LibMemoryMap(&num_entries, &map_key, &desc_sz, &desc_ver);
-	if (!num_entries || !descs)
-		error(u"cannot get mem. map again!");
+	/* Wait for about 3 seconds. */
+	wait_for_time_change();
+	wait_for_one_second();
+	wait_for_one_second();
+	wait_for_one_second();
+	/* Really exit boot services... */
 	status = BS->ExitBootServices(image_handle, map_key);
 	if (EFI_ERROR(status))
 		error_with_status(u"cannot exit UEFI", status);

@@ -57,6 +57,24 @@ void *bparm_add(uint32_t type, uint32_t size)
 	return bp->u;
 }
 
+/*
+ * Convenience function: add a boot parameter node for a memory address
+ * range.  If the range is empty, do nothing.
+ */
+bdat_mem_range_t *bparm_add_mem_range(uint64_t start, uint64_t len,
+    uint32_t e820_type, uint32_t e820_ext_attr)
+{
+	bdat_mem_range_t *bd;
+	if (!len)
+		return NULL;
+	bd = bparm_add(BP_MRNG, sizeof(bdat_mem_range_t));
+	bd->start = start;
+	bd->len = len;
+	bd->e820_type = e820_type;
+	bd->e820_ext_attr = e820_ext_attr;
+	return bd;
+}
+
 /* Return the linked list of boot parameters built up. */
 bparm_t *bparm_get(void)
 {

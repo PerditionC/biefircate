@@ -48,7 +48,7 @@
 #define MAX_BMEM_BLKS	(BMEM_MAX_ADDR / EFI_PAGE_SIZE / 2)
 
 typedef struct {
-	UINT32 start, end;
+	UINT32 start, end, orig_end;
 } blk_info_t;
 
 /* Variables to keep track of available base memory blocks. */
@@ -58,7 +58,7 @@ static blk_info_t blk[MAX_BMEM_BLKS];
  * Variable to keep track of the start of base memory that is available at
  * boot time.  The area below boottime_bmem_bot may be filled with boot
  * parameters or other ephemera.  The stage 2 bootloader can use the memory
- * from boottime_bmem_not up to runtime_bmem_top (below) as a scratch area,
+ * from boottime_bmem_bot up to runtime_bmem_top (below) as a scratch area,
  * & later free up the memory below boottime_bmem_bot.
  */
 static uint32_t boottime_bmem_bot = EFI_PAGE_SIZE;
@@ -74,6 +74,64 @@ static void bmem_check_enough(void)
 	if (runtime_bmem_top < 192 * KIBYTE ||
 	    boottime_bmem_bot > runtime_bmem_top - 128 * KIBYTE)
 		error(u"not enough base mem.!");
+}
+
+/*
+ * Add information about reserved memory below the 1 MiB mark as known to
+ * UEFI to the boot parameters.
+ */
+static void add_uefi_mem_bparms(EFI_MEMORY_DESCRIPTOR *descs, UINTN num_ents,
+    UINTN desc_sz)
+{
+	enum { EfiPersistentMemory = EfiPalCode + 1 };
+	EFI_MEMORY_DESCRIPTOR *desc;
+	UINTN ent_iter;
+	FOR_EACH_MEM_DESC(desc, descs, desc_sz, num_ents, ent_iter) {
+		EFI_PHYSICAL_ADDRESS start = desc->PhysicalStart;
+		UINT64 sz;
+		uint32_t e820_type;
+		if (start >= BMEM_MAX_ADDR)
+			continue;
+		sz = desc->NumberOfPages * EFI_PAGE_SIZE;
+		if (sz > BMEM_MAX_ADDR - start)
+			sz = BMEM_MAX_ADDR - start;
+		switch (desc->Type) {
+		    case EfiLoaderCode:
+		    case EfiLoaderData:
+		    case EfiBootServicesCode:
+		    case EfiBootServicesData:
+		    case EfiConventionalMemory:
+			continue;  /* skip */
+		    case EfiACPIReclaimMemory:
+			e820_type = E820_ACPI;	break;
+		    case EfiACPIMemoryNVS:
+			e820_type = E820_NVS;	break;
+		    case EfiPersistentMemory:
+			e820_type = E820_PMEM;	break;
+		    default:
+			e820_type = E820_RESERVED;
+		}
+		bparm_add_mem_range(start, sz, e820_type, 1U);
+	}
+}
+
+/*
+ * Add information about free & reserved memory below the 1 MiB mark as
+ * managed by us.
+ */
+static void add_our_mem_bparms(void)
+{
+	UINT32 blk_idx = 0;
+	bparm_add_mem_range(0, runtime_bmem_top, E820_RAM, 1);
+	while (blk_idx < num_blks && blk[blk_idx].start < runtime_bmem_top)
+		++blk_idx;
+	while (blk_idx < num_blks) {
+		UINT32 start = blk[blk_idx].start;
+		UINT32 end = blk[blk_idx].end;
+		UINT32 orig_end = blk[blk_idx].orig_end;
+		bparm_add_mem_range(start, end - start, E820_RAM, 1);
+		bparm_add_mem_range(end, orig_end - end, E820_RESERVED, 1);
+	}
 }
 
 /* Initialize base memory allocation. */
@@ -121,7 +179,7 @@ void bmem_init(void)
 		} else if (start != BMEM_MAX_ADDR) {
 			end = (UINT32)idx * EFI_PAGE_SIZE;
 			blk[num_blks].start = start;
-			blk[num_blks].end = end;
+			blk[num_blks].end = blk[num_blks].orig_end = end;
 			if (num_blks % 4 == 0)
 				Output(u"\r\n");
 			Print(u"  @0x%lx~@0x%lx", start, end - 1);
@@ -132,7 +190,7 @@ void bmem_init(void)
 	if (start != BMEM_MAX_ADDR) {
 		end = (UINT32)idx * EFI_PAGE_SIZE;
 		blk[num_blks].start = start;
-		blk[num_blks].end = end;
+		blk[num_blks].end = blk[num_blks].orig_end = end;
 		if (num_blks % 4 == 0)
 			Output(u"\r\n");
 		Print(u"  @0x%lx~@0x%lx", start, end - 1);
@@ -204,15 +262,7 @@ void *bmem_alloc(UINTN size, UINTN align)
 		/* Success! */
 		if (runtime_bmem_top > astart)
 			runtime_bmem_top = astart;
-		if (astart != bstart)
-			blk[blk_idx].end = astart;
-		else {
-			while (blk_idx < num_blks - 1) {
-				blk[blk_idx] = blk[blk_idx + 1];
-				++blk_idx;
-			}
-			--num_blks;
-		}
+		blk[blk_idx].end = astart;
 		return (void *)(EFI_PHYSICAL_ADDRESS)astart;
 	}
 	error(u"cannot alloc. from base mem.!");
@@ -258,13 +308,25 @@ void *bmem_alloc_boottime(UINTN size, UINTN align)
 	error(u"cannot alloc. for boot time from base mem.!");
 }
 
-/* Wrap up base memory allocation. */
-void bmem_fini(uint32_t *p_boottime_bmem_bot, uint32_t *p_runtime_bmem_top)
+/*
+ * Wrap up base memory allocation.  As part of this, add information about
+ * memory address ranges below the 1 MiB mark, as boot parameters.
+ *
+ * This routine accepts a memory map which the caller should have retrieved
+ * via BS->GetMemoryMap(...) or some such.
+ */
+void bmem_fini(EFI_MEMORY_DESCRIPTOR *descs, UINTN num_ents, UINTN desc_sz,
+    uint32_t *p_boottime_bmem_bot, uint32_t *p_runtime_bmem_top)
 {
+	add_uefi_mem_bparms(descs, num_ents, desc_sz);
+	add_our_mem_bparms();
 	boottime_bmem_bot = (boottime_bmem_bot + PARA_SIZE - 1) & -PARA_SIZE;
 	runtime_bmem_top &= -KIBYTE;
+#if 0
+	/* FIXME: this alters the UEFI memory map. */
 	Print(u"base mem. at boottime: @0x%x~@0x%x\r\n",
-	    boottime_bmem_bot, runtime_bmem_top - 1);
+	    boottime_bmem_bot, runtime_bmem_top);
+#endif
 	bmem_check_enough();
 	*p_boottime_bmem_bot = boottime_bmem_bot;
 	*p_runtime_bmem_top = runtime_bmem_top;

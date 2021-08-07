@@ -205,7 +205,7 @@ void fv_init(void)
 		    &gEfiFirmwareVolume2ProtocolGuid, (void **)&fv);
 		if (EFI_ERROR(status))
 			continue;
-		Print(u"  scanning FV %lu\r\n", hidx);
+		Print(u"  FV %lu\r\n", hidx);
 		fv_gather_rimgs_for_one_fv(fv);
 	}
 	FreePool(handles);

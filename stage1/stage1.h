@@ -44,11 +44,14 @@
 extern void bmem_init(void);
 extern void *bmem_alloc(UINTN, UINTN);
 extern void *bmem_alloc_boottime(UINTN, UINTN);
-extern void bmem_fini(uint32_t *, uint32_t *);
+extern void bmem_fini(EFI_MEMORY_DESCRIPTOR *, UINTN, UINTN,
+    uint32_t *, uint32_t *);
 
 /* bparm.c functions. */
 
 extern void *bparm_add(uint32_t, uint32_t);
+extern bdat_mem_range_t *bparm_add_mem_range(uint64_t, uint64_t,
+    uint32_t, uint32_t);
 extern bparm_t *bparm_get(void);
 
 /* fv.c functions. */
@@ -137,5 +140,11 @@ static inline uint16_t ptr_to_rm_seg(void *p)
 	     (ent_iter); \
 	     --(ent_iter), \
 	     (desc) = (EFI_MEMORY_DESCRIPTOR *)((char *)(desc) + (desc_sz)))
+
+/* Wait for an asynchronous interrupt. */
+static inline void hlt(void)
+{
+	__asm volatile("hlt");
+}
 
 #endif
