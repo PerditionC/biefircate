@@ -141,10 +141,4 @@ static inline uint16_t ptr_to_rm_seg(void *p)
 	     --(ent_iter), \
 	     (desc) = (EFI_MEMORY_DESCRIPTOR *)((char *)(desc) + (desc_sz)))
 
-/* Wait for an asynchronous interrupt. */
-static inline void hlt(void)
-{
-	__asm volatile("hlt");
-}
-
 #endif

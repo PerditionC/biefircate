@@ -48,7 +48,7 @@ LDLIBS := $(LIBEFI) $(LDLIBS)
 CFLAGS2 += -mregparm=3 -ffreestanding -Os -Wall -fno-stack-protector -MMD
 AS2 = nasm
 ASFLAGS2 = -f elf32 -MD $(@:.o=.d)
-CPPFLAGS2 += $(COMMON_CPPFLAGS)
+CPPFLAGS2 += -I $(conf_Srcdir) $(COMMON_CPPFLAGS)
 LDFLAGS2 += $(CFLAGS2) -static -nostdlib -ffreestanding \
     -Wl,-Ttext-segment=0x300000 -Wl,--strip-all -Wl,-Map=$(@:.sys=.map) \
     -Wl,--build-id=none
@@ -94,6 +94,10 @@ stage1/main.o romdumper.o : CPPFLAGS += -DVERSION='"$(conf_Pkg_ver)"'
 
 $(STAGE2): stage2/start.o
 	$(CC2) $(LDFLAGS2) -o $@ $^ $(LDLIBS2)
+
+stage2/%.o: stage2/%.c
+	mkdir -p $(@D)
+	$(CC2) $(CFLAGS2) $(CPPFLAGS2) -c -o $@ $<
 
 stage2/%.o: stage2/%.asm
 	mkdir -p $(@D)

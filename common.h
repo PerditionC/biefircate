@@ -39,7 +39,23 @@
 	 (uint32_t)(unsigned char)(c) << 16 | \
 	 (uint32_t)(unsigned char)(d) << 24)
 
-#define BP_PCID		MAGIC32('P', 'C', 'I', 'D')
-#define BP_BMEM		MAGIC32('b', 'M', 'E', 'M')
+/*
+ * Address range types, in the manner of BIOS int 0x15, ax = 0xe820.  These
+ * go into bdat_mem_range_t::e820_type.  Other than E820_DISABLED, the names
+ * are taken from the Linux 5.9.14 kernel code.
+ */
+#define E820_RAM	1U		/* available memory */
+#define E820_RESERVED	2U		/* reserved memory */
+#define E820_ACPI	3U		/* ACPI reclaimable */
+#define E820_NVS	4U		/* ACPI NVS */
+#define E820_UNUSABLE	5U		/* bad memory */
+#define E820_DISABLED	6U		/* disabled memory (ACPI 6.3) */
+#define E820_PMEM	7U		/* persistent memory (ACPI 6.3) */
+
+/* Wait for an asynchronous interrupt. */
+static inline void hlt(void)
+{
+	__asm volatile("hlt");
+}
 
 #endif

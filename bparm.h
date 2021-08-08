@@ -34,8 +34,8 @@
  * This header file needs to work in both 32-bit & 64-bit compilation modes.
  */
 
-#ifndef H_BOOT_PARAM
-#define H_BOOT_PARAM
+#ifndef H_BPARM
+#define H_BPARM
 
 #include <inttypes.h>
 #include "common.h"
@@ -79,19 +79,6 @@ typedef struct __attribute__((packed)) {
 	uint32_t e820_ext_attr;
 } bdat_mem_range_t;
 
-/*
- * Address range types, in the manner of BIOS int 0x15, ax = 0xe820.  These
- * go into bdat_mem_range_t::e820_type.  The names are taken from the Linux
- * 5.9.14 kernel code.
- */
-#define E820_RAM	1U		/* available memory */
-#define E820_RESERVED	2U		/* reserved memory */
-#define E820_ACPI	3U		/* ACPI reclaimable */
-#define E820_NVS	4U		/* ACPI NVS */
-#define E820_UNUSABLE	5U		/* bad memory */
-#define E820_DISABLED	6U		/* disabled memory (ACPI 6.3) */
-#define E820_PMEM	7U		/* persistent memory (ACPI 6.3) */
-
 /* Node type for linked list of boot parameters. */
 struct __attribute__((packed)) bparm {
 	struct bparm *next;	/* pointer to next boot param. node */
@@ -110,7 +97,7 @@ struct __attribute__((packed)) bparm {
 typedef struct bparm bparm_t;
 
 #define BP_PCID		MAGIC32('P', 'C', 'I', 'D')
-#define BP_BMEM		MAGIC32('b', 'M', 'E', 'M')
+#define BP_BMEM		MAGIC32('B', 'M', 'E', 'M')
 #define BP_MRNG		MAGIC32('M', 'R', 'N', 'G')
 
 #endif
