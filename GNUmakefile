@@ -45,7 +45,7 @@ LDFLAGS += $(CFLAGS) -nostdlib -ffreestanding -Wl,--entry,efi_main \
 LIBEFI = gnu-efi/x86_64/lib/libefi.a
 LDLIBS := $(LIBEFI) $(LDLIBS)
 
-CFLAGS2 += -mregparm=3 -ffreestanding -Os -Wall -fno-stack-protector -MMD
+CFLAGS2 += -mregparm=3 -mrtd -ffreestanding -Os -Wall -fno-stack-protector -MMD
 AS2 = nasm
 ASFLAGS2 = -f elf32 -MD $(@:.o=.d)
 CPPFLAGS2 += -I $(conf_Srcdir) $(COMMON_CPPFLAGS)
@@ -92,7 +92,7 @@ romdumper.o: romdumper.c $(LIBEFI)
 
 stage1/main.o romdumper.o : CPPFLAGS += -DVERSION='"$(conf_Pkg_ver)"'
 
-$(STAGE2): stage2/start.o
+$(STAGE2): stage2/start.o stage2/mem.o
 	$(CC2) $(LDFLAGS2) -o $@ $^ $(LDLIBS2)
 
 stage2/%.o: stage2/%.c

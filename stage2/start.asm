@@ -35,9 +35,13 @@
 
 VGA_INIT_SEG equ 0x1000
 
+	extern	mem_init
+
 	global	_start
 _start:
-	mov	esp, 0x0400
+	mov	esp, starting_stack
+	mov	eax, ebp
+	call	mem_init
 	mov	edi, VGA_INIT_SEG<<4
 	mov	esi, LB
 	mov	ecx, (LE-LB)/4
@@ -117,3 +121,8 @@ msg:	db	"Hello world from int 0x10!", 13, 10, 0
 
 	align	16
 LE:
+
+	section	.bss
+
+	resb	0x1000
+starting_stack:
