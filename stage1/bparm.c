@@ -43,7 +43,7 @@ static bparm_t *bp_head = NULL, *bp_tail = NULL;
 void *bparm_add(uint32_t type, uint32_t size)
 {
 	bparm_t *bp = bmem_alloc_boottime(sizeof(bparm_t) + size,
-					  __BIGGEST_ALIGNMENT__);
+					  sizeof(void *));
 	if (!bp_head)
 		bp_head = bp_tail = bp;
 	else {

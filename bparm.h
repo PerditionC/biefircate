@@ -49,12 +49,11 @@ typedef struct __attribute__((packed)) {
 	uint16_t rimg_seg;		/* real mode segment where option
 					   ROM image is (or has been copied
 					   to); 0 if no ROM image */
-	uint16_t rimg_flags;		/* flags describing the ROM image */
+	uint16_t rimg_rt_seg;		/* final location of option ROM code
+					   after initialization (for PCI 3+
+					   compliant ROM images) */
 	uint32_t rimg_sz;		/* ROM image size */
 } bdat_pci_dev_t;
-
-/* bdat_pci_dev_t::rimg_flags bit fields. */
-#define BD_PCI_RIMG_PCI3 0x0001U	/* ROM image is PCI 3.0 compliant */
 
 /*
  * "bMEM" boot data, describing base memory availability at boot time &

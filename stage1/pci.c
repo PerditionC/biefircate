@@ -131,31 +131,55 @@ const uint16_t *rimg_pcir_find_dev_id_list(const rimg_pcir_t *pcir,
 	return (const uint16_t *)dev_ids;
 }
 
-static void get_rimg(bdat_pci_dev_t *bd, void *rimg, uint32_t sz)
+static void get_rimg(bdat_pci_dev_t *bd, void *rimg, uint32_t sz,
+    const rimg_pcir_t *pcir)
 {
-	void *rimg_copy;
-	if ((uintptr_t)rimg <= BMEM_MAX_ADDR - sz &&
-	    (uintptr_t)rimg % (2 * KIBYTE) == 0)
-	{
-		Print(u"    ROM img.: @0x%lx~@0x%lx\r\n", rimg,
-		    (char *)rimg + sz - 1);
-		bd->rimg_seg = ptr_to_rm_seg(rimg);
-		bd->rimg_sz = sz;
+	void *rimg_copy, *rimg_rt;
+	bd->rimg_sz = sz;
+	if (pcir->pcir_rev >= 3) {
+		uint32_t rt_sz = pcir->max_rt_sz_hkib * HKIBYTE;
+		if (rt_sz != sz) {
+			if ((uintptr_t)rimg <= BMEM_MAX_ADDR - sz &&
+			    (uintptr_t)rimg % HKIBYTE == 0)
+			{
+				Print(u"    ROM img.: @0x%lx~@0x%lx\r\n",
+				    rimg, (char *)rimg + sz - 1);
+				bd->rimg_seg = ptr_to_rm_seg(rimg);
+				bd->rimg_sz = sz;
+			} else {
+				rimg_copy = bmem_alloc_boottime(sz, HKIBYTE);
+				memcpy(rimg_copy, rimg, sz);
+				Print(u"    ROM img.: @0x%lx~@0x%lx "
+					   "(copied from @0x%lx)",
+				    rimg_copy, (char *)rimg_copy + sz - 1,
+				    rimg);
+				bd->rimg_seg = ptr_to_rm_seg(rimg_copy);
+			}
+			/* FIXME: should run time addr. be 2 KiB aligned? */
+			rimg_rt = bmem_alloc(rt_sz, HKIBYTE);
+			Print(u"  run time: @0x%lx\r\n", rimg_rt);
+			bd->rimg_rt_seg = ptr_to_rm_seg(rimg_rt);
+			return;
+		}
+		/* or else fall through */
 	}
 	rimg_copy = bmem_alloc(sz, 2 * KIBYTE);
 	memcpy(rimg_copy, rimg, sz);
 	Print(u"    ROM img.: @0x%lx~@0x%lx (copied from @0x%lx)\r\n",
 	    rimg_copy, (char *)rimg_copy + sz - 1, rimg);
-	bd->rimg_seg = ptr_to_rm_seg(rimg_copy);
-	bd->rimg_sz = sz;
+	bd->rimg_seg = bd->rimg_rt_seg = ptr_to_rm_seg(rimg_copy);
 }
 
 static void get_rimg_from_fvs(bdat_pci_dev_t *bd)
 {
 	void *rimg;
 	uint32_t sz;
-	if (fv_find_rimg(bd->pci_id, bd->class_if, &rimg, &sz))
-		get_rimg(bd, rimg, sz);
+	bd->rimg_seg = bd->rimg_rt_seg = bd->rimg_sz = 0;
+	if (fv_find_rimg(bd->pci_id, bd->class_if, &rimg, &sz)) {
+		const rimg_pcir_t *pcir = rimg_find_pcir(rimg, sz);
+		if (pcir)
+			get_rimg(bd, rimg, sz, pcir);
+	}
 }
 
 static void get_rimg_from_pci_io(bdat_pci_dev_t *bd, EFI_PCI_IO_PROTOCOL *io)
@@ -164,7 +188,7 @@ static void get_rimg_from_pci_io(bdat_pci_dev_t *bd, EFI_PCI_IO_PROTOCOL *io)
 	uint64_t rsz = io->RomSize;
 	uint32_t isz;
 	const rimg_pcir_t *pcir;
-	bd->rimg_seg = bd->rimg_flags = bd->rimg_sz = 0;
+	bd->rimg_seg = bd->rimg_rt_seg = bd->rimg_sz = 0;
 	if (!rsz || !rimg)
 		return;
 	pcir = rimg_find_pcir(rimg, rsz);
@@ -175,10 +199,8 @@ static void get_rimg_from_pci_io(bdat_pci_dev_t *bd, EFI_PCI_IO_PROTOCOL *io)
 			   "PC-AT compatible\r\n");
 		return;
 	}
-	if (pcir->pcir_rev >= 3)
-		bd->rimg_flags = BD_PCI_RIMG_PCI3;
 	isz = (uint64_t)pcir->rimg_sz_hkib * HKIBYTE;
-	get_rimg(bd, rimg, isz);
+	get_rimg(bd, rimg, isz, pcir);
 }
 
 static bdat_pci_dev_t *process_one_pci_io(EFI_PCI_IO_PROTOCOL *io,

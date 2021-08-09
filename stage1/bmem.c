@@ -131,6 +131,7 @@ static void add_our_mem_bparms(void)
 		UINT32 orig_end = blk[blk_idx].orig_end;
 		bparm_add_mem_range(start, end - start, E820_RAM, 1);
 		bparm_add_mem_range(end, orig_end - end, E820_RESERVED, 1);
+		++blk_idx;
 	}
 }
 

@@ -116,7 +116,10 @@ static void read_stage2(EFI_FILE_PROTOCOL *prog, EFI_FILE_PROTOCOL *vol,
 			UINTN size, void *buf)
 {
 	UINTN read_size = size;
-	EFI_STATUS status = prog->Read(prog, &read_size, buf);
+	EFI_STATUS status;
+	if (!size)
+		return;
+	status = prog->Read(prog, &read_size, buf);
 	if (EFI_ERROR(status)) {
 		prog->Close(prog);
 		vol->Close(vol);

@@ -74,6 +74,7 @@ LB:
 	mov	ss, ax
 	mov	fs, ax
 	mov	gs, ax
+	mov	esp, 0x0600
 	mov	eax, cr0		; switch to real mode
 	and	al, 0b11111110
 	mov	cr0, eax
@@ -95,13 +96,12 @@ find:
 	jnz	next
 	mov	cx, [ebp+0x1c]
 	jcxz	next
-	mov	[cs:orom_seg_1-LB], cx	; plug in VGA option ROM segment
-	mov	[cs:orom_seg_2-LB], cx
 	mov	ax, [ebp+0x10]		; get VGA controller's PCI locn.
-	mov	bx, 0			; set the dest. seg. for the opt. ROM
-orom_seg_1 equ	$-2
-	call	0:3			; call the option ROM code
-orom_seg_2 equ	$-2
+	mov	bx, [ebp+0x1e]		; set the dest. seg. for the opt. ROM
+	push	word [ebp+0x1c]		; call the option ROM code
+	push	word 3
+	call	far word [esp]
+	pop	eax
 	mov	ax, 0x0003		; try to set 80 * 25 screen mode
 	int	0x10
 	mov	si, msg-LB
