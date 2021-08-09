@@ -35,40 +35,54 @@
 
 VGA_INIT_SEG equ 0x1000
 
-	extern	mem_init
+	extern	mem_init, rm16_load_start, rm16_load_dwords
 
 	global	_start
 _start:
 	mov	esp, starting_stack
+	lgdt	[gdtr]
+	lidt	[idtrrm]
+	jmp	SEL_CS32:.cont
+.cont:
+	mov	ax, SEL_DS32
+	mov	ds, ax
+	mov	es, ax
+	mov	ss, ax
+	mov	fs, ax
+	mov	gs, ax
 	mov	eax, ebp
 	call	mem_init
 	mov	edi, VGA_INIT_SEG<<4
-	mov	esi, LB
-	mov	ecx, (LE-LB)/4
+	mov	esi, rm16_load_start
+	mov	ecx, rm16_load_dwords
 	cld
 	rep movsd
-	lgdt	[gdtr16]
-	lidt	[idtrrm16]
-	jmp	8:0
+	jmp	SEL_CS16:word 0
 
 	section .rodata
 
 	align	8
-gdt16 equ	$-8
+	global	SEL_CS32, SEL_DS32, SEL_CS16, SEL_DS16
+gdt equ		$-8
+SEL_CS32 equ	$-gdt
+	dq	0x00cf9a000000ffff	; 32-bit protected mode code seg.
+SEL_DS32 equ	$-gdt
+	dq	0x00cf92000000ffff	; 32-bit protected mode data seg.
+SEL_CS16 equ	$-gdt
 					; 16-bit protected mode code seg.
 	dq	0x008f9a000000ffff|(VGA_INIT_SEG<<4<<16)
+SEL_DS16 equ	$-gdt
 	dq	0x008f92000000ffff	; 16-bit protected mode data seg.
-gdt16_end:
-gdtr16:	dw	gdt16_end-gdt16-1
-	dd	gdt16
-idtrrm16:
-	dw	0x100*4-1
+gdt_end:
+gdtr:	dw	gdt_end-gdt-1
+	dd	gdt
+idtrrm:	dw	0x100*4-1
 	dd	0
 
-	align	16
+	section	.rm16.text
+
 	bits	16
-LB:
-	mov	ax, 0x10		; prime segment descriptor caches
+	mov	ax, SEL_DS16		; prime segment descriptor caches
 	mov	ds, ax
 	mov	es, ax
 	mov	ss, ax
@@ -78,7 +92,7 @@ LB:
 	mov	eax, cr0		; switch to real mode
 	and	al, 0b11111110
 	mov	cr0, eax
-	jmp	VGA_INIT_SEG:word cont-LB
+	jmp	VGA_INIT_SEG:word cont
 cont:
 	xor	ax, ax			; really set up segments
 	mov	ds, ax
@@ -104,7 +118,7 @@ find:
 	pop	eax
 	mov	ax, 0x0003		; try to set 80 * 25 screen mode
 	int	0x10
-	mov	si, msg-LB
+	mov	si, msg
 say:
 	cs lodsb
 	test	al, al
@@ -120,9 +134,8 @@ stop:
 msg:	db	"Hello world from int 0x10!", 13, 10, 0
 
 	align	16
-LE:
 
 	section	.bss
 
-	resb	0x1000
+	resb	0x2000
 starting_stack:

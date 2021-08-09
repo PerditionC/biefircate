@@ -37,6 +37,7 @@ static mem_range_t *mem_ranges;
 
 static void radix_sort(mem_range_t *mrs, unsigned nmr, unsigned bit_pos)
 {
+	/* FIXME: this uses way too much stack space! */
 	unsigned left = 0, right = nmr - 1;
 	if (!nmr)
 		return;

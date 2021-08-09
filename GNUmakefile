@@ -50,8 +50,7 @@ AS2 = nasm
 ASFLAGS2 = -f elf32 -MD $(@:.o=.d)
 CPPFLAGS2 += -I $(conf_Srcdir) $(COMMON_CPPFLAGS)
 LDFLAGS2 += $(CFLAGS2) -static -nostdlib -ffreestanding \
-    -Wl,-Ttext-segment=0x300000 -Wl,--strip-all -Wl,-Map=$(@:.sys=.map) \
-    -Wl,--build-id=none
+    -Wl,--strip-all -Wl,-Map=$(@:.sys=.map) -Wl,--build-id=none
 
 QEMUFLAGS = -m 224m -serial stdio
 QEMUFLAGSXV6 = $(QEMUFLAGS) -hdb xv6/fs.img
@@ -92,8 +91,8 @@ romdumper.o: romdumper.c $(LIBEFI)
 
 stage1/main.o romdumper.o : CPPFLAGS += -DVERSION='"$(conf_Pkg_ver)"'
 
-$(STAGE2): stage2/start.o stage2/mem.o
-	$(CC2) $(LDFLAGS2) -o $@ $^ $(LDLIBS2)
+$(STAGE2): stage2/start.o stage2/mem.o stage2/stage2.ld
+	$(CC2) $(LDFLAGS2) -o $@ $(^:%.ld=-T %.ld) $(LDLIBS2)
 
 stage2/%.o: stage2/%.c
 	mkdir -p $(@D)
