@@ -35,7 +35,7 @@
 
 VGA_INIT_SEG equ 0x1000
 
-	extern	mem_init, rm16_load_start, rm16_load_dwords
+	extern	mem_init, rm16_load_start, rm16_run_start, rm16_load_dwords
 
 	global	_start
 _start:
@@ -52,12 +52,12 @@ _start:
 	mov	gs, ax
 	mov	eax, ebp
 	call	mem_init
-	mov	edi, VGA_INIT_SEG<<4
+	mov	edi, (VGA_INIT_SEG<<4)+rm16_run_start
 	mov	esi, rm16_load_start
 	mov	ecx, rm16_load_dwords
 	cld
 	rep movsd
-	jmp	SEL_CS16:word 0
+	jmp	SEL_CS16:word rm16
 
 	section .rodata
 
@@ -82,6 +82,7 @@ idtrrm:	dw	0x100*4-1
 	section	.rm16.text
 
 	bits	16
+rm16:
 	mov	ax, SEL_DS16		; prime segment descriptor caches
 	mov	ds, ax
 	mov	es, ax

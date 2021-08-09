@@ -226,7 +226,8 @@ static Elf32_Addr load_stage2(void)
 		phdr = &phdrs[ph_idx];
 		Elf32_Word type = phdr->p_type;
 		Elf32_Off off = phdr->p_offset;
-		EFI_PHYSICAL_ADDRESS paddr = phdr->p_paddr;
+		EFI_PHYSICAL_ADDRESS paddr = phdr->p_paddr,
+				     slack = paddr % EFI_PAGE_SIZE;
 		Elf32_Word filesz = phdr->p_filesz, memsz = phdr->p_memsz;
 		UINTN pages;
 		phdr = &phdrs[ph_idx];
@@ -239,6 +240,13 @@ static Elf32_Addr load_stage2(void)
 			Output(u"  seg. file sz. > seg. mem. sz.!\r\n");
 			goto bad_elf;
 		}
+		if (slack) {
+			off -= slack;
+			paddr -= slack;
+			if (filesz)
+				filesz += slack;
+			memsz += slack;
+		}
 		pages = ((UINT64)memsz + EFI_PAGE_SIZE - 1) / EFI_PAGE_SIZE;
 		status = BS->AllocatePages(AllocateAddress,
 		    EfiRuntimeServicesData, pages, &paddr);
@@ -247,8 +255,10 @@ static Elf32_Addr load_stage2(void)
 			error_with_status(u"cannot get mem. for ELF seg.",
 			    status);
 		}
-		seek_stage2(prog, vol, off);
-		read_stage2(prog, vol, filesz, (void *)paddr);
+		if (filesz) {
+			seek_stage2(prog, vol, off);
+			read_stage2(prog, vol, filesz, (void *)paddr);
+		}
 		memset((char *)paddr + filesz, 0, memsz - filesz);
 	}
 	prog->Close(prog);

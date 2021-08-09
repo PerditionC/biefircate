@@ -66,7 +66,10 @@ SECTIONS
 
 	. = .;
 
-	.rm16 0 : AT(ALIGN(ADDR(.bss) + SIZEOF(.bss), 0x1000)) {
+	HIDDEN(PAGESIZE = CONSTANT(COMMONPAGESIZE));
+	rm16_run_start = ALIGN(_edata, 0x10) % PAGESIZE;
+
+	.rm16 rm16_run_start : AT(ALIGN(_end, PAGESIZE) + rm16_run_start) {
 		*(.rm16.text .rm16.stub .rm16.text.*)
 
 		. = ALIGN(0x10);
@@ -76,12 +79,11 @@ SECTIONS
 		*(.rm16.data .rm16.data.*)
 
 		. = ALIGN(0x10);
-		rm16_load_dwords = . / 4;
-
 		*(.rm16.bss .rm16.bss.*)
 	} :rm16
 
 	rm16_load_start = LOADADDR(.rm16);
+	rm16_load_dwords = (. - rm16_run_start) / 4;
 
 	/DISCARD/ : {
 		*(.note.GNU-stack .gnu_* .gnu.* .stab* .debug_* .eh_frame
