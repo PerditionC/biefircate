@@ -1,0 +1,18 @@
+= Developer notes
+
+=== Relevant standards (and "standards")
+
+:fn-brown-00: footnote:brown-00[Brown, Ralf.  The x86 Interrupt List.  16 July 2000.  http://www.cs.cmu.edu/~ralf/files.html.]
+:fn-pci-05: footnote:pci-05[PCI-SIG.  PCI Firmware Specification: Revision 3.0.  June 2005.]
+:fn-uefi-20: footnote:uefi-20[UEFI Forum.  UEFI Platform Initialization (PI) Specification: Version 1.7 Errata A.  April 2020.  https://uefi.org/sites/default/files/resources/PI_Spec_1_7_A_final_May1.pdf.]
+:fn-uefi-21: footnote:uefi-21[UEFI Forum.  Unified Extensible Firmware Interface (UEFI) Specification: Version 2.9.  March 2021.  https://uefi.org/sites/default/files/resources/UEFI_Spec_2_9_2021_03_18.pdf.]
+
+  * the hope is that `biefircate` can implement at least the BIOS interrupts and parts of the BIOS data area described in RBIL{fn-brown-00}
+    - intrs. `0x00`—`0x1f` (incl. `0x08`—`0x0f` for IRQs 0—7)
+    - intrs. `0x70`—`0x77` (IRQs 8—15)
+    - the BIOS data area `0x40:0`—`0x50:0`
+    - maybe also intrs. `0x40` (relocated diskette I/O) and `0x42` (relocated video output services)
+    - no need for `biefircate` to implement MS-DOS intrs. (`0x20`—`0x33` etc.)
+  * `biefircate` should also properly initialize any option ROMs for PCI devices — PCI firmware spec.{fn-pci-05} says how
+  * we assume the PC firmware implements UEFI{fn-uefi-21} and has some PCI support
+    - some PCs — but not all — allow bootloaders to access the firmware volume protocol{fn-uefi-20}

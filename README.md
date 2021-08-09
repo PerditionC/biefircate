@@ -1,6 +1,6 @@
 # biᴇꜰɪrcate
 
-_very experimental_
+_very experimental_ • _some [developer notes](NOTES.asciidoc) available_
 
  1. &nbsp;`sudo apt-get install gcc-mingw-w64-x86-64 gcc-multilib`
  2. &nbsp;`sudo apt-get install dosfstools mtools`
