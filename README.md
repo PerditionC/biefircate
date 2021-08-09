@@ -15,3 +15,5 @@ Currently the bootloader can also run an unmodified kernel from MIT's [Xv6](http
 
  7. &nbsp;`make -j4 hd-xv6.img`
  8. &nbsp;`make run-qemu-xv6`
+
+Again, some [developer notes](NOTES.asciidoc) are available.
