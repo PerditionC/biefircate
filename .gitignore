@@ -7,4 +7,6 @@ config.cache
 *.map
 *.stamp
 *.sys
+*.bin
+*.elf
 *~

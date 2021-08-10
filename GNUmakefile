@@ -49,8 +49,18 @@ CFLAGS2 += -mregparm=3 -mrtd -ffreestanding -Os -Wall -fno-stack-protector -MMD
 AS2 = nasm
 ASFLAGS2 = -f elf32 -MD $(@:.o=.d)
 CPPFLAGS2 += -I $(conf_Srcdir) $(COMMON_CPPFLAGS)
+LDFLAGS2_ORIG := $(LDFLAGS2)
 LDFLAGS2 += $(CFLAGS2) -static -nostdlib -ffreestanding \
-    -Wl,--strip-all -Wl,-Map=$(@:.sys=.map) -Wl,--build-id=none
+    -Wl,--strip-all -Wl,-Map=$(basename $@).map -Wl,--build-id=none
+
+CC3 = $(patsubst -m32,-m16,$(CC2))
+CFLAGS3 = -m16 $(patsubst -m32,-m16,$(CFLAGS2))
+AS3 = $(AS2)
+ASFLAGS3 = $(ASFLAGS2)
+CPPFLAGS3 = $(CPPFLAGS2)
+LDFLAGS3 = $(LDFLAGS2_ORIG) $(CFLAGS3) -static -nostdlib -ffreestanding \
+    -Wl,--strip-debug -Wl,-Map=$(basename $@).map -Wl,--build-id=none
+LDLIBS3 = $(LDLIBS2)
 
 QEMUFLAGS = -m 224m -serial stdio
 QEMUFLAGSXV6 = $(QEMUFLAGS) -hdb xv6/fs.img
@@ -91,14 +101,32 @@ romdumper.o: romdumper.c $(LIBEFI)
 
 stage1/main.o romdumper.o : CPPFLAGS += -DVERSION='"$(conf_Pkg_ver)"'
 
-$(STAGE2): stage2/start.o stage2/mem.o stage2/stage2.ld
-	$(CC2) $(LDFLAGS2) -o $@ $(^:%.ld=-T %.ld) $(LDLIBS2)
+stage2/16.bin: stage2/16.elf
+	objcopy -I elf32-i386 -O binary $< $@
+
+stage2/16.elf: stage2/16/rm16.o stage2/16/16.ld
+	$(CC3) $(LDFLAGS3) -o $@ $(^:%.ld=-T %.ld) $(LDLIBS3)
+
+stage2/16/%.o: stage2/16/%.c
+	mkdir -p $(@D)
+	$(CC3) $(CFLAGS3) $(CPPFLAGS3) -c -o $@ $<
+
+stage2/16/%.o: stage2/16/%.asm
+	mkdir -p $(@D)
+	$(AS3) $(ASFLAGS3) $(CPPFLAGS3) -o $@ $<
+
+$(STAGE2): stage2/start.o stage2/mem.o stage2/stage2.ld stage2/16.elf
+	$(CC2) $(LDFLAGS2) -o $@ \
+	    $(filter-out %.ld %.elf, $^) \
+	    $(patsubst %.ld,-T %.ld,$(filter %.ld,$^)) \
+	    $(patsubst %.elf,-Xlinker --just-symbols=%.elf,$(filter %.elf,$^))\
+	    $(LDLIBS2)
 
 stage2/%.o: stage2/%.c
 	mkdir -p $(@D)
 	$(CC2) $(CFLAGS2) $(CPPFLAGS2) -c -o $@ $<
 
-stage2/%.o: stage2/%.asm
+stage2/%.o: stage2/%.asm stage2/16.bin
 	mkdir -p $(@D)
 	$(AS2) $(ASFLAGS2) $(CPPFLAGS2) -o $@ $<
 
@@ -156,11 +184,11 @@ endif
 
 clean:
 	set -e; \
-	for d in . stage1 stage2; do \
+	for d in . stage1 stage2 stage2/16; do \
 		if test -d "$$d"; then \
 			(cd "$$d" && \
 			 $(RM) *.[od] *.so *.efi *.img *.vdi *.map *.stamp \
-			       *.sys *~); \
+			       *.sys *.elf *.bin *~); \
 		fi; \
 	done
 ifeq "$(conf_Separate_build_dir)" "yes"

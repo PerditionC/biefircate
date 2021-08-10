@@ -27,41 +27,37 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef H_COMMON
-#define H_COMMON
+/* GNU ld compatible linker script for the 16-bit portion of stage 2. */
 
-#include <inttypes.h>
+OUTPUT_FORMAT("elf32-i386", "elf32-i386", "elf32-i386")
+OUTPUT_ARCH(i386)
+ENTRY(_start)
 
-#define PARA_SIZE	0x10UL		/* no. of bytes in a paragraph */
-#define KIBYTE		1024UL		/* no. of bytes in a KiB */
-#define HKIBYTE		(KIBYTE / 2)	/* no. of bytes in half a KiB */
-#define BMEM_MAX_ADDR	0x100000ULL	/* end of base memory, i.e. the
-					   1 MiB mark */
-
-/* Fabricate a 32-bit magic number from 4 characters. */
-#define MAGIC32(a, b, c, d) \
-	((uint32_t)(unsigned char)(a)	    | \
-	 (uint32_t)(unsigned char)(b) <<  8 | \
-	 (uint32_t)(unsigned char)(c) << 16 | \
-	 (uint32_t)(unsigned char)(d) << 24)
-
-/*
- * Address range types, in the manner of BIOS int 0x15, ax = 0xe820.  These
- * go into bdat_mem_range_t::e820_type.  Other than E820_DISABLED, the names
- * are taken from the Linux 5.9.14 kernel code.
- */
-#define E820_RAM	1U		/* available memory */
-#define E820_RESERVED	2U		/* reserved memory */
-#define E820_ACPI	3U		/* ACPI reclaimable */
-#define E820_NVS	4U		/* ACPI NVS */
-#define E820_UNUSABLE	5U		/* bad memory */
-#define E820_DISABLED	6U		/* disabled memory (ACPI 6.3) */
-#define E820_PMEM	7U		/* persistent memory (ACPI 6.3) */
-
-/* Wait for an asynchronous interrupt. */
-static inline void hlt(void)
+SECTIONS
 {
-	__asm volatile("hlt");
-}
+	.text 0 : {
+		*(.text .stub .text.* .gnu.linkonce.t.*)
+		*(.gnu.warning)
+		PROVIDE(_etext = .);
 
-#endif
+		. = ALIGN(0x10);
+		*(.rodata .rodata.* .gnu.linkonce.r.*)
+
+		. = ALIGN(0x10);
+		*(.data .data.* .gnu.linkonce.d.*)
+		PROVIDE(_edata = .);
+
+		. = ALIGN(0x10);
+	}
+
+	.bss : {
+		*(.bss .bss.* .gnu.linkonce.b.*)
+		*(COMMON)
+		PROVIDE(_end = .);
+	}
+
+	/DISCARD/ : {
+		*(.note.GNU-stack .gnu_* .gnu.* .stab* .debug_* .eh_frame
+		  .comment)
+	}
+}

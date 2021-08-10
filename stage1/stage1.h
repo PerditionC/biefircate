@@ -36,6 +36,7 @@
 #include <inttypes.h>
 #include <stdbool.h>
 #include "bparm.h"
+#include "common.h"
 #include "elf.h"
 #include "pci.h"
 
@@ -82,12 +83,6 @@ extern void run_stage2(Elf32_Addr entry, Elf32_Addr trampoline,
 		       bparm_t *bparm);
 
 /* Macros, inline functions, & other definitions. */
-
-#define PARA_SIZE	0x10UL		/* no. of bytes in a paragraph */
-#define KIBYTE		1024UL		/* no. of bytes in a KiB */
-#define HKIBYTE		(KIBYTE / 2)	/* no. of bytes in half a KiB */
-#define BMEM_MAX_ADDR	0x100000ULL	/* end of base memory, i.e. the
-					   1 MiB mark */
 
 /* Define a bit vector type for storing the given number of bits. */
 #define BVEC_TYPE(num_ents) \
