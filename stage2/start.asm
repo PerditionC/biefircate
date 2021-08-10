@@ -88,5 +88,5 @@ rm16_load:
 
 	section	.bss
 
-	resb	0x2000
+	resb	0x1000
 starting_stack:

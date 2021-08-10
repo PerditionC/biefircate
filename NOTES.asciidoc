@@ -17,6 +17,8 @@
   * we assume the PC firmware implements UEFI{fn-uefi-21} and has some PCI support
     - some PCs — but not all — allow bootloaders to access the firmware volume protocol{fn-uefi-20}
 
+---
+
 === Other notes
 
 :fn-intel-97: footnote:intel-97[Intel Corporation.  MultiProcessor Specification: Version 1.4.  May 1997.]

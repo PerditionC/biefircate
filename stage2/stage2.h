@@ -43,8 +43,8 @@ extern void mem_init(bparm_t *);
 					   i.e. the 4 GiB mark */
 
 /*
- * Data structure describing a single memory address range.  The front part
- * is in the same format as returned by int 0x15, ax = 0xe820.
+ * Data structure describing a single memory address range.  This is in the
+ * same format as returned by int 0x15, ax = 0xe820.
  */
 typedef struct __attribute__((packed)) mem_range {
 	uint64_t start;

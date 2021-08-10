@@ -35,33 +35,27 @@
 static unsigned num_mem_ranges = 0, max_mem_ranges = 0;
 static mem_range_t *mem_ranges;
 
-static void radix_sort(mem_range_t *mrs, unsigned nmr, unsigned bit_pos)
+static void shellsort(mem_range_t *mrs, unsigned nmr)
 {
-	/* FIXME: this uses way too much stack space! */
-	unsigned left = 0, right = nmr - 1;
-	if (!nmr)
+	/* See Sedgewick 1996 (https://www.cs.princeton.edu/~rs/shell/). */
+	unsigned h = 1, i, j;
+	if (nmr < 2)
 		return;
-	while (left < right) {
-		while (left < right &&
-		       ((mrs[left].start + mrs[left].len - 1) >> bit_pos & 1)
-			   == 0)
-			++left;
-		while (left < right &&
-		       ((mrs[right].start + mrs[right].len - 1) >> bit_pos & 1)
-			   != 0)
-			--right;
-		if (left < right) {
-			mem_range_t mr = mrs[left];
-			mrs[left] = mrs[right];
-			mrs[right] = mr;
-			++left;
-			--right;
+	while (h < nmr)
+		h *= 2;
+	--h;
+	do {
+		for (i = h; i < nmr; ++i) {
+			mem_range_t v = mrs[i];
+			j = i;
+			while (j > h && mrs[j - h].start > v.start) {
+				mrs[j] = mrs[j - h];
+				j -= h;
+			}
+			mrs[j] = v;
 		}
-	}
-	if (bit_pos) {
-		radix_sort(mrs, left, bit_pos - 1);
-		radix_sort(mrs + left, nmr - left, bit_pos - 1);
-	}
+		h >>= 1;
+	} while (h);
 }
 
 /* Initialize memory allocation. */
@@ -143,7 +137,7 @@ void mem_init(bparm_t *bparms)
 		++nmr;
 	}
 	/* Sort the memory map by order of increasing ending addresses. */
-	radix_sort(mrs, nmr, 63);
+	shellsort(mrs, nmr);
 	/* Remember the memory map. */
 	mem_ranges = mrs;
 	num_mem_ranges = nmr;
