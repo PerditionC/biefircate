@@ -22,6 +22,14 @@
 
 ---
 
+=== Code structure (?)
+
+  * stage 1 is for stuff that happens before exiting UEFI boot services; stage 2 is for stuff after that
+    - other than the above, there are (currently) no hard and fast rules for delineating the two
+    - stage 1 passes a pointer to a linked list of boot parameters (see link:bparm.h[`bparm.h`]) to stage 2
+
+---
+
 === Other notes
 
 :fn-intel-97: footnote:intel-97[Intel Corporation.  MultiProcessor Specification: Version 1.4.  May 1997.]
