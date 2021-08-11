@@ -45,7 +45,8 @@ LDFLAGS += $(CFLAGS) -nostdlib -ffreestanding -Wl,--entry,efi_main \
 LIBEFI = gnu-efi/x86_64/lib/libefi.a
 LDLIBS := $(LIBEFI) $(LDLIBS)
 
-CFLAGS2 += -mregparm=3 -mrtd -ffreestanding -Os -Wall -fno-stack-protector -MMD
+CFLAGS2 += -mregparm=3 -mrtd -fno-pic -ffreestanding -Os -Wall \
+    -fno-stack-protector -MMD
 AS2 = nasm
 ASFLAGS2 = -f elf32 -MD $(@:.o=.d)
 CPPFLAGS2 += -I $(conf_Srcdir) $(COMMON_CPPFLAGS)
@@ -115,7 +116,8 @@ stage2/16/%.o: stage2/16/%.asm
 	mkdir -p $(@D)
 	$(AS3) $(ASFLAGS3) $(CPPFLAGS3) -o $@ $<
 
-$(STAGE2): stage2/start.o stage2/mem.o stage2/stage2.ld stage2/16.elf
+$(STAGE2): stage2/start.o stage2/main.o stage2/mem.o stage2/stage2.ld \
+    stage2/16.elf
 	$(CC2) $(LDFLAGS2) -o $@ \
 	    $(filter-out %.ld %.elf, $^) \
 	    $(patsubst %.ld,-T %.ld,$(filter %.ld,$^)) \

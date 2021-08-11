@@ -27,37 +27,26 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef H_STAGE2_STAGE2
-#define H_STAGE2_STAGE2
-
 #include <inttypes.h>
+#include <stdbool.h>
 #include <stdlib.h>
-#include "bparm.h"
+#include <string.h>
+#include "stage2/stage2.h"
 
-/* mem.c functions. */
+static void *copy_rm16(void *rm16_load, size_t rm16_sz)
+{
+	void *rm16_run = mem_alloc(rm16_sz, KIBYTE, BMEM_MAX_ADDR);
+	memcpy(rm16_run, rm16_load, rm16_sz);
+	fixup_gdt_cs16(rm16_run);
+	return rm16_run;
+}
 
-extern void mem_init(bparm_t *);
-extern void *mem_alloc(size_t, size_t, uintptr_t);
-
-/* start.asm functions. */
-
-extern void fixup_gdt_cs16(void *);
-
-/* Macros, inline functions, & other definitions. */
-
-#define XM32_MAX_ADDR	0x100000000ULL	/* end of 32-bit extended memory,
-					   i.e. the 4 GiB mark */
-
-/*
- * Data structure describing a single memory address range.  The front part
- * is in the same format as returned by int 0x15, ax = 0xe820.
- */
-typedef struct __attribute__((packed)) mem_range {
-	uint64_t start;
-	uint64_t len;
-	uint32_t e820_type;
-	uint32_t e820_ext_attr;
-	struct mem_range *prev, *next;
-} mem_range_t;
-
-#endif
+void stage2_main(bparm_t *bparms, void *rm16_load, size_t rm16_sz)
+{
+	void *rm16_run;
+	mem_init(bparms);
+	rm16_run = copy_rm16(rm16_load, rm16_sz);
+	__asm volatile("movw $SEL_DS16, %%ax; ljmpw $SEL_CS16, $rm16"
+	    : : "d" ((uintptr_t)rm16_run >> 4));
+	hlt();
+}

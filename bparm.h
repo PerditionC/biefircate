@@ -56,7 +56,7 @@ typedef struct __attribute__((packed)) {
 } bdat_pci_dev_t;
 
 /*
- * "bMEM" boot data, describing base memory availability at boot time &
+ * "BMEM" boot data, describing base memory availability at boot time &
  * run time.
  */
 typedef struct __attribute__((packed)) {

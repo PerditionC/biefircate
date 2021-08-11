@@ -47,7 +47,9 @@ rm16:
 	mov	eax, cr0		; switch to real mode
 	and	al, 0b11111110
 	mov	cr0, eax
-	jmp	VGA_INIT_SEG:word .cont
+	push	dx
+	push	word .cont
+	retf
 .cont:
 	xor	ax, ax			; really set up segments
 	mov	ds, ax

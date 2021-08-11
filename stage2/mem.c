@@ -58,6 +58,54 @@ static void shellsort(mem_range_t *mrs, unsigned nmr)
 	} while (h);
 }
 
+static mem_range_t *find_highest_range_below(uint64_t max_addr)
+{
+	unsigned left = 0, right = num_mem_ranges;
+	mem_range_t *mr;
+	while (left < right - 1) {
+		unsigned mid = (left + right) / 2;
+		mr = &mem_ranges[mid];
+		if (mr->start + mr->len - 1 > max_addr - 1)
+			right = mid;
+		else
+			left = mid;
+	}
+	mr = &mem_ranges[left];
+	while (mr->start + mr->len - 1 > max_addr - 1) {
+		if (!left)
+			hlt();
+		--mr;
+		--left;
+	}
+	return mr;
+}
+
+void split_range(mem_range_t *mr, uint64_t split_point,
+    uint32_t e820_type_below, uint32_t e820_type_above)
+{
+	if (mr->start == split_point)
+		mr->e820_type = e820_type_above;
+	else if (mr->start + mr->len == split_point)
+		mr->e820_type = e820_type_below;
+	else {
+		mem_range_t *mr2;
+		if (num_mem_ranges >= max_mem_ranges)
+			hlt();
+		mr2 = &mem_ranges[num_mem_ranges];
+		++num_mem_ranges;
+		while (mr2 != mr) {
+			*mr2 = mr2[-1];
+			--mr2;
+		}
+		++mr2;
+		mr->len = split_point - mr->start;
+		mr2->len -= mr->len;
+		mr2->start = split_point;
+		mr->e820_type = e820_type_below;
+		mr2->e820_type = e820_type_above;
+	}
+}
+
 /* Initialize memory allocation. */
 void mem_init(bparm_t *bparms)
 {
@@ -78,7 +126,7 @@ void mem_init(bparm_t *bparms)
 	 */
 	mmr = 1;
 	for (bp = bparms; bp; bp = bp->next)
-		if (bp->type == BP_MRNG)
+		if (bp->type == BP_MRNG && bp->u->mem_range.len != 0)
 			++mmr;
 	mmr = (3 * mmr + 1) / 2;
 	if (mmr < 16)
@@ -142,4 +190,33 @@ void mem_init(bparm_t *bparms)
 	mem_ranges = mrs;
 	num_mem_ranges = nmr;
 	max_mem_ranges = mmr;
+}
+
+/*
+ * Reserve some memory for internal use.  If `max_addr' != 0, the end of the
+ * memory block will be below `max_addr'.
+ */
+void *mem_alloc(size_t sz, size_t align, uintptr_t max_addr)
+{
+	uint64_t max_addr64;
+	uintptr_t astart;
+	mem_range_t *mr;
+	if (!sz)
+		return NULL;
+	max_addr64 = max_addr;
+	if (!max_addr)
+		max_addr64 = XM32_MAX_ADDR;
+	if (max_addr < sz)
+		hlt();
+	for (mr = find_highest_range_below(max_addr64); ; --mr) {
+		if (mr->e820_type != E820_RAM || mr->len < sz)
+			continue;
+		astart = (mr->start + mr->len - sz) & -align;
+		if (astart >= mr->start)
+			break;
+		if (!mr->start)
+			hlt();
+	}
+	split_range(mr, astart, E820_RAM, E820_RESERVED);
+	return (void *)astart;
 }

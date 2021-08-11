@@ -14,8 +14,11 @@
     - maybe also intrs. `0x40` (relocated diskette I/O) and `0x42` (relocated video output services)
     - no need for `biefircate` to implement MS-DOS intrs. (`0x20`—`0x33` etc.)
   * `biefircate` should also properly initialize any option ROMs for PCI devices — PCI firmware spec.{fn-pci-05} says how
-  * we assume the PC firmware implements UEFI{fn-uefi-21} and has some PCI support
-    - some PCs — but not all — allow bootloaders to access the firmware volume protocol{fn-uefi-20}
+  * we assume the PC firmware
+    - implements UEFI{fn-uefi-21}
+    - has some PCI support
+    - has a legacy-style PCI option ROM for the VGA device
+  * some PCs — but not all — allow bootloaders to access the firmware volume protocol;{fn-uefi-20} this can be used to discover some option ROMs
 
 ---
 

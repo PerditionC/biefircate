@@ -35,10 +35,12 @@
 
 VGA_INIT_SEG equ 0x1000
 
-	extern	mem_init, rm16_load_start, rm16
+	extern	mem_init, stage2_main, rm16
 
 	global	_start
 _start:
+	cli
+	cld
 	mov	esp, starting_stack
 	lgdt	[gdtr]
 	lidt	[idtrrm]
@@ -51,16 +53,23 @@ _start:
 	mov	fs, ax
 	mov	gs, ax
 	mov	eax, ebp
-	call	mem_init
-	mov	edi, VGA_INIT_SEG<<4
-	mov	esi, rm16_load
-	mov	ecx, (rm16_load.end-rm16_load)/4
-	cld
-	rep movsd
-	mov	ax, SEL_DS16
-	jmp	SEL_CS16:word rm16
+	mov	edx, rm16_load
+	mov	ecx, rm16_load.end-rm16_load
+	call	stage2_main
+
+	global	fixup_gdt_cs16
+fixup_gdt_cs16:
+	or	[gdt+SEL_CS16+2], eax
+	ret
 
 	section .rodata
+
+gdtr:	dw	gdt_end-gdt-1
+	dd	gdt
+idtrrm:	dw	0x100*4-1
+	dd	0
+
+	section	.data
 
 	align	8
 	global	SEL_CS32, SEL_DS32, SEL_CS16, SEL_DS16
@@ -70,15 +79,11 @@ SEL_CS32 equ	$-gdt
 SEL_DS32 equ	$-gdt
 	dq	0x00cf92000000ffff	; 32-bit protected mode data seg.
 SEL_CS16 equ	$-gdt
-					; 16-bit protected mode code seg.
-	dq	0x008f9a000000ffff|(VGA_INIT_SEG<<4<<16)
+	dq	0x008f9a000000ffff	; 16-bit protected mode code seg.
+					; pointing to our 16-bit code
 SEL_DS16 equ	$-gdt
 	dq	0x008f92000000ffff	; 16-bit protected mode data seg.
 gdt_end:
-gdtr:	dw	gdt_end-gdt-1
-	dd	gdt
-idtrrm:	dw	0x100*4-1
-	dd	0
 
 	align	4
 rm16_load:
