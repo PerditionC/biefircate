@@ -33,20 +33,46 @@
 #include <string.h>
 #include "stage2/stage2.h"
 
-static void *copy_rm16(void *rm16_load, size_t rm16_sz)
+static void rimg_init(bparm_t *bparms, bool init_vga)
 {
-	void *rm16_run = mem_alloc(rm16_sz, KIBYTE, BMEM_MAX_ADDR);
-	memcpy(rm16_run, rm16_load, rm16_sz);
-	fixup_gdt_cs16(rm16_run);
-	return rm16_run;
+	bparm_t *bp;
+	for (bp = bparms; bp; bp = bp->next) {
+		uint16_t rimg_seg;
+		bdat_pci_dev_t *pd;
+		bool do_init;
+		if (bp->type != BP_PCID)
+			continue;
+		pd = &bp->u->pci_dev;
+		switch (pd->class_if & 0xffff0000UL) {
+		    case 0x03000000:  /* VGA */
+		    case 0x03010000:  /* XGA */
+			do_init = init_vga;
+			break;
+		    default:
+			do_init = !init_vga;
+		}
+		if (!do_init)
+			continue;
+		rimg_seg = pd->rimg_seg;
+		if (!rimg_seg)
+			continue;
+		rm16_call(pd->pci_locn, 0, 0, pd->rimg_rt_seg,
+		    MK_FP16(rimg_seg, 0x0003));
+	}
+}
+
+static void hello(void)
+{
+	extern void hello16(void);
+	rm16_call(0, 0, 0, 0, MK_FP16(rm16_cs, (uint16_t)(uintptr_t)hello16));
 }
 
 void stage2_main(bparm_t *bparms, void *rm16_load, size_t rm16_sz)
 {
-	void *rm16_run;
 	mem_init(bparms);
-	rm16_run = copy_rm16(rm16_load, rm16_sz);
-	__asm volatile("movw $SEL_DS16, %%ax; ljmpw $SEL_CS16, $rm16"
-	    : : "d" ((uintptr_t)rm16_run >> 4));
+	rm16_init();
+	rimg_init(bparms, true);
+	hello();
+	rimg_init(bparms, false);
 	hlt();
 }

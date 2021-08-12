@@ -25,73 +25,23 @@
 ; NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 ; SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-%include "stage2/stage2.inc"
+%ifndef	_H_STAGE2
+%define	_H_STAGE2
 
-	section	.text
+SEL_CS32 equ	0x0008
+SEL_DS32 equ	0x0010
+SEL_CS16 equ	0x0018
+SEL_DS16_ZERO equ 0x0020
 
-%define MAGIC32(a, b, c, d) \
-	(((a) & 0xff)	    | \
-	 ((b) & 0xff) <<  8 | \
-	 ((c) & 0xff) << 16 | \
-	 ((d) & 0xff) << 24)
+	absolute 0x0400
+bda:
+.com1:	resw	1
+.com2:	resw	1
+.com3:	resw	1
+.com4:	resw	1
+.lpt1:	resw	1
+.lpt2:	resw	1
+.lpt3:	resw	1
+.ebda:	resw	1
 
-VGA_INIT_SEG equ 0x1000
-
-	extern	mem_init, stage2_main, rm16
-
-	global	_start
-_start:
-	cli
-	cld
-	mov	esp, starting_stack
-	lgdt	[gdtr]
-	lidt	[idtrrm]
-	jmp	SEL_CS32:.cont
-.cont:
-	mov	ax, SEL_DS32
-	mov	ds, ax
-	mov	es, ax
-	mov	ss, ax
-	mov	fs, ax
-	mov	gs, ax
-	mov	eax, ebp
-	call	stage2_main
-
-	section .rodata
-
-gdtr:	dw	gdt_end-gdt-1
-	dd	gdt
-idtrrm:	dw	0x100*4-1
-	dd	0
-
-	section	.data
-
-	global	gdt_desc_cs16
-
-	align	8
-gdt equ		$-8
-%if SEL_CS32 != $-gdt
-%   error "SEL_CS32 does not match actual GDT"
 %endif
-	dq	0x00cf9a000000ffff	; 32-bit protected mode code seg.
-%if SEL_DS32 != $-gdt
-%   error "SEL_DS32 does not match actual GDT"
-%endif
-	dq	0x00cf92000000ffff	; 32-bit protected mode data seg.
-%if SEL_CS16 != $-gdt
-%   error "SEL_CS16 does not match actual GDT"
-%endif
-gdt_desc_cs16:
-	dq	0x008f9a000000ffff	; 16-bit protected mode code seg.
-					; pointing to our 16-bit code
-%if SEL_DS16_ZERO != $-gdt
-%   error "SEL_DS16_ZERO does not match actual GDT"
-%endif
-	dq	0x008f92000000ffff	; 16-bit protected mode data seg.
-					; pointing to linear address zero
-gdt_end:
-
-	section	.bss
-
-	resb	0x1000
-starting_stack:

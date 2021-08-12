@@ -31,29 +31,42 @@
 
 OUTPUT_FORMAT("elf32-i386", "elf32-i386", "elf32-i386")
 OUTPUT_ARCH(i386)
-ENTRY(_start)
+ENTRY(_stext16)
 
 SECTIONS
 {
-	.text 0 : {
-		*(.text .stub .text.* .gnu.linkonce.t.*)
-		*(.gnu.warning)
-		PROVIDE(_etext = .);
+	HIDDEN(KIBYTE = 1024);
 
-		. = ALIGN(0x10);
+	.data 0 : {
+		_sdata16 = .;
+
 		*(.rodata .rodata.* .gnu.linkonce.r.*)
 
 		. = ALIGN(0x10);
 		*(.data .data.* .gnu.linkonce.d.*)
-		PROVIDE(_edata = .);
 
 		. = ALIGN(0x10);
+		_edata16 = .;
 	}
 
 	.bss : {
 		*(.bss .bss.* .gnu.linkonce.b.*)
 		*(COMMON)
-		PROVIDE(_end = .);
+
+		. = ALIGN(KIBYTE);
+		_end16 = .;
+	}
+
+	. = .;
+	_END16_KIB = . / KIBYTE;
+
+	.text 0 : AT(ALIGN(. + 1, CONSTANT(COMMONPAGESIZE))) {
+		_stext16 = .;
+
+		*(.text .stub .text.* .gnu.linkonce.t.*)
+		*(.gnu.warning)
+
+		_etext16 = .;
 	}
 
 	/DISCARD/ : {

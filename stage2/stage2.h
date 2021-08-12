@@ -34,14 +34,19 @@
 #include <stdlib.h>
 #include "bparm.h"
 
+typedef uint32_t farptr16_t;
+
 /* mem.c functions. */
 
 extern void mem_init(bparm_t *);
 extern void *mem_alloc(size_t, size_t, uintptr_t);
 
-/* start.asm functions. */
+/* rm16.asm functions. */
 
-extern void fixup_gdt_cs16(void *);
+extern uint16_t rm16_cs;
+extern void rm16_init(void);
+extern void rm16_call(uint32_t eax, uint32_t edx, uint32_t ecx, uint32_t ebx,
+		      farptr16_t callee);
 
 /* Macros, inline functions, & other definitions. */
 
@@ -59,5 +64,11 @@ typedef struct __attribute__((packed)) mem_range {
 	uint32_t e820_ext_attr;
 	struct mem_range *prev, *next;
 } mem_range_t;
+
+/* Fashion a far 16-bit pointer from a 16-bit segment & a 16-bit offset. */
+static inline uint32_t MK_FP16(uint16_t seg, uint16_t off)
+{
+	return (uint32_t)seg << 16 | off;
+}
 
 #endif

@@ -74,7 +74,7 @@ Lpm32:
 	mov	al, 0
 	mov	fs, ax
 	mov	gs, ax
-	mov	eax, cr0		; turn off paging (CR0.PG) */
+	mov	eax, cr0		; turn off paging (CR0.PG)
 	and	eax, 0x7fffffff
 	mov	cr0, eax
 	mov	ecx, 0xc0000080		; turn off long mode support (EFER.LME)

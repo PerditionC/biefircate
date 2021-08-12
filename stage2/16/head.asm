@@ -25,67 +25,10 @@
 ; NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 ; SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-%define MAGIC32(a, b, c, d) \
-	(((a) & 0xff)	    | \
-	 ((b) & 0xff) <<  8 | \
-	 ((c) & 0xff) << 16 | \
-	 ((d) & 0xff) << 24)
+%include "stage2/stage2.inc"
 
-VGA_INIT_SEG equ 0x1000
+	section .rodata
 
-	section	.text
+	extern	_END16_KIB
 
-	bits	16
-	global	rm16
-rm16:
-	mov	ds, ax			; prime segment descriptor caches;
-	mov	es, ax			; ax = SEL_DS16
-	mov	ss, ax
-	mov	fs, ax
-	mov	gs, ax
-	mov	esp, 0x0600
-	mov	eax, cr0		; switch to real mode
-	and	al, 0b11111110
-	mov	cr0, eax
-	push	dx
-	push	word .cont
-	retf
-.cont:
-	xor	ax, ax			; really set up segments
-	mov	ds, ax
-	mov	es, ax
-	mov	ss, ax
-	mov	fs, ax
-	mov	gs, ax
-	jmp	find
-next:
-	mov	ebp, [ebp]
-find:
-					; look for a "PCID" boot param. with
-					; an option ROM
-	cmp	dword [ebp+8], MAGIC32('P', 'C', 'I', 'D')
-	jnz	next
-	mov	cx, [ebp+0x1c]
-	jcxz	next
-	mov	ax, [ebp+0x10]		; get VGA controller's PCI locn.
-	mov	bx, [ebp+0x1e]		; set the dest. seg. for the opt. ROM
-	push	word [ebp+0x1c]		; call the option ROM code
-	push	word 3
-	call	far word [esp]
-	pop	eax
-	mov	ax, 0x0003		; try to set 80 * 25 screen mode
-	int	0x10
-	mov	si, msg
-say:
-	cs lodsb
-	test	al, al
-	jz	stop
-	mov	ah, 0xe
-	mov	bx, 0x0007
-	int	0x10
-	jmp	say
-stop:
-	cli
-	hlt				; snooze
-
-msg:	db	"Hello world from int 0x10!", 13, 10, 0
+	db	_END16_KIB		; size of the EBDA in kiB

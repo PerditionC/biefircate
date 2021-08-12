@@ -29,69 +29,72 @@
 
 	section	.text
 
-%define MAGIC32(a, b, c, d) \
-	(((a) & 0xff)	    | \
-	 ((b) & 0xff) <<  8 | \
-	 ((c) & 0xff) << 16 | \
-	 ((d) & 0xff) << 24)
-
-VGA_INIT_SEG equ 0x1000
-
-	extern	mem_init, stage2_main, rm16
-
-	global	_start
-_start:
+	bits	16
+	global	rm16_call.cont1, rm16_call.rm_cs16
+rm16_call.cont1:			; on entry eax, ebx, ecx, edx give
+					; the parameters to pass to the
+					; callee, [edi] is the real mode far
+					; address to call, & esi is free
+	mov	si, SEL_DS16_ZERO	; prime segment descriptor caches
+	mov	ds, si			; with 16-bit properties
+	mov	es, si
+	mov	fs, si
+	mov	gs, si
+	mov	esi, cr0		; switch to real mode
+	and	si, byte ~0b00000001
+	mov	cr0, esi
+	jmp	0:rm16_call.cont2
+rm16_call.rm_cs16 equ $-2
+rm16_call.cont2:
+	mov	si, [bda.ebda]		; really set up segments
+	mov	ds, si
+	mov	[sp32], esp
+	mov	ss, si
+	mov	esp, _stack16
+	mov	es, si
+	xor	si, si
+	mov	fs, si
+	mov	gs, si
+	sgdt	[gdtr]			; save our GDTR
+	call	far word [fs:edi]	; call the callee
 	cli
-	cld
-	mov	esp, starting_stack
+	xor	si, si			; restore the 32-bit stack & also
+	mov	ss, si			; restore our GDTR
+	mov	ds, [ss:bda.ebda]
+	mov	esp, [sp32]
 	lgdt	[gdtr]
-	lidt	[idtrrm]
-	jmp	SEL_CS32:.cont
-.cont:
-	mov	ax, SEL_DS32
-	mov	ds, ax
-	mov	es, ax
-	mov	ss, ax
-	mov	fs, ax
-	mov	gs, ax
-	mov	eax, ebp
-	call	stage2_main
+	mov	esi, cr0		; return to 32-bit protected mode
+	or	si, byte 0b00000001
+	mov	cr0, esi
+	jmp	short rm16_call.cont3
+rm16_call.cont3:
+	add	esp, 8
+	jmp	far dword [esp-8]
 
-	section .rodata
+	global	hello16
+hello16:
+	mov	ax, 0x0003
+	int	0x10
+	mov	ah, 0x03
+	xor	bh, bh
+	int	0x10
+	mov	ax, 0x1301
+	mov	bx, 0x0007
+	mov	cx, msg.end-msg
+	mov	bp, msg
+	int	0x10
+	retf
 
-gdtr:	dw	gdt_end-gdt-1
-	dd	gdt
-idtrrm:	dw	0x100*4-1
-	dd	0
+	section	.rodata
 
-	section	.data
-
-	global	gdt_desc_cs16
-
-	align	8
-gdt equ		$-8
-%if SEL_CS32 != $-gdt
-%   error "SEL_CS32 does not match actual GDT"
-%endif
-	dq	0x00cf9a000000ffff	; 32-bit protected mode code seg.
-%if SEL_DS32 != $-gdt
-%   error "SEL_DS32 does not match actual GDT"
-%endif
-	dq	0x00cf92000000ffff	; 32-bit protected mode data seg.
-%if SEL_CS16 != $-gdt
-%   error "SEL_CS16 does not match actual GDT"
-%endif
-gdt_desc_cs16:
-	dq	0x008f9a000000ffff	; 16-bit protected mode code seg.
-					; pointing to our 16-bit code
-%if SEL_DS16_ZERO != $-gdt
-%   error "SEL_DS16_ZERO does not match actual GDT"
-%endif
-	dq	0x008f92000000ffff	; 16-bit protected mode data seg.
-					; pointing to linear address zero
-gdt_end:
+msg:	db	".:. biefircate ", VERSION, " .:. "
+	db	"hello world from int 0x10", 13, 10
+.end:
 
 	section	.bss
 
+sp32:	resd	1
+gdtr:	resb	6
+
 	resb	0x1000
-starting_stack:
+_stack16:

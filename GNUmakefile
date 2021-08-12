@@ -101,11 +101,15 @@ romdumper.o: romdumper.c $(LIBEFI)
 	$(CC) $(CFLAGS) $(CPPFLAGS) -c -o $@ $<
 
 stage1/main.o romdumper.o : CPPFLAGS += -DVERSION='"$(conf_Pkg_ver)"'
+stage2/16/do-rm16-call.o : CPPFLAGS3 += -DVERSION='"$(conf_Pkg_ver)"'
 
-stage2/16.bin: stage2/16.elf
-	objcopy -I elf32-i386 -O binary $< $@
+stage2/data16.bin: stage2/16.elf
+	objcopy -I elf32-i386 --dump-section .data=$@ $< /dev/null
 
-stage2/16.elf: stage2/16/rm16.o stage2/16/16.ld
+stage2/text16.bin: stage2/16.elf
+	objcopy -I elf32-i386 --dump-section .text=$@ $< /dev/null
+
+stage2/16.elf: stage2/16/head.o stage2/16/do-rm16-call.o stage2/16/16.ld
 	$(CC3) $(LDFLAGS3) -o $@ $(^:%.ld=-T %.ld) $(LDLIBS3)
 
 stage2/16/%.o: stage2/16/%.c
@@ -116,8 +120,8 @@ stage2/16/%.o: stage2/16/%.asm
 	mkdir -p $(@D)
 	$(AS3) $(ASFLAGS3) $(CPPFLAGS3) -o $@ $<
 
-$(STAGE2): stage2/start.o stage2/main.o stage2/mem.o stage2/stage2.ld \
-    stage2/16.elf
+$(STAGE2): stage2/start.o stage2/main.o stage2/mem.o stage2/rm16.o \
+    stage2/stage2.ld stage2/16.elf
 	$(CC2) $(LDFLAGS2) -o $@ \
 	    $(filter-out %.ld %.elf, $^) \
 	    $(patsubst %.ld,-T %.ld,$(filter %.ld,$^)) \
@@ -128,7 +132,7 @@ stage2/%.o: stage2/%.c
 	mkdir -p $(@D)
 	$(CC2) $(CFLAGS2) $(CPPFLAGS2) -c -o $@ $<
 
-stage2/%.o: stage2/%.asm stage2/16.bin
+stage2/%.o: stage2/%.asm stage2/data16.bin stage2/text16.bin
 	mkdir -p $(@D)
 	$(AS2) $(ASFLAGS2) $(CPPFLAGS2) -o $@ $<
 
