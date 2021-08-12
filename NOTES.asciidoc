@@ -8,16 +8,16 @@
 :fn-uefi-21: footnote:uefi-21[UEFI Forum.  Unified Extensible Firmware Interface (UEFI) Specification: Version 2.9.  March 2021.  https://uefi.org/sites/default/files/resources/UEFI_Spec_2_9_2021_03_18.pdf.]
 
   * the hope is that `biefircate` can implement at least the BIOS interrupts and parts of the BIOS data area described in RBIL{fn-brown-00}
-    - intrs. `0x00`—`0x1f` (incl. `0x08`—`0x0f` for IRQs 0—7)
-    - intrs. `0x70`—`0x77` (IRQs 8—15)
-    - the BIOS data area `0x40:0`—`0x50:0`
-    - maybe also intrs. `0x40` (relocated diskette I/O) and `0x42` (relocated video output services)
-    - no need for `biefircate` to implement MS-DOS intrs. (`0x20`—`0x33` etc.)
+  ** intrs. `0x00`—`0x1f` (incl. `0x08`—`0x0f` for IRQs 0—7)
+  ** intrs. `0x70`—`0x77` (IRQs 8—15)
+  ** the BIOS data area `0x40:0`—`0x50:0`
+  ** maybe also intrs. `0x40` (relocated diskette I/O) and `0x42` (relocated video output services)
+  ** no need for `biefircate` to implement MS-DOS intrs. (`0x20`—`0x33` etc.)
   * `biefircate` should also properly initialize any option ROMs for PCI devices — PCI firmware spec.{fn-pci-05} says how
   * we assume the PC firmware
-    - implements UEFI{fn-uefi-21}
-    - has some PCI support
-    - has a legacy-style PCI option ROM for the VGA device
+  ** implements UEFI{fn-uefi-21}
+  ** has some PCI support
+  ** has a legacy-style PCI option ROM for the VGA device
   * some PCs — but not all — allow bootloaders to access the firmware volume protocol;{fn-uefi-20} this can be used to discover some option ROMs
 
 ---
@@ -25,8 +25,13 @@
 === Code structure (?)
 
   * stage 1 is for stuff that happens before exiting UEFI boot services; stage 2 is for stuff after that
-    - other than the above, there are (currently) no hard and fast rules for delineating the two
-    - stage 1 passes a pointer to a linked list of boot parameters (see link:bparm.h[`bparm.h`]) to stage 2
+  ** other than the above, there are (currently) no hard and fast rules for delineating the two
+  ** stage 1 passes a pointer to a linked list of boot parameters (see link:bparm.h[`bparm.h`]) to stage 2
+  * calling convention used for stage 2 is `-mregparm=3 -mrtd`
+  ** when calling non-variadic function:
+  *** first few arguments go in `eax`, `edx`, `ecx`
+  *** callee pops any stack arguments
+  ** callee must preserve `ebx` (!), `esi`, `edi`, `ebp`
 
 ---
 
@@ -35,8 +40,8 @@
 :fn-intel-97: footnote:intel-97[Intel Corporation.  MultiProcessor Specification: Version 1.4.  May 1997.]
 
   * UEFI stuff
-    - **note:** boot services will be unavailable once bootloader calls `BS->ExitBootServices(, )`
-      - _might_ be possible to implement a BIOS without exiting boot services, but this is non-trivial — UEFI expects to be in control of most system resources, incl. memory, page tables, and IRQs
+  ** **note:** boot services will be unavailable once bootloader calls `BS->ExitBootServices(, )`
+  *** _might_ be possible to implement a BIOS without exiting boot services, but this is non-trivial — UEFI expects to be in control of most system resources, incl. memory, page tables, and IRQs
   * Xv6 will panic if it cannot find MP tables per Intel's (deprecated) MultiProcessor Specification{fn-intel-97}
-    - `biefircate` produces dummy MP tables if `XV6_COMPAT` is defined
-    - other OSes probably do not need MP tables to work
+  ** `biefircate` produces dummy MP tables if `XV6_COMPAT` is defined
+  ** other OSes probably do not need MP tables to work
