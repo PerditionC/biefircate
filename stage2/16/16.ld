@@ -37,13 +37,21 @@ SECTIONS
 {
 	HIDDEN(KIBYTE = 1024);
 
+	/*
+	 * Place read/write initialized data before read-only data, & place
+	 * data before text.  This arrangement more closely mimics the
+	 * memory layout that will arise at run time, with the EBDA coming
+	 * right above the first block of base memory, & the "BIOS" code
+	 * appearing only further up.
+	 */
+
 	.data 0 : {
 		_sdata16 = .;
 
-		*(.rodata .rodata.* .gnu.linkonce.r.*)
+		*(.data .data.* .gnu.linkonce.d.*)
 
 		. = ALIGN(0x10);
-		*(.data .data.* .gnu.linkonce.d.*)
+		*(.rodata .rodata.* .gnu.linkonce.r.*)
 
 		. = ALIGN(0x10);
 		_edata16 = .;

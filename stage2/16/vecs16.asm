@@ -27,74 +27,115 @@
 
 %include "stage2/stage2.inc"
 
+	bits	16
+
+%define	TO_HEX_DIGIT(v)	((v)>9?(v)-10+'a':(v)+'0')
+
+%macro	ISR_UNIMPL 1
+	section	.text
+isr16_%{1}_unimpl:
+	call	isr16_unimpl
+	db	TO_HEX_DIGIT((%1)>>4), TO_HEX_DIGIT((%1)&0x0f)
+	section	.rodata
+    %if (%1) == 0x00
+	global	vecs16
+vecs16:
+    %endif
+	dw	isr16_%{1}_unimpl
+%endmacro
+
+%macro	ISR_IMPL 1
+	section	.rodata
+	dw	isr16_%1
+%endmacro
+
+%macro	ISR_IRET 1
+	section	.rodata
+	dw	iret16
+%endmacro
+
+%macro	ISR_END 0
+	section	.rodata
+	global	NUM_VECS16
+NUM_VECS16 equ	($-vecs16)/2
+%endmacro
+
+	ISR_UNIMPL 0x00
+	ISR_IRET 0x01
+	ISR_UNIMPL 0x02
+	ISR_IRET 0x03
+	ISR_IRET 0x04
+	ISR_UNIMPL 0x05
+	ISR_UNIMPL 0x06
+	ISR_UNIMPL 0x07
+	ISR_UNIMPL 0x08
+	ISR_UNIMPL 0x09
+	ISR_UNIMPL 0x0a
+	ISR_UNIMPL 0x0b
+	ISR_UNIMPL 0x0c
+	ISR_UNIMPL 0x0d
+	ISR_UNIMPL 0x0e
+	ISR_UNIMPL 0x0f
+	ISR_UNIMPL 0x10
+	ISR_IMPL 0x11
+	ISR_IMPL 0x12
+	ISR_UNIMPL 0x13
+	ISR_UNIMPL 0x14
+	ISR_UNIMPL 0x15
+	ISR_UNIMPL 0x16
+	ISR_UNIMPL 0x17
+	ISR_UNIMPL 0x18
+	ISR_UNIMPL 0x19
+	ISR_UNIMPL 0x1a
+	ISR_IRET 0x1b
+	ISR_IRET 0x1c
+	ISR_END
+
 	section	.text
 
-	bits	16
+isr16_0x11:
+	push	ds
+	xor	ax, ax
+	mov	ds, ax
+	movzx	eax, word [bda.eqpt]
+	pop	ds
+iret16:	iret
+
+isr16_0x12:
+	push	ds
+	xor	ax, ax
+	mov	ds, ax
+	mov	ax, [bda.base_kib]
+	pop	ds
+	iret
 
 	extern	_stack16
 
-	global	rm16_call.cont1, rm16_call.rm_cs16
-rm16_call.cont1:			; on entry eax, ebx, ecx, edx give
-					; the parameters to pass to the
-					; callee, [edi] is the real mode far
-					; address to call, & esi is free
-	mov	si, SEL_DS16_ZERO	; prime segment descriptor caches
-	mov	ds, si			; with 16-bit properties
-	mov	es, si
-	mov	fs, si
-	mov	gs, si
-	mov	esi, cr0		; switch to real mode
-	and	si, byte ~0b00000001
-	mov	cr0, esi
-	jmp	0:rm16_call.cont2
-rm16_call.rm_cs16 equ $-2
-rm16_call.cont2:
-	mov	si, [bda.ebda]		; really set up segments
-	mov	ds, si
-	mov	[sp32], esp
-	mov	ss, si
-	mov	esp, _stack16
-	mov	es, si
-	xor	si, si
-	mov	fs, si
-	mov	gs, si
-	sgdt	[gdtr]			; save our GDTR
-	call	far word [fs:edi]	; call the callee
-	cli
-	xor	si, si			; restore the 32-bit stack & also
-	mov	ss, si			; restore our GDTR
-	mov	ds, [ss:bda.ebda]
-	mov	esp, [sp32]
-	lgdt	[gdtr]
-	mov	esi, cr0		; return to 32-bit protected mode
-	or	si, byte 0b00000001
-	mov	cr0, esi
-	jmp	short rm16_call.cont3
-rm16_call.cont3:
-	add	esp, 8
-	jmp	far dword [esp-8]
-
-	global	hello16
-hello16:
-	mov	ax, 0x0003
-	int	0x10
+isr16_unimpl:
+	pop	bx
+	xor	ax, ax
+	mov	ds, ax
+	mov	ax, [bda.ebda]
+	mov	ds, ax
+	mov	es, ax
+	mov	ss, ax
+	mov	sp, _stack16
+	mov	ax, [cs:bx]
+	mov	[msg_unimpl.num], ax
 	mov	ah, 0x03
 	xor	bh, bh
 	int	0x10
 	mov	ax, 0x1301
 	mov	bx, 0x0007
-	mov	cx, msg.end-msg
-	mov	bp, msg
+	mov	cx, msg_unimpl.end-msg_unimpl
+	mov	bp, msg_unimpl
 	int	0x10
-	retf
+	cli
+	hlt
 
-	section	.rodata
+	section	.data
 
-msg:	db	".:. biefircate ", VERSION, " .:. "
-	db	"hello world from int 0x10", 13, 10
+msg_unimpl:
+	db	13, 10, "stage2 panic: int 0x"
+.num:	db	"00 unimplemented", 7
 .end:
-
-	section	.bss
-
-sp32:	resd	1
-gdtr:	resb	6

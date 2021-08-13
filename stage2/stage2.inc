@@ -35,13 +35,16 @@ SEL_DS16_ZERO equ 0x0020
 
 	absolute 0x0400
 bda:
-.com1:	resw	1
-.com2:	resw	1
-.com3:	resw	1
-.com4:	resw	1
-.lpt1:	resw	1
-.lpt2:	resw	1
-.lpt3:	resw	1
-.ebda:	resw	1
+.com1:	resw	1			; 0x0400
+.com2:	resw	1			; 0x0402
+.com3:	resw	1			; 0x0404
+.com4:	resw	1			; 0x0406
+.lpt1:	resw	1			; 0x0408
+.lpt2:	resw	1			; 0x040a
+.lpt3:	resw	1			; 0x040c
+.ebda:	resw	1			; 0x040e
+.eqpt:	resw	1			; 0x0411
+.post_flag: resb 1			; 0x0412
+.base_kib: resw	1			; 0x0413
 
 %endif

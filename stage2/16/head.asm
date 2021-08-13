@@ -27,8 +27,14 @@
 
 %include "stage2/stage2.inc"
 
-	section .rodata
+	section .data
 
 	extern	_END16_KIB
 
 	db	_END16_KIB		; size of the EBDA in kiB
+
+	section	.bss
+
+	global	_stack16
+	resb	0x1000
+_stack16:

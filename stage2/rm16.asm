@@ -34,7 +34,7 @@
 	section	.text
 
 	extern	mem_alloc, _stext16, _etext16, _sdata16, _end16, gdt_desc_cs16
-	extern	rm16_call.cont1, rm16_call.rm_cs16
+	extern	rm16_call.cont1, rm16_call.rm_cs16, vecs16, NUM_VECS16
 
 	global	rm16_init
 rm16_init:
@@ -53,6 +53,7 @@ rm16_init:
 	shr	ecx, 4			; patch seg. no. in copied code
 	mov	[rm16_cs], cx
 	mov	[eax+rm16_call.rm_cs16], cx
+	push	ecx			; (1) --- see below
 	mov	eax, _end16		; allocate base memory for the real-
 	mov	edx, KIBYTE		; -mode data
 	mov	ecx, BMEM_MAX_ADDR
@@ -64,11 +65,19 @@ rm16_init:
 	lea	edi, [eax+_sdata16]
 	mov	ecx, (data16_load.end-data16_load)/4
 	rep movsd
+	lea	esi, [eax+vecs16]	; (2) --- see below
 	lea	ecx, [eax+_end16+3]	; blank out the uninitialized data
 	sub	ecx, edi
 	shr	ecx, 2
 	xor	eax, eax
 	rep stosd
+	xchg	edi, eax		; initialize real-mode intr. vectors
+	mov	cl, NUM_VECS16		; before calling option ROMs
+	pop	eax			; (1) --- see above
+	shl	eax, 16
+.vecs:	lodsw				; (2) --- see above
+	stosd
+	loop	.vecs
 	pop	edi
 	pop	esi
 	ret
