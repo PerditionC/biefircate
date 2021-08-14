@@ -72,6 +72,7 @@ else
 STAGE1 = stage1.efi
 endif
 STAGE2 = stage2.sys
+LEGACY_MBR = legacy-mbr.bin
 
 default: $(STAGE1) $(STAGE2) hd.img romdumper.efi
 .PHONY: default
@@ -158,9 +159,13 @@ endif
 	$(MAKE) -C xv6 kernel fs.img
 	>$@
 
-hd.img: $(STAGE1) $(STAGE2)
+$(LEGACY_MBR): legacy-mbr.asm
+	$(AS2) -f bin -MD $(@:.bin=.d) -o $@ $< 
+
+hd.img: $(STAGE1) $(STAGE2) $(LEGACY_MBR)
 	$(RM) $@.tmp
 	dd if=/dev/zero of=$@.tmp bs=1048576 count=32
+	dd if=$(LEGACY_MBR) of=$@.tmp conv=notrunc
 	echo start=32K type=0B bootable | sfdisk $@.tmp
 	mkdosfs -v -F16 --offset 64 $@.tmp
 	mmd -i $@.tmp@@32K ::/EFI ::/EFI/BOOT ::/EFI/biefirc
@@ -172,9 +177,10 @@ hd.vdi: hd.img
 	qemu-img convert $< -O vdi $@.tmp
 	mv $@.tmp $@
 
-hd-xv6.img: $(STAGE1) xv6.stamp
+hd-xv6.img: $(STAGE1) xv6.stamp $(LEGACY_MBR)
 	$(RM) $@.tmp
 	dd if=/dev/zero of=$@.tmp bs=1048576 count=32
+	dd if=$(LEGACY_MBR) of=$@.tmp conv=notrunc
 	echo start=32K type=0B bootable | sfdisk $@.tmp
 	mkdosfs -v -F16 --offset 64 $@.tmp
 	mmd -i $@.tmp@@32K ::/EFI ::/EFI/BOOT
