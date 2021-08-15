@@ -48,7 +48,9 @@
 /* Option ROM image header. */
 typedef struct __attribute__((packed)) {
 	uint16_t sig;			/* 0x55 0xaa signature */
-	uint8_t reserved[0x16];		/* reserved */
+	uint8_t rimg_sz_hkib_legacy;	/* legacy field for ROM image len.
+					   (0x200-byte units) */
+	uint8_t reserved[0x15];		/* reserved */
 	uint16_t pcir_off;		/* pointer to PCI Data Structure */
 } rimg_hdr_t;
 
@@ -96,5 +98,10 @@ static inline uint32_t pci_make_id(uint16_t vendor, uint16_t dev)
 {
 	return (uint32_t)dev << 16 | vendor;
 }
+
+/* Vendor & device ids. */
+#define PCI_VENDOR_ID_VBOX	0x80ee	/* Innotek GmbH (creator of
+					   VirtualBox VM hypervisor) */
+#define PCI_DEVICE_ID_VBOX_VESA	0xbeef	/* VirtualBox graphics card */
 
 #endif

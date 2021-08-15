@@ -106,6 +106,8 @@ const rimg_pcir_t *rimg_find_pcir(const void *rimg, uint64_t rom_sz)
 	rimg_sz = rimg_sz_hkib * HKIBYTE;
 	if (pcir_off > rimg_sz - PCIR_MIN_SZ || pcir_sz > rimg_sz - pcir_off)
 		return NULL;
+	if (compute_cksum((const uint8_t *)rimg, rimg_sz) != 0)
+		return NULL;
 	return pcir;
 }
 
@@ -131,12 +133,32 @@ const uint16_t *rimg_pcir_find_dev_id_list(const rimg_pcir_t *pcir,
 	return (const uint16_t *)dev_ids;
 }
 
+static uint64_t rimg_find(const void *rimg)
+{
+	const rimg_hdr_t *hdr = rimg;
+	uint8_t rimg_sz_hkib;
+	uint64_t rimg_sz;
+	if (hdr->sig != 0xaa55U)
+		return 0;
+	rimg_sz_hkib = hdr->rimg_sz_hkib_legacy;
+	if (!rimg_sz_hkib || rimg_sz_hkib > 0x7f)
+		return 0;
+	rimg_sz = rimg_sz_hkib * HKIBYTE;
+	if (compute_cksum((const uint8_t *)rimg, rimg_sz) != 0)
+		return 0;
+	return rimg_sz;
+}
+
 static void get_rimg(bdat_pci_dev_t *bd, void *rimg, uint32_t sz,
     const rimg_pcir_t *pcir)
 {
 	void *rimg_copy, *rimg_rt;
 	bd->rimg_sz = sz;
-	if (pcir->pcir_rev >= 3) {
+	if (!pcir) {
+		Print(u"    ROM img.: @0x%lx~@0x%lx (no PCIR!)\r\n",
+		    rimg, (char *)rimg + sz - 1);
+		bd->rimg_seg = bd->rimg_rt_seg = ptr_to_rm_seg(rimg);
+	} else if (pcir->pcir_rev >= 3) {
 		uint32_t rt_sz = pcir->max_rt_sz_hkib * HKIBYTE;
 		if (rt_sz != sz) {
 			if ((uintptr_t)rimg <= BMEM_MAX_ADDR - sz &&
@@ -170,18 +192,6 @@ static void get_rimg(bdat_pci_dev_t *bd, void *rimg, uint32_t sz,
 	bd->rimg_seg = bd->rimg_rt_seg = ptr_to_rm_seg(rimg_copy);
 }
 
-static void get_rimg_from_fvs(bdat_pci_dev_t *bd)
-{
-	void *rimg;
-	uint32_t sz;
-	bd->rimg_seg = bd->rimg_rt_seg = bd->rimg_sz = 0;
-	if (fv_find_rimg(bd->pci_id, bd->class_if, &rimg, &sz)) {
-		const rimg_pcir_t *pcir = rimg_find_pcir(rimg, sz);
-		if (pcir)
-			get_rimg(bd, rimg, sz, pcir);
-	}
-}
-
 static void get_rimg_from_pci_io(bdat_pci_dev_t *bd, EFI_PCI_IO_PROTOCOL *io)
 {
 	void *rimg = io->RomImage;
@@ -201,6 +211,36 @@ static void get_rimg_from_pci_io(bdat_pci_dev_t *bd, EFI_PCI_IO_PROTOCOL *io)
 	}
 	isz = (uint64_t)pcir->rimg_sz_hkib * HKIBYTE;
 	get_rimg(bd, rimg, isz, pcir);
+}
+
+static void get_rimg_from_fvs(bdat_pci_dev_t *bd)
+{
+	void *rimg;
+	uint32_t sz;
+	bd->rimg_seg = bd->rimg_rt_seg = bd->rimg_sz = 0;
+	if (fv_find_rimg(bd->pci_id, bd->class_if, &rimg, &sz)) {
+		const rimg_pcir_t *pcir = rimg_find_pcir(rimg, sz);
+		if (pcir)
+			get_rimg(bd, rimg, sz, pcir);
+	}
+}
+
+static void get_rimg_special_case(bdat_pci_dev_t *bd)
+{
+	if (bd->pci_id == pci_make_id(PCI_VENDOR_ID_VBOX,
+				      PCI_DEVICE_ID_VBOX_VESA)) {
+		const rimg_hdr_t *rimg = (const rimg_hdr_t *)0xc0000;
+		uint64_t rimg_sz = rimg_find(rimg);
+		const rimg_pcir_t *pcir;
+		if (!rimg_sz)
+			return;
+		/*
+		 * This may be NULL!  The VirtualBox "graphics card" has a
+		 * PCI id., but its option ROM has no "PCIR" structure. =_=
+		 */
+		pcir = rimg_find_pcir(rimg, rimg_sz);
+		get_rimg(bd, rimg, rimg_sz, pcir);
+	}
 }
 
 static bdat_pci_dev_t *process_one_pci_io(EFI_PCI_IO_PROTOCOL *io,
@@ -264,8 +304,11 @@ static bdat_pci_dev_t *process_one_pci_io(EFI_PCI_IO_PROTOCOL *io,
 	}
 	Output(u"\r\n");
 	get_rimg_from_pci_io(bd, io);
-	if (!bd->rimg_seg)
+	if (!bd->rimg_seg) {
 		get_rimg_from_fvs(bd);
+		if (!bd->rimg_seg)
+			get_rimg_special_case(bd);
+	}
 	/* Enumerate all BAR values. */
 	status = io->Pci.Read(io, EfiPciIoWidthUint32, 4 * sizeof(UINT32),
 	    6, pci_conf);

@@ -75,3 +75,20 @@ EFI_MEMORY_DESCRIPTOR *get_mem_map(UINTN *p_num_ents, UINTN *p_map_key,
 		error(u"cannot get mem. map!");
 	return descs;
 }
+
+uint8_t compute_cksum(const uint8_t *buf, size_t n)
+{
+	const uint8_t *p = buf;
+	uint8_t cksum = 0;
+	while (n-- != 0)
+		cksum -= *p++;
+	return cksum;
+}
+
+void update_cksum(uint8_t *buf, size_t n, uint8_t *p_cksum)
+{
+	uint8_t cksum = 0;
+	*p_cksum = 0;  /* the checksum may be part of the summed area */
+	cksum = compute_cksum(buf, n);
+	*p_cksum = cksum;
+}

@@ -296,15 +296,6 @@ static void cpuid(uint32_t leaf,
 		*pd = d;
 }
 
-static void update_cksum(uint8_t *buf, size_t n, uint8_t *p_cksum)
-{
-	uint8_t *p = buf, cksum = 0;
-	*p_cksum = 0;  /* the checksum may be part of the summed area */
-	while (n-- != 0)
-		cksum -= *p++;
-	*p_cksum = cksum;
-}
-
 static void fake_mp_table(void)
 {
 	/*
