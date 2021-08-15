@@ -188,6 +188,18 @@ hd-xv6.img: $(STAGE1) xv6.stamp $(LEGACY_MBR)
 	mcopy -i $@.tmp@@32K xv6/kernel ::/kernel.sys
 	mv $@.tmp $@
 
+hd-gpt.img: $(STAGE1) $(STAGE2) $(LEGACY_MBR)
+	$(RM) $@.tmp
+	dd if=/dev/zero of=$@.tmp bs=1048576 count=32
+	dd if=$(LEGACY_MBR) of=$@.tmp conv=notrunc
+	(echo label: gpt && \
+	 echo start=1M type=uefi bootable) | sfdisk $@.tmp
+	mkdosfs -v -F16 --offset 2048 $@.tmp
+	mmd -i $@.tmp@@1M ::/EFI ::/EFI/BOOT ::/EFI/biefirc
+	mcopy -i $@.tmp@@1M $< ::/EFI/BOOT/bootx64.efi
+	mcopy -i $@.tmp@@1M $(STAGE2) ::/EFI/biefirc/
+	mv $@.tmp $@
+
 distclean: clean
 	$(RM) config.cache
 ifeq "$(conf_Separate_build_dir)" "yes"
@@ -220,5 +232,9 @@ run-qemu-xv6: hd-xv6.img xv6.stamp
 	qemu-system-x86_64 -bios /usr/share/ovmf/OVMF.fd -hda $< \
 	    $(QEMUFLAGSXV6)
 .PHONY: run-qemu
+
+run-qemu-gpt: hd-gpt.img
+	qemu-system-x86_64 -bios /usr/share/ovmf/OVMF.fd -hda $< $(QEMUFLAGS)
+.PHONY: run-qemu-gpt
 
 -include *.d stage1/*.d stage2/*.d
