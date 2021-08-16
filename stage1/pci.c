@@ -149,7 +149,7 @@ static uint64_t rimg_find(const void *rimg)
 	return rimg_sz;
 }
 
-static void get_rimg(bdat_pci_dev_t *bd, void *rimg, uint32_t sz,
+static void get_rimg(bdat_pci_dev_t *bd, const void *rimg, uint32_t sz,
     const rimg_pcir_t *pcir)
 {
 	void *rimg_copy, *rimg_rt;

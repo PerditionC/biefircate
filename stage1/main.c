@@ -29,6 +29,7 @@
 
 #include <stdbool.h>
 #include <string.h>
+#include "acpi.h"
 #include "stage1/stage1.h"
 #ifdef XV6_COMPAT
 #   include "mp.h"
@@ -50,6 +51,7 @@ static void init(void)
 static void process_efi_conf_tables(void)
 {
 	UINTN i, sct_cnt = ST->NumberOfTableEntries;
+	acpi_rsdp_common_t *rsdp = NULL;
 	Output(u"EFI sys. conf. tables:");
 	for (i = 0; i < sct_cnt; ++i) {
 		const EFI_CONFIGURATION_TABLE *cft =
@@ -59,8 +61,13 @@ static void process_efi_conf_tables(void)
 			Output(u"\r\n");
 		Output(u"  ");
 		print_guid(vguid);
+		if (memcmp(vguid, &AcpiTableGuid, sizeof(EFI_GUID)) == 0)
+			rsdp = cft->VendorTable;
 	}
 	Output(u"\r\n");
+	if (!rsdp)
+		error(u"no ACPI 1.0 RSDP");
+	acpi_init(rsdp);
 }
 
 static void find_boot_media(void)

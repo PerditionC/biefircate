@@ -35,10 +35,15 @@
 #include <efilib.h>
 #include <inttypes.h>
 #include <stdbool.h>
+#include "acpi.h"
 #include "bparm.h"
 #include "common.h"
 #include "elf.h"
 #include "pci.h"
+
+/* acpi.c functions. */
+
+extern void acpi_init(acpi_rsdp_common_t *);
 
 /* bmem.c functions. */
 
@@ -123,7 +128,7 @@ static inline uint16_t addr_to_rm_seg(uintptr_t p)
 }
 
 /* Ditto. */
-static inline uint16_t ptr_to_rm_seg(void *p)
+static inline uint16_t ptr_to_rm_seg(const void *p)
 {
 	return addr_to_rm_seg((uintptr_t)p);
 }

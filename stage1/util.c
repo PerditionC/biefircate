@@ -27,7 +27,21 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include <string.h>
 #include "stage1/stage1.h"
+
+int memcmp(const void *s1, const void *s2, size_t n)
+{
+	const unsigned char *p1 = s1, *p2 = s2;
+	while (n-- != 0) {
+		unsigned char c1 = *p1++, c2 = *p2++;
+		if (c1 < c2)
+			return -1;
+		else if (c1 > c2)
+			return +1;
+	}
+	return 0;
+}
 
 __attribute__((noreturn)) static void wait_and_exit(void)
 {

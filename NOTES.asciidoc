@@ -11,10 +11,11 @@
 :fn-brown-00: footnote:brown-00[Brown, Ralf.  The x86 Interrupt List.  16 July 2000.  http://www.cs.cmu.edu/~ralf/files.html.]
 :fn-pci-05: footnote:pci-05[PCI-SIG.  PCI Firmware Specification: Revision 3.0.  June 2005.]
 :fn-uefi-20: footnote:uefi-20[UEFI Forum.  UEFI Platform Initialization (PI) Specification: Version 1.7 Errata A.  April 2020.  https://uefi.org/sites/default/files/resources/PI_Spec_1_7_A_final_May1.pdf.]
+:fn-uefi-21b: footnote:uefi-20b[UEFI Forum.  Advanced Configuration and Power Interface (ACPI) Specification: Version 6.4.  January 2021.  https://uefi.org/sites/default/files/resources/ACPI_Spec_6_4_Jan22.pdf.]
 
   * the hope is that `biefircate` can implement at least the BIOS interrupts and parts of the BIOS data area described in RBIL{fn-brown-00}
   ** intrs. `0x00`—`0x1f` (incl. `0x08`—`0x0f` for IRQs 0—7)
-  ** intrs. `0x70`—`0x77` (IRQs 8—15)
+  ** intrs. `0x70`—`0x77` for IRQs 8—15
   ** the BIOS data area `0x40:0`—`0x50:0`
   ** maybe also intrs. `0x40` (relocated diskette I/O) and `0x42` (relocated video output services)
   ** no need for `biefircate` to implement MS-DOS intrs. (`0x20`—`0x33` etc.)
@@ -23,20 +24,24 @@
   ** implements UEFI{fn-uefi-21}
   ** has some PCI support
   ** has a legacy-style PCI option ROM for the VGA device
+  ** has some ACPI tables{fn-uefi-21b} which report what features the underlying system has
+  *** `biefircate` will likely not support ACPI in its full generality; the spec. is extremely complex
   * some PCs — but not all — allow bootloaders to access the firmware volume protocol;{fn-uefi-20} this can be used to discover some option ROMs
 
 ---
 
 === Code structure (?)
 
+:fn-tis-95: footnote:tis-95[TIS Committee.  Tool Interface Standard (TIS) Executable and Linking Format (ELF) Specification: Version 1.2.  May 1995.  http://refspecs.linuxbase.org/elf/elf.pdf.]
+
   * stage 1 is for stuff that happens before exiting UEFI boot services; stage 2 is for stuff after that
   ** other than the above, there are (currently) no hard and fast rules for delineating the two
   ** stage 1 passes a pointer to a linked list of boot parameters (see link:bparm.h[`bparm.h`]) to stage 2
-  * calling convention used for stage 2 is `-mregparm=3 -mrtd`
-  ** when calling non-variadic function:
-  *** first few arguments go in `eax`, `edx`, `ecx`
-  *** callee pops any stack arguments
-  ** callee must preserve `ebx` (!), `esi`, `edi`, `ebp`
+  * stage 2
+  ** currently takes the form of an ELF executable{fn-tis-95}
+  ** calling convention used is `-mregparm=3 -mrtd`
+  *** when calling non-variadic function: first few arguments go in `eax`, `edx`, `ecx`; callee pops any stack arguments
+  *** callee must preserve `ebx` (!), `esi`, `edi`, `ebp`
 
 ---
 

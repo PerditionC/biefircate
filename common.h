@@ -45,6 +45,17 @@
 	 (uint32_t)(unsigned char)(c) << 16 | \
 	 (uint32_t)(unsigned char)(d) << 24)
 
+/* Fabricate a 64-bit magic number from 8 characters. */
+#define MAGIC64(a, b, c, d, e, f, g, h) \
+	((uint64_t)(unsigned char)(a)	    | \
+	 (uint64_t)(unsigned char)(b) <<  8 | \
+	 (uint64_t)(unsigned char)(c) << 16 | \
+	 (uint64_t)(unsigned char)(d) << 24 | \
+	 (uint64_t)(unsigned char)(e) << 32 | \
+	 (uint64_t)(unsigned char)(f) << 40 | \
+	 (uint64_t)(unsigned char)(g) << 48 | \
+	 (uint64_t)(unsigned char)(h) << 56)
+
 /*
  * Address range types, in the manner of BIOS int 0x15, ax = 0xe820.  These
  * go into bdat_mem_range_t::e820_type.  Other than E820_DISABLED, the names
