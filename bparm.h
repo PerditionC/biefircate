@@ -78,9 +78,18 @@ typedef struct __attribute__((packed)) {
 	uint32_t e820_ext_attr;
 } bdat_mem_range_t;
 
+/*
+ * "RSDP" boot data, saying how to find the ACPI Root System Description
+ * Pointer (RSDP) structure.
+ */
+typedef struct __attribute__((packed)) {
+	uint64_t rsdp_phy_addr;		/* 64-bit physical address of RSDP */
+	uint32_t rsdp_sz;		/* size of RSDP */
+} bdat_rsdp_t;
+
 /* Node type for linked list of boot parameters. */
 struct __attribute__((packed)) bparm {
-	struct bparm *next;	/* pointer to next boot param. node */
+	struct bparm *next;		/* pointer to next boot param. node */
 #   ifndef __x86_64__
 	uint32_t reserved;
 #   endif
@@ -90,6 +99,7 @@ struct __attribute__((packed)) bparm {
 		bdat_pci_dev_t pci_dev;
 		bdat_bmem_t bmem;
 		bdat_mem_range_t mem_range;
+		bdat_rsdp_t rsdp;
 	} u[];
 };
 
@@ -98,5 +108,6 @@ typedef struct bparm bparm_t;
 #define BP_PCID		MAGIC32('P', 'C', 'I', 'D')
 #define BP_BMEM		MAGIC32('B', 'M', 'E', 'M')
 #define BP_MRNG		MAGIC32('M', 'R', 'N', 'G')
+#define BP_RSDP		MAGIC32('R', 'S', 'D', 'P')
 
 #endif

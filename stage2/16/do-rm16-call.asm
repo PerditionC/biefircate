@@ -43,15 +43,17 @@ rm16_call.cont1:			; on entry eax, ebx, ecx, edx give
 	mov	es, si
 	mov	fs, si
 	mov	gs, si
-	mov	esi, cr0		; switch to real mode
-	and	si, byte ~0b00000001
+	mov	esi, cr0		; switch to real mode without paging
+	and	esi, ~(CR0_PG|CR0_PE)
 	mov	cr0, esi
 	jmp	0:rm16_call.cont2
 rm16_call.rm_cs16 equ $-2
 rm16_call.cont2:
 	mov	si, [bda.ebda]		; really set up segments
 	mov	ds, si
-	mov	[sp32], esp
+	mov	[sp32], esp		; store the protected-mode esp & cr3
+	mov	esp, cr3
+	mov	[ptpd32], esp
 	mov	ss, si
 	mov	esp, _stack16
 	mov	es, si
@@ -62,12 +64,17 @@ rm16_call.cont2:
 	call	far word [fs:edi]	; call the callee
 	cli
 	xor	si, si			; restore the 32-bit stack & also
-	mov	ss, si			; restore our GDTR
+	mov	ss, si			; restore our GDTR, esp, & cr3
 	mov	ds, [ss:bda.ebda]
 	mov	esp, [sp32]
+	mov	esi, [ptpd32]
+	mov	cr3, esi
 	lgdt	[gdtr]
-	mov	esi, cr0		; return to 32-bit protected mode
-	or	si, byte 0b00000001
+	mov	esi, cr4		; return to 32-bit protected mode
+	or	si, byte CR4_PAE	; with PAE paging
+	mov	cr4, esi
+	mov	esi, cr0
+	or	esi, CR0_PG|CR0_PE
 	mov	cr0, esi
 	jmp	short rm16_call.cont3
 rm16_call.cont3:
@@ -97,4 +104,5 @@ msg:	db	".:. biefircate ", VERSION, " .:. "
 	section	.bss
 
 sp32:	resd	1
+ptpd32:	resd	1
 gdtr:	resb	6

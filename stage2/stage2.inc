@@ -28,10 +28,18 @@
 %ifndef	_H_STAGE2
 %define	_H_STAGE2
 
+; Segment selector values for our GDT.
 SEL_CS32 equ	0x0008
 SEL_DS32 equ	0x0010
 SEL_CS16 equ	0x0018
 SEL_DS16_ZERO equ 0x0020
+
+; Flags in the cr0 register.
+CR0_PG equ	(1 << 31)
+CR0_PE equ	(1 <<  0)
+
+; Flags in the cr4 register.
+CR4_PAE equ	(1 <<  5)
 
 	absolute 0x0400
 bda:

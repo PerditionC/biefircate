@@ -1,5 +1,5 @@
 config.cache
-*.[od]
+*.[ods]
 *.so
 *.efi
 *.img

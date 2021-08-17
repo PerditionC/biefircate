@@ -134,6 +134,11 @@ stage2/%.o: stage2/%.c
 	mkdir -p $(@D)
 	$(CC2) $(CFLAGS2) $(CPPFLAGS2) -c -o $@ $<
 
+# For debugging.
+stage2/%.s: stage2/%.c
+	mkdir -p $(@D)
+	$(CC2) $(CFLAGS2) $(CPPFLAGS2) -S -o $@ $<
+
 stage2/%.o: stage2/%.asm stage2/data16.bin stage2/text16.bin
 	mkdir -p $(@D)
 	$(AS2) $(ASFLAGS2) $(CPPFLAGS2) -o $@ $<
@@ -200,7 +205,7 @@ clean:
 	for d in . stage1 stage2 stage2/16; do \
 		if test -d "$$d"; then \
 			(cd "$$d" && \
-			 $(RM) *.[od] *.so *.efi *.img *.vdi *.map *.stamp \
+			 $(RM) *.[ods] *.so *.efi *.img *.vdi *.map *.stamp \
 			       *.sys *.elf *.bin *~); \
 		fi; \
 	done
