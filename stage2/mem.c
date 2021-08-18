@@ -200,20 +200,24 @@ static void mem_map_init(bparm_t *bparms)
 	max_mem_ranges = mmr;
 }
 
-static void va_id_map(uint32_t start, uint32_t len)
+static void do_va_map(uint32_t vstart, uint64_t pstart, uint32_t len)
 {
 	while (len) {
-		unsigned pdpti = start >> 30, pdi = (start >> 21) & 0x1ff;
+		unsigned pdpti = vstart >> 30,
+			 pdi = (vstart >> 21) & 0x1ff;
 		uint32_t pdpte = (uint32_t)pdpt[pdpti];
 		uint64_t *pd, pde, *pt;
 		pd = (uint64_t *)((uint32_t)pdpte & -PDPT_ALIGN);
-		if (start % LARGE_PAGE_SIZE == 0 && len >= LARGE_PAGE_SIZE) {
-			pde = start | PTE_P | PTE_RW | PTE_US | PDE_PS;
+		if (vstart % LARGE_PAGE_SIZE == 0 &&
+		    pstart % LARGE_PAGE_SIZE == 0 &&
+		    len >= LARGE_PAGE_SIZE) {
+			pde = pstart | PTE_P | PTE_RW | PTE_US | PDE_PS;
 			pd[pdi] = pde;
-			start += LARGE_PAGE_SIZE;
+			vstart += LARGE_PAGE_SIZE;
+			pstart += LARGE_PAGE_SIZE;
 			len -= LARGE_PAGE_SIZE;
 		} else {
-			unsigned pti = (start >> 12) & 0x1ff;
+			unsigned pti = (vstart >> 12) & 0x1ff;
 			pde = pd[pdi];
 			if (!pde) {
 				pt = mem_alloc(PAGE_SIZE, PAGE_SIZE, 0);
@@ -221,11 +225,17 @@ static void va_id_map(uint32_t start, uint32_t len)
 				pd[pdi] = pde;
 			} else
 				pt = (uint64_t *)((uint32_t)pde & -PAGE_SIZE);
-			pt[pti] = start | PTE_P | PTE_RW | PTE_US;
-			start += PAGE_SIZE;
+			pt[pti] = pstart | PTE_P | PTE_RW | PTE_US;
+			vstart += PAGE_SIZE;
+			pstart += PAGE_SIZE;
 			len -= PAGE_SIZE;
 		}
 	}
+}
+
+static void do_va_id_map(uint32_t start, uint32_t len)
+{
+	do_va_map(start, (uint64_t)start, len);
 }
 
 static void va_init(void)
@@ -284,12 +294,12 @@ static void va_init(void)
 	 * mappings for all physical memory addresses below 4 GiB that may
 	 * be backed by physical hardware.
 	 */
-	va_id_map(0, unused_va_ranges[0].start);
+	do_va_id_map(0, unused_va_ranges[0].start);
 	for (i = 1; i < nvr; ++i) {
 		uint32_t prev_end = unused_va_ranges[i - 1].start +
 				    unused_va_ranges[i - 1].len;
 		uint32_t start = unused_va_ranges[i].start;
-		va_id_map(prev_end, start - prev_end);
+		do_va_id_map(prev_end, start - prev_end);
 	}
 	/* Bring up our page tables. */
 	wr_cr4(rd_cr4() | CR4_PAE);
@@ -331,4 +341,35 @@ void *mem_alloc(size_t sz, size_t align, uintptr_t max_addr)
 	}
 	split_range(mr, astart, E820_RAM, E820_RESERVED);
 	return (void *)astart;
+}
+
+/*
+ * Map some physical memory --- possibly beyond the 32-bit physical space
+ * --- into our 32-bit virtual address space.
+ */
+void *mem_do_va_map(uint64_t pa, size_t sz)
+{
+	uint64_t pstart, pend, sz_to_map;
+	uint32_t vstart;
+	unsigned i;
+	if (!sz)
+		return NULL;
+	pstart = pa & -(uint64_t)PAGE_SIZE;
+	pend = (pa + sz + PAGE_SIZE - 1) & -(uint64_t)PAGE_SIZE;
+	sz_to_map = pend - pstart;
+	if (sz_to_map >= XM32_MAX_ADDR)
+		hlt();
+	i = num_unused_va_ranges;
+	while (i-- != 0) {
+		uint32_t vrsz = unused_va_ranges[i].len;
+		if (vrsz >= sz) {
+			vrsz -= sz;
+			unused_va_ranges[i].len = vrsz;
+			vstart = unused_va_ranges[i].start + vrsz;
+			do_va_map(vstart, pstart, sz_to_map);
+			return (char *)vstart + (size_t)(pa % PAGE_SIZE);
+		}
+	}
+	hlt();
+	__builtin_unreachable();
 }

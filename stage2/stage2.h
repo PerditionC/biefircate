@@ -40,6 +40,7 @@ typedef uint32_t farptr16_t;
 
 extern void mem_init(bparm_t *);
 extern void *mem_alloc(size_t, size_t, uintptr_t);
+extern void *mem_va_map(uint64_t, size_t);
 
 /* rm16.asm functions. */
 
