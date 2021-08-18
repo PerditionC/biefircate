@@ -242,10 +242,10 @@ static void va_init(void)
 	for (i = 1; i <= num_mem_ranges; ++i) {
 		uint64_t prev_end, start;
 		prev_end = mem_ranges[i - 1].start + mem_ranges[i - 1].len;
-		if (prev_end >= XM32_MAX_ADDR)
+		if (prev_end - 1 >= XM32_MAX_ADDR - 1)
 			break;
 		prev_end = (prev_end + PAGE_SIZE - 1) & -(uint64_t)PAGE_SIZE;
-		if (prev_end >= XM32_MAX_ADDR)
+		if (prev_end - 1 >= XM32_MAX_ADDR - 1)
 			break;
 		/*
 		 * As a special case, skip over any "holes" that occur in
@@ -305,8 +305,8 @@ void mem_init(bparm_t *bparms)
 }
 
 /*
- * Reserve some memory for internal use.  If `max_addr' != 0, the end of the
- * memory block will be below `max_addr'.
+ * Reserve some physical memory for internal use.  If `max_addr' != 0, the
+ * end of the memory block will be below `max_addr'.
  */
 void *mem_alloc(size_t sz, size_t align, uintptr_t max_addr)
 {

@@ -61,6 +61,9 @@ rm16_call.cont2:
 	mov	fs, si
 	mov	gs, si
 	sgdt	[gdtr]			; save our GDTR
+	mov	esi, cr4		; turn off cr4.PAE in case some 3rd-
+	and	si, byte ~CR4_PAE	; -party code wants to set up its
+	mov	cr4, esi		; own page tables at some point...
 	call	far word [fs:edi]	; call the callee
 	cli
 	xor	si, si			; restore the 32-bit stack & also

@@ -69,7 +69,7 @@ idtrrm:	dw	0x100*4-1
 	global	gdt_desc_cs16
 
 	align	8
-gdt equ		$-8
+gdt	equ	$-8
 %if SEL_CS32 != $-gdt
 %   error "SEL_CS32 does not match actual GDT"
 %endif

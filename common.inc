@@ -25,29 +25,20 @@
 ; NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 ; SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-%ifndef	_H_STAGE2
-%define	_H_STAGE2
+%ifndef	_H_COMMON
+%define	_H_COMMON
 
-%include "common.inc"
+; Flags in the cr0 register.
+CR0_PE	equ	(1 <<  0)
+CR0_PG	equ	(1 << 31)
 
-; Segment selector values for our GDT.
-SEL_CS32 equ	0x0008
-SEL_DS32 equ	0x0010
-SEL_CS16 equ	0x0018
-SEL_DS16_ZERO equ 0x0020
+; Flags in the cr4 register.
+CR4_PSE	equ	(1 <<  4)
+CR4_PAE	equ	(1 <<  5)
 
-	absolute 0x0400
-bda:
-.com1:	resw	1			; 0x0400
-.com2:	resw	1			; 0x0402
-.com3:	resw	1			; 0x0404
-.com4:	resw	1			; 0x0406
-.lpt1:	resw	1			; 0x0408
-.lpt2:	resw	1			; 0x040a
-.lpt3:	resw	1			; 0x040c
-.ebda:	resw	1			; 0x040e
-.eqpt:	resw	1			; 0x0411
-.post_flag: resb 1			; 0x0412
-.base_kib: resw	1			; 0x0413
+; Model-specific register (MSR) no. for the Extended Feature Enable MSR
+; (EFER), & flags in the EFER itself.
+MSR_EFER equ	0xc0000080
+EFER_LME equ	(1 <<  8)
 
 %endif

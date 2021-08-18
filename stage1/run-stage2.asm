@@ -25,6 +25,8 @@
 ; NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 ; SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+%include "common.inc"
+
 	section .text
 
 	global	run_stage2
@@ -74,15 +76,15 @@ Lpm32:
 	mov	al, 0
 	mov	fs, ax
 	mov	gs, ax
-	mov	eax, cr0		; turn off paging (CR0.PG)
-	and	eax, 0x7fffffff
+	mov	eax, cr0		; turn off paging
+	and	eax, ~CR0_PG
 	mov	cr0, eax
-	mov	ecx, 0xc0000080		; turn off long mode support (EFER.LME)
+	mov	ecx, MSR_EFER		; turn off long mode support
 	rdmsr
-	and	ah, 0b11111110
+	and	ah, (~EFER_LME)>>8
 	wrmsr
 	mov	eax, cr4		; turn off paging extensions
-	and	al, 0b11001111		; (CR4.PAE, CR4.PSE)
+	and	al, ~(CR4_PAE|CR4_PSE)
 	mov	cr4, eax
 	mov	eax, cr3		; invalidate TLB by touching CR3
 	mov	cr3, eax
