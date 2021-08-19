@@ -33,19 +33,22 @@ endif
 -include $(conf_Lolwutconf_dir)/lolwutconf.mk
 
 GNUEFISRCDIR := '$(abspath $(conf_Srcdir))'/gnu-efi
-CFLAGS = -pie -fPIC -ffreestanding -Os -Wall -mno-red-zone \
+LAISRCDIR := '$(abspath $(conf_Srcdir))'/lai
+CFLAGS = -pie -fPIC -ffreestanding -O2 -Wall -mno-red-zone \
 	 -fno-stack-protector -MMD
 AS = nasm
 ASFLAGS = -f win64 -MD $(@:.o=.d)
 COMMON_CPPFLAGS = -DXV6_COMPAT
 CPPFLAGS += -I $(GNUEFISRCDIR)/inc -I $(GNUEFISRCDIR)/protocol \
-	    -I $(GNUEFISRCDIR)/inc/x86_64 -I $(conf_Srcdir) $(COMMON_CPPFLAGS)
+	    -I $(GNUEFISRCDIR)/inc/x86_64 \
+	    -I $(LAISRCDIR)/include \
+	    -I $(conf_Srcdir) $(COMMON_CPPFLAGS)
 LDFLAGS += $(CFLAGS) -nostdlib -ffreestanding -Wl,--entry,efi_main \
 	  -Wl,--subsystem,10 -Wl,--strip-all -Wl,-Map=$(@:.efi=.map)
 LIBEFI = gnu-efi/x86_64/lib/libefi.a
 LDLIBS := $(LIBEFI) $(LDLIBS)
 
-CFLAGS2 += -mregparm=3 -mrtd -fno-pic -ffreestanding -Os -Wall \
+CFLAGS2 += -mregparm=3 -mrtd -fno-pic -ffreestanding -O2 -Wall \
     -fno-stack-protector -MMD
 AS2 = nasm
 ASFLAGS2 = -f elf32 -MD $(@:.o=.d)

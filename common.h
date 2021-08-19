@@ -75,4 +75,11 @@ static inline void hlt(void)
 	__asm volatile("hlt");
 }
 
+/* Type of a 64-bit pointer. */
+#ifndef __x86_64__
+typedef uint64_t ptr64_t;
+#else
+typedef void *ptr64_t;
+#endif
+
 #endif

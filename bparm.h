@@ -83,16 +83,16 @@ typedef struct __attribute__((packed)) {
  * Pointer (RSDP) structure.
  */
 typedef struct __attribute__((packed)) {
-	uint64_t rsdp_phy_addr;		/* 64-bit physical address of RSDP */
+	ptr64_t rsdp_phy_addr;		/* 64-bit physical address of RSDP */
 	uint32_t rsdp_sz;		/* size of RSDP */
 } bdat_rsdp_t;
 
 /* Node type for linked list of boot parameters. */
 struct __attribute__((packed)) bparm {
 	struct bparm *next;		/* pointer to next boot param. node */
-#   ifndef __x86_64__
+#ifndef __x86_64__
 	uint32_t reserved;
-#   endif
+#endif
 	uint32_t type;			/* "PCID", etc. */
 	uint32_t size;			/* size of boot param. data only */
 	union {				/* boot param. data */

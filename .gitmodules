@@ -7,3 +7,6 @@
 [submodule "xv6"]
 	path = xv6
 	url = https://github.com/mit-pdos/xv6-public.git
+[submodule "lai"]
+	path = lai
+	url = https://github.com/managarm/lai.git

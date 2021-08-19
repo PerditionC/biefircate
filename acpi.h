@@ -32,18 +32,24 @@
 #ifndef H_ACPI
 #define H_ACPI
 
-#include <inttypes.h>
+#include <acpispec/tables.h>
 
-/*
- * Structure of an ACPI 1.0 RSDP.  ACPI 2+ define additional fields that are
- * not covered here.
- */
+/* Flags in acpi_fadt_t::iapc_boot_flags. */
+#define FADT_IAPC_LEGACY_DEVS	(1 <<  0)
+#define FADT_IAPC_8042		(1 <<  1)
+#define FADT_IAPC_NOVGA		(1 <<  2)
+#define FADT_IAPC_NOMSI		(1 <<  3)
+#define FADT_IAPC_NOASPM	(1 <<  4)
+#define FADT_IAPC_NORTC		(1 <<  5)
+
 typedef struct __attribute__((packed)) {
-	uint64_t sig;			/* "RSD PTR " signature */
-	uint8_t cksum;			/* checksum of ACPI 1.0 fields */
-	uint8_t oem_id[6];		/* OEM id. string */
-	uint8_t acpi_rev;		/* ACPI revision level */
-	uint32_t rsdt_phy_addr;		/* RSDT physical address */
-} acpi_rsdp_common_t;
+	acpi_header_t header;
+	uint32_t lapic_phy_addr;	/* local APIC address */
+	uint32_t flags;			/* multiple APIC flags */
+	char ics[];			/* interrupt controller structures */
+} acpi_madt_t;
+
+/* Flags in acpi_madt_t::flags. */
+#define MADT_PCAT_COMPAT	(1 <<  0)
 
 #endif

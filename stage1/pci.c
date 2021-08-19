@@ -106,7 +106,7 @@ const rimg_pcir_t *rimg_find_pcir(const void *rimg, uint64_t rom_sz)
 	rimg_sz = rimg_sz_hkib * HKIBYTE;
 	if (pcir_off > rimg_sz - PCIR_MIN_SZ || pcir_sz > rimg_sz - pcir_off)
 		return NULL;
-	if (compute_cksum((const uint8_t *)rimg, rimg_sz) != 0)
+	if (compute_cksum(rimg, rimg_sz) != 0)
 		return NULL;
 	return pcir;
 }
@@ -144,7 +144,7 @@ static uint64_t rimg_find(const void *rimg)
 	if (!rimg_sz_hkib || rimg_sz_hkib > 0x7f)
 		return 0;
 	rimg_sz = rimg_sz_hkib * HKIBYTE;
-	if (compute_cksum((const uint8_t *)rimg, rimg_sz) != 0)
+	if (compute_cksum(rimg, rimg_sz) != 0)
 		return 0;
 	return rimg_sz;
 }

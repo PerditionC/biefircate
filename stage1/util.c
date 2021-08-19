@@ -90,9 +90,9 @@ EFI_MEMORY_DESCRIPTOR *get_mem_map(UINTN *p_num_ents, UINTN *p_map_key,
 	return descs;
 }
 
-uint8_t compute_cksum(const uint8_t *buf, size_t n)
+uint8_t compute_cksum(const void *buf, size_t n)
 {
-	const uint8_t *p = buf;
+	const uint8_t *p = (const uint8_t *)buf;
 	uint8_t cksum = 0;
 	while (n-- != 0)
 		cksum -= *p++;

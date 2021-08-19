@@ -29,7 +29,6 @@
 
 #include <stdbool.h>
 #include <string.h>
-#include "acpi.h"
 #include "stage1/stage1.h"
 #ifdef XV6_COMPAT
 #   include "mp.h"
@@ -38,6 +37,9 @@
 extern EFI_HANDLE LibImageHandle;
 extern EFI_GUID gEfiLoadedImageProtocolGuid, gEfiGlobalVariableGuid;
 
+static EFI_GUID Acpi20TableGuid =
+		    { 0x8868e871, 0xe4f1, 0x11d3,
+		      { 0xbc, 0x22, 0x00, 0x80, 0xc7, 0x3c, 0x88, 0x81 } };
 static BOOLEAN secure_boot_p = FALSE;
 static EFI_HANDLE boot_media_handle;
 static uint16_t temp_ebda_seg = 0;
@@ -51,7 +53,7 @@ static void init(void)
 static void process_efi_conf_tables(void)
 {
 	UINTN i, sct_cnt = ST->NumberOfTableEntries;
-	acpi_rsdp_common_t *rsdp = NULL;
+	acpi_xsdp_t *rsdp = NULL;
 	Output(u"EFI sys. conf. tables:");
 	for (i = 0; i < sct_cnt; ++i) {
 		const EFI_CONFIGURATION_TABLE *cft =
@@ -61,12 +63,12 @@ static void process_efi_conf_tables(void)
 			Output(u"\r\n");
 		Output(u"  ");
 		print_guid(vguid);
-		if (memcmp(vguid, &AcpiTableGuid, sizeof(EFI_GUID)) == 0)
+		if (memcmp(vguid, &Acpi20TableGuid, sizeof(EFI_GUID)) == 0)
 			rsdp = cft->VendorTable;
 	}
 	Output(u"\r\n");
 	if (!rsdp)
-		error(u"no ACPI 1.0 RSDP");
+		error(u"no ACPI 2+ RSDP");
 	acpi_init(rsdp);
 }
 
