@@ -47,6 +47,13 @@
 
 #define MAX_BMEM_BLKS	(BMEM_MAX_ADDR / EFI_PAGE_SIZE / 2)
 
+#ifndef EFI_MEMORY_RO
+#   define EFI_MEMORY_RO (1ULL << 17)
+#endif
+#ifndef EFI_MEMORY_CPU_CRYPTO
+#   define EFI_MEMORY_CPU_CRYPTO (1ULL << 19)
+#endif
+
 typedef struct {
 	UINT32 start, end, orig_end;
 } blk_info_t;
@@ -67,6 +74,15 @@ static uint32_t boottime_bmem_bot = EFI_PAGE_SIZE;
  * 0 that will be available at run time.
  */
 static uint32_t runtime_bmem_top = 0;
+/*
+ * Memory region attributes supported by all the usable memory below 1 MiB. 
+ * We start out by assuming that all cacheability & protection attributes
+ * are supported, then turn off any unsupported attributes as we proceed
+ * through the memory map.
+ */
+static UINT64 bmem_uefi_attr = EFI_MEMORY_UC | EFI_MEMORY_WC | EFI_MEMORY_WB |
+    EFI_MEMORY_UCE | EFI_MEMORY_WP | EFI_MEMORY_RP | EFI_MEMORY_XP |
+    EFI_MEMORY_RO | EFI_MEMORY_CPU_CRYPTO;
 
 /* Check if we have enough base memory left. */
 static void bmem_check_enough(void)
@@ -111,7 +127,7 @@ static void add_uefi_mem_bparms(EFI_MEMORY_DESCRIPTOR *descs, UINTN num_ents,
 		    default:
 			e820_type = E820_RESERVED;
 		}
-		bparm_add_mem_range(start, sz, e820_type, 1U);
+		bparm_add_mem_range(start, sz, e820_type, 1U, desc->Attribute);
 	}
 }
 
@@ -122,15 +138,17 @@ static void add_uefi_mem_bparms(EFI_MEMORY_DESCRIPTOR *descs, UINTN num_ents,
 static void add_our_mem_bparms(void)
 {
 	UINT32 blk_idx = 0;
-	bparm_add_mem_range(0, runtime_bmem_top, E820_RAM, 1);
+	bparm_add_mem_range(0, runtime_bmem_top, E820_RAM, 1, bmem_uefi_attr);
 	while (blk_idx < num_blks && blk[blk_idx].start < runtime_bmem_top)
 		++blk_idx;
 	while (blk_idx < num_blks) {
 		UINT32 start = blk[blk_idx].start;
 		UINT32 end = blk[blk_idx].end;
 		UINT32 orig_end = blk[blk_idx].orig_end;
-		bparm_add_mem_range(start, end - start, E820_RAM, 1);
-		bparm_add_mem_range(end, orig_end - end, E820_RESERVED, 1);
+		bparm_add_mem_range(start, end - start, E820_RAM, 1,
+		    bmem_uefi_attr);
+		bparm_add_mem_range(end, orig_end - end, E820_RESERVED, 1,
+		    bmem_uefi_attr);
 		++blk_idx;
 	}
 }
@@ -231,6 +249,7 @@ void bmem_init(void)
 				bvec_set(&avail, idx);
 				++idx;
 			}
+			bmem_uefi_attr &= desc->Attribute;
 		}
 	}
 	Output(u"\r\n");

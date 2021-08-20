@@ -476,7 +476,8 @@ static unsigned prepare_to_hand_over(EFI_HANDLE image_handle)
 		    default:
 			e820_type = E820_RESERVED;
 		}
-		bparm_add_mem_range(start, end - start, e820_type, 1U);
+		bparm_add_mem_range(start, end - start, e820_type, 1U,
+		    desc->Attribute);
 	}
 	/*
 	 * Wrap up base memory handling.  Add boot parameters to tell the

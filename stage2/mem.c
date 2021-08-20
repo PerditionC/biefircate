@@ -33,6 +33,9 @@
 #include <string.h>
 #include "stage2/stage2.h"
 
+#define EFI_MEMORY_WT	(1ULL <<  2)
+#define EFI_MEMORY_WB	(1ULL <<  3)
+
 /* Structure for a range of (unused) 32-bit virtual addresses. */
 typedef struct {
 	uint32_t start, len;
@@ -102,6 +105,7 @@ static void split_range(mem_range_t *mr, uint64_t split_point,
 			hlt();
 		mr2 = &mem_ranges[num_mem_ranges];
 		++num_mem_ranges;
+		/* Ugh.  Hopefully we will not need to do this too often. */
 		while (mr2 != mr) {
 			*mr2 = mr2[-1];
 			--mr2;
@@ -178,6 +182,7 @@ static void mem_map_init(bparm_t *bparms)
 		mr->len = bdmr->len;
 		mr->e820_type = bdmr->e820_type;
 		mr->e820_ext_attr = bdmr->e820_ext_attr;
+		mr->uefi_attr = bdmr->uefi_attr;
 		if (bdmr == bdmr_chosen) {
 			mr->len -= e820_need_space;
 			if (mr->len) {
@@ -188,6 +193,7 @@ static void mem_map_init(bparm_t *bparms)
 			mr->len = e820_need_space;
 			mr->e820_type = E820_RESERVED;
 			mr->e820_ext_attr = bdmr->e820_ext_attr;
+			mr->uefi_attr = bdmr->uefi_attr;
 		}
 		++mr;
 		++nmr;
@@ -200,7 +206,39 @@ static void mem_map_init(bparm_t *bparms)
 	max_mem_ranges = mmr;
 }
 
-static void do_va_map(uint32_t vstart, uint64_t pstart, uint32_t len)
+/*
+ * Make sure that the PDE *`pde' refers to a bottom-level PT.  If *`pde' is
+ * a large page, turn it into a PT with several small pages.  If *`pde' is a
+ * blank entry, allocate a new PT.
+ *
+ * Return a pointer to the PT.
+ */
+static uint64_t *ensure_pt(uint64_t *p_pde)
+{
+	uint64_t pde = *p_pde, *pt, pte;
+	unsigned i;
+	if (pde) {
+		if ((pde & PDE_PS) == 0) {
+			pt = (uint64_t *)((uint32_t)pde & -PAGE_SIZE);
+			return pt;
+		}
+		pt = mem_alloc(PAGE_SIZE, PAGE_SIZE, 0);
+		pte = pde & ~(uint64_t)PDE_PS;
+		for (i = 0; i <= 0x1ff; ++i) {
+			pt[i] = pte;
+			pte += PAGE_SIZE;
+		}
+	} else {
+		pt = mem_alloc(PAGE_SIZE, PAGE_SIZE, 0);
+		memset(pt, 0, PAGE_SIZE);
+	}
+	pde = (uint32_t)pt | PTE_P | PTE_RW | PTE_US;
+	*p_pde = pde;
+	return pt;
+}
+
+static void do_va_map(uint32_t vstart, uint64_t pstart, uint32_t len,
+    unsigned pte_flags)
 {
 	while (len) {
 		unsigned pdpti = vstart >> 30,
@@ -210,22 +248,18 @@ static void do_va_map(uint32_t vstart, uint64_t pstart, uint32_t len)
 		pd = (uint64_t *)((uint32_t)pdpte & -PDPT_ALIGN);
 		if (vstart % LARGE_PAGE_SIZE == 0 &&
 		    pstart % LARGE_PAGE_SIZE == 0 &&
-		    len >= LARGE_PAGE_SIZE) {
-			pde = pstart | PTE_P | PTE_RW | PTE_US | PDE_PS;
+		    len >= LARGE_PAGE_SIZE &&
+		    (pd[pdi] == 0 || (pd[pdi] & PDE_PS) != 0)) {
+			pde = pstart | PTE_P | PTE_RW | PTE_US | PDE_PS |
+			    pte_flags;
 			pd[pdi] = pde;
 			vstart += LARGE_PAGE_SIZE;
 			pstart += LARGE_PAGE_SIZE;
 			len -= LARGE_PAGE_SIZE;
 		} else {
 			unsigned pti = (vstart >> 12) & 0x1ff;
-			pde = pd[pdi];
-			if (!pde) {
-				pt = mem_alloc(PAGE_SIZE, PAGE_SIZE, 0);
-				pde = (uint32_t)pt | PTE_P | PTE_RW | PTE_US;
-				pd[pdi] = pde;
-			} else
-				pt = (uint64_t *)((uint32_t)pde & -PAGE_SIZE);
-			pt[pti] = pstart | PTE_P | PTE_RW | PTE_US;
+			pt = ensure_pt(&pd[pdi]);
+			pt[pti] = pstart | PTE_P | PTE_RW | PTE_US | pte_flags;
 			vstart += PAGE_SIZE;
 			pstart += PAGE_SIZE;
 			len -= PAGE_SIZE;
@@ -233,9 +267,19 @@ static void do_va_map(uint32_t vstart, uint64_t pstart, uint32_t len)
 	}
 }
 
-static void do_va_id_map(uint32_t start, uint32_t len)
+static void do_va_id_map(uint32_t start, uint32_t len, unsigned pte_flags)
 {
-	do_va_map(start, (uint64_t)start, len);
+	do_va_map(start, (uint64_t)start, len, pte_flags);
+}
+
+static unsigned uefi_attr_to_pte_flags(uint64_t uefi_attr)
+{
+	if ((uefi_attr & EFI_MEMORY_WB) != 0)
+		return 0;
+	else if ((uefi_attr & EFI_MEMORY_WT) != 0)
+		return PTE_WT;
+	else
+		return PTE_CD;
 }
 
 static void va_init(void)
@@ -294,12 +338,55 @@ static void va_init(void)
 	 * mappings for all physical memory addresses below 4 GiB that may
 	 * be backed by physical hardware.
 	 */
-	do_va_id_map(0, unused_va_ranges[0].start);
+	do_va_id_map(0, unused_va_ranges[0].start,
+	    uefi_attr_to_pte_flags(mem_ranges[0].uefi_attr));
 	for (i = 1; i < nvr; ++i) {
 		uint32_t prev_end = unused_va_ranges[i - 1].start +
 				    unused_va_ranges[i - 1].len;
 		uint32_t start = unused_va_ranges[i].start;
-		do_va_id_map(prev_end, start - prev_end);
+		do_va_id_map(prev_end, start - prev_end, 0);
+	}
+	/*
+	 * If there are any memory ranges that are non-cacheable or only
+	 * write-through cacheable, then modify the PTs to properly handle
+	 * these.
+	 *
+	 * Make the pages write-through where write-through is supported.
+	 * Make the rest of the pages uncached.
+	 *
+	 * FIXME: the mem_ranges[] array may expand in the course of this
+	 * loop.  This should not affect correctness though.
+	 */
+	i = 0;
+	while (i < num_mem_ranges) {
+		mem_range_t *mr = &mem_ranges[i];
+		uint64_t start64, len64;
+		uint32_t start, len;
+		unsigned pte_flags = uefi_attr_to_pte_flags(mr->uefi_attr);
+		if (!pte_flags) {
+			++i;
+			continue;
+		}
+		start64 = mem_ranges[i].start;
+		if (start64 >= XM32_MAX_ADDR) {
+			++i;
+			continue;
+		}
+		start = (uint32_t)start64;
+		len64 = mem_ranges[i].len;
+		if (len64 >= XM32_MAX_ADDR - start)
+			len = (uint32_t)XM32_MAX_ADDR - start;
+		else
+			len = (uint32_t)len64;
+		if (start % PAGE_SIZE != 0) {
+			len += start % PAGE_SIZE;
+			start &= -PAGE_SIZE;
+		}
+		if (len % PAGE_SIZE != 0)
+			len = (len + PAGE_SIZE - 1) & -PAGE_SIZE;
+		do_va_id_map(start, len, pte_flags);
+		while (i < num_mem_ranges && mem_ranges[i].start != start64)
+			++i;
 	}
 	/* Bring up our page tables. */
 	wr_cr4(rd_cr4() | CR4_PAE);
@@ -321,7 +408,7 @@ void mem_init(bparm_t *bparms)
 void *mem_alloc(size_t sz, size_t align, uintptr_t max_addr)
 {
 	uint64_t max_addr64;
-	uintptr_t astart;
+	uintptr_t astart, aend;
 	mem_range_t *mr;
 	if (!sz)
 		return NULL;
@@ -333,7 +420,8 @@ void *mem_alloc(size_t sz, size_t align, uintptr_t max_addr)
 	for (mr = find_highest_range_below(max_addr64); ; --mr) {
 		if (mr->e820_type != E820_RAM || mr->len < sz)
 			continue;
-		astart = (mr->start + mr->len - sz) & -align;
+		aend = mr->start + mr->len;
+		astart = (aend - sz) & -align;
 		if (astart >= mr->start)
 			break;
 		if (!mr->start)
@@ -347,7 +435,7 @@ void *mem_alloc(size_t sz, size_t align, uintptr_t max_addr)
  * Map some physical memory --- possibly beyond the 32-bit physical space
  * --- into our 32-bit virtual address space.
  */
-void *mem_do_va_map(uint64_t pa, size_t sz)
+void *mem_do_va_map(uint64_t pa, size_t sz, unsigned pte_flags)
 {
 	uint64_t pstart, pend, sz_to_map;
 	uint32_t vstart;
@@ -366,7 +454,7 @@ void *mem_do_va_map(uint64_t pa, size_t sz)
 			vrsz -= sz;
 			unused_va_ranges[i].len = vrsz;
 			vstart = unused_va_ranges[i].start + vrsz;
-			do_va_map(vstart, pstart, sz_to_map);
+			do_va_map(vstart, pstart, sz_to_map, pte_flags);
 			return (char *)vstart + (size_t)(pa % PAGE_SIZE);
 		}
 	}

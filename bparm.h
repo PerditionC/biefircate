@@ -72,10 +72,14 @@ typedef struct __attribute__((packed)) {
 
 /* "MRNG" boot data, describing a single memory address range at run time. */
 typedef struct __attribute__((packed)) {
-	uint64_t start;
-	uint64_t len;
-	uint32_t e820_type;
-	uint32_t e820_ext_attr;
+	uint64_t start;			/* starting physical address */
+	uint64_t len;			/* siae of memory address range */
+	uint32_t e820_type;		/* mem. type as in int 0x15, 0xe820 */
+	uint32_t e820_ext_attr;		/* extended memory attributes as in
+					   int 0x15, ax = 0xe820 */
+	uint64_t uefi_attr;		/* more memory attributes (including
+					   cacheability attributes) as in
+					   UEFI BS->GetMemoryMap(...) */
 } bdat_mem_range_t;
 
 /*

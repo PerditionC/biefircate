@@ -62,7 +62,7 @@ void *bparm_add(uint32_t type, uint32_t size)
  * range.  If the range is empty, do nothing.
  */
 bdat_mem_range_t *bparm_add_mem_range(uint64_t start, uint64_t len,
-    uint32_t e820_type, uint32_t e820_ext_attr)
+    uint32_t e820_type, uint32_t e820_ext_attr, uint64_t uefi_attr)
 {
 	bdat_mem_range_t *bd;
 	if (!len)
@@ -72,6 +72,7 @@ bdat_mem_range_t *bparm_add_mem_range(uint64_t start, uint64_t len,
 	bd->len = len;
 	bd->e820_type = e820_type;
 	bd->e820_ext_attr = e820_ext_attr;
+	bd->uefi_attr = uefi_attr;
 	return bd;
 }
 

@@ -59,12 +59,12 @@ extern void rm16_call(uint32_t eax, uint32_t edx, uint32_t ecx, uint32_t ebx,
 					   table (PDPT) for PAE paging */
 
 /* Flags in PAE page directory & page table entries. */
-#define PTE_P		(1ULL <<  0)	/* present */
-#define PTE_RW		(1ULL <<  1)	/* read/write */
-#define PTE_US		(1ULL <<  2)	/* user/supervisor */
-#define PTE_WT		(1ULL <<  3)	/* write-through */
-#define PTE_CD		(1ULL <<  4)	/* cache disable */
-#define PDE_PS		(1ULL <<  7)	/* (page dir.) large page size */
+#define PTE_P		(1UL <<  0)	/* present */
+#define PTE_RW		(1UL <<  1)	/* read/write */
+#define PTE_US		(1UL <<  2)	/* user/supervisor */
+#define PTE_WT		(1UL <<  3)	/* write-through */
+#define PTE_CD		(1UL <<  4)	/* cache disable */
+#define PDE_PS		(1UL <<  7)	/* (page dir.) large page size */
 
 /* Flags in the cr0 register. */
 #define CR0_PG		(1UL << 31)	/* paging */
@@ -74,14 +74,15 @@ extern void rm16_call(uint32_t eax, uint32_t edx, uint32_t ecx, uint32_t ebx,
 #define CR4_PAE		(1UL <<  5)	/* physical address extension (PAE) */
 
 /*
- * Data structure describing a single memory address range.  This is in the
- * same format as returned by int 0x15, ax = 0xe820.
+ * Data structure describing a single memory address range.  The front part
+ * is in the same format as returned by int 0x15, ax = 0xe820.
  */
 typedef struct __attribute__((packed)) mem_range {
 	uint64_t start;
 	uint64_t len;
 	uint32_t e820_type;
 	uint32_t e820_ext_attr;
+	uint64_t uefi_attr;
 } mem_range_t;
 
 /* Fashion a far 16-bit pointer from a 16-bit segment & a 16-bit offset. */
