@@ -60,7 +60,7 @@ static void shellsort(mem_range_t *mrs, unsigned nmr)
 		for (i = h; i < nmr; ++i) {
 			mem_range_t v = mrs[i];
 			j = i;
-			while (j > h && mrs[j - h].start > v.start) {
+			while (j >= h && mrs[j - h].start > v.start) {
 				mrs[j] = mrs[j - h];
 				j -= h;
 			}
@@ -272,6 +272,41 @@ static void do_va_id_map(uint32_t start, uint32_t len, unsigned pte_flags)
 	do_va_map(start, (uint64_t)start, len, pte_flags);
 }
 
+static void do_va_unmap(uint32_t vstart, uint32_t len)
+{
+	while (len) {
+		unsigned pdpti = vstart >> 30,
+			 pdi = (vstart >> 21) & 0x1ff;
+		uint32_t pdpte = (uint32_t)pdpt[pdpti];
+		uint64_t *pd, pde, *pt;
+		pd = (uint64_t *)((uint32_t)pdpte & -PDPT_ALIGN);
+		pde = pd[pdi];
+		if ((pde & PDE_PS) != 0) {
+			if (vstart % LARGE_PAGE_SIZE == 0 &&
+			    len >= LARGE_PAGE_SIZE) {
+				pd[pdi] = 0;
+				vstart += LARGE_PAGE_SIZE;
+				len -= LARGE_PAGE_SIZE;
+			} else {
+				/*
+				 * Trying to unmap only part of a large page?
+				 * It is probably best to not do anything...
+				 */
+				vstart += PAGE_SIZE;
+				len -= PAGE_SIZE;
+			}
+		} else {
+			if (pde) {
+				unsigned pti = (vstart >> 12) & 0x1ff;
+				pt = (uint64_t *)((uint32_t)pde & -PAGE_SIZE);
+				pt[pti] = 0;
+			}
+			vstart += PAGE_SIZE;
+			len -= PAGE_SIZE;
+		}
+	}
+}
+
 static unsigned uefi_attr_to_pte_flags(uint64_t uefi_attr)
 {
 	if ((uefi_attr & EFI_MEMORY_WB) != 0)
@@ -385,7 +420,7 @@ static void va_init(void)
 		if (len % PAGE_SIZE != 0)
 			len = (len + PAGE_SIZE - 1) & -PAGE_SIZE;
 		do_va_id_map(start, len, pte_flags);
-		while (i < num_mem_ranges && mem_ranges[i].start != start64)
+		while (i < num_mem_ranges && mem_ranges[i].start <= start64)
 			++i;
 	}
 	/* Bring up our page tables. */
@@ -435,7 +470,7 @@ void *mem_alloc(size_t sz, size_t align, uintptr_t max_addr)
  * Map some physical memory --- possibly beyond the 32-bit physical space
  * --- into our 32-bit virtual address space.
  */
-void *mem_do_va_map(uint64_t pa, size_t sz, unsigned pte_flags)
+void *mem_va_map(uint64_t pa, size_t sz, unsigned pte_flags)
 {
 	uint64_t pstart, pend, sz_to_map;
 	uint32_t vstart;
@@ -450,12 +485,58 @@ void *mem_do_va_map(uint64_t pa, size_t sz, unsigned pte_flags)
 	i = num_unused_va_ranges;
 	while (i-- != 0) {
 		uint32_t vrsz = unused_va_ranges[i].len;
-		if (vrsz >= sz) {
-			vrsz -= sz;
+		if (vrsz >= sz_to_map) {
+			vrsz -= sz_to_map;
 			unused_va_ranges[i].len = vrsz;
 			vstart = unused_va_ranges[i].start + vrsz;
 			do_va_map(vstart, pstart, sz_to_map, pte_flags);
+			flush_cr3();
 			return (char *)vstart + (size_t)(pa % PAGE_SIZE);
+		}
+	}
+	hlt();
+	__builtin_unreachable();
+}
+
+/*
+ * Unmap some virtual memory previously mapped.  The address & size must
+ * correspond exactly to a virtual memory block previously obtained by
+ * mem_va_map(...).
+ */
+void mem_va_unmap(void *va, size_t sz)
+{
+	uint32_t vstart, vend, sz_to_unmap;
+	unsigned i, j;
+	if (!sz)
+		return;
+	vstart = (uint32_t)va & -(uint64_t)PAGE_SIZE;
+	vend = ((uint32_t)va + sz + PAGE_SIZE - 1) & -(uint64_t)PAGE_SIZE;
+	sz_to_unmap = vend - vstart;
+	do_va_unmap(vstart, sz_to_unmap);
+	flush_cr3();
+	i = num_unused_va_ranges;
+	while (i-- != 0) {
+		va_range_t *vr = &unused_va_ranges[i];
+		if (vr->start == vend) {
+			vr->start = vstart;
+			vr->len += sz_to_unmap;
+			return;
+		}
+		if (vr->start + vr->len == vstart) {
+			vr->len += sz_to_unmap;
+			return;
+		}
+		if (vr->start < vstart) {
+			if (num_unused_va_ranges == max_unused_va_ranges)
+				hlt();
+			++num_unused_va_ranges;
+			j = num_unused_va_ranges;
+			while (j-- != i + 1)
+				unused_va_ranges[j] = unused_va_ranges[j - 1];
+			++vr;
+			vr->start = vstart;
+			vr->len = sz_to_unmap;
+			return;
 		}
 	}
 	hlt();

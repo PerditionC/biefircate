@@ -34,7 +34,7 @@ endif
 
 GNUEFISRCDIR := '$(abspath $(conf_Srcdir))'/gnu-efi
 LAISRCDIR := '$(abspath $(conf_Srcdir))'/lai
-CFLAGS = -pie -fPIC -ffreestanding -O2 -Wall -mno-red-zone \
+CFLAGS = -pie -fPIC -ffreestanding -fbuiltin -O2 -Wall -mno-red-zone \
 	 -fno-stack-protector -MMD
 AS = nasm
 ASFLAGS = -f win64 -MD $(@:.o=.d)
@@ -48,11 +48,11 @@ LDFLAGS += $(CFLAGS) -nostdlib -ffreestanding -Wl,--entry,efi_main \
 LIBEFI = gnu-efi/x86_64/lib/libefi.a
 LDLIBS := $(LIBEFI) $(LDLIBS)
 
-CFLAGS2 += -mregparm=3 -mrtd -fno-pic -ffreestanding -O2 -Wall \
+CFLAGS2 += -mregparm=3 -mrtd -fno-pic -ffreestanding -fbuiltin -O2 -Wall \
     -fno-stack-protector -MMD
 AS2 = nasm
 ASFLAGS2 = -f elf32 -MD $(@:.o=.d)
-CPPFLAGS2 += -I $(conf_Srcdir) $(COMMON_CPPFLAGS)
+CPPFLAGS2 += -I $(LAISRCDIR)/include -I $(conf_Srcdir) $(COMMON_CPPFLAGS)
 LDFLAGS2_ORIG := $(LDFLAGS2)
 LDFLAGS2 += $(CFLAGS2) -static -nostdlib -ffreestanding \
     -Wl,--strip-all -Wl,-Map=$(basename $@).map -Wl,--build-id=none
@@ -66,8 +66,8 @@ LDFLAGS3 = $(LDFLAGS2_ORIG) $(CFLAGS3) -static -nostdlib -ffreestanding \
     -Wl,--strip-debug -Wl,-Map=$(basename $@).map -Wl,--build-id=none
 LDLIBS3 = $(LDLIBS2)
 
-QEMUFLAGS = -m 224m -serial stdio
-QEMUFLAGSXV6 = $(QEMUFLAGS) -hdb xv6/fs.img
+QEMUFLAGS = -m 224m -serial stdio $(QEMUEXTRAFLAGS)
+QEMUFLAGSXV6 = -hdb xv6/fs.img $(QEMUFLAGS)
 
 ifneq "" "$(SBSIGN_MOK)"
 STAGE1 = stage1.signed.efi
@@ -125,8 +125,8 @@ stage2/16/%.o: stage2/16/%.asm
 	mkdir -p $(@D)
 	$(AS3) $(ASFLAGS3) $(CPPFLAGS3) -o $@ $<
 
-$(STAGE2): stage2/start.o stage2/main.o stage2/mem.o stage2/rm16.o \
-    stage2/stage2.ld stage2/16.elf
+$(STAGE2): stage2/start.o stage2/clib.o stage2/irq.o stage2/main.o \
+    stage2/mem.o stage2/rm16.o stage2/stage2.ld stage2/16.elf
 	$(CC2) $(LDFLAGS2) -o $@ \
 	    $(filter-out %.ld %.elf, $^) \
 	    $(patsubst %.ld,-T %.ld,$(filter %.ld,$^)) \
@@ -140,7 +140,7 @@ stage2/%.o: stage2/%.c
 # For debugging.
 stage2/%.s: stage2/%.c
 	mkdir -p $(@D)
-	$(CC2) $(CFLAGS2) $(CPPFLAGS2) -S -o $@ $<
+	$(CC2) $(CFLAGS2) $(CPPFLAGS2) -S -dA -o $@ $<
 
 stage2/%.o: stage2/%.asm stage2/data16.bin stage2/text16.bin
 	mkdir -p $(@D)

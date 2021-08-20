@@ -52,4 +52,11 @@ typedef struct __attribute__((packed)) {
 /* Flags in acpi_madt_t::flags. */
 #define MADT_PCAT_COMPAT	(1 <<  0)
 
+/* Union of ACPI table types. :-) */
+typedef union __attribute__((packed)) {
+	acpi_header_t header[1];
+	acpi_fadt_t fadt[1];
+	acpi_madt_t madt[1];
+} acpi_table_union_t;
+
 #endif

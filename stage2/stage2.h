@@ -36,11 +36,16 @@
 
 typedef uint32_t farptr16_t;
 
+/* irq.c functions. */
+
+extern void irq_init(bparm_t *);
+
 /* mem.c functions. */
 
 extern void mem_init(bparm_t *);
 extern void *mem_alloc(size_t, size_t, uintptr_t);
-extern void *mem_va_map(uint64_t, size_t);
+extern void *mem_va_map(uint64_t, size_t, unsigned);
+extern void mem_va_unmap(void *, size_t);
 
 /* rm16.asm functions. */
 
@@ -105,10 +110,24 @@ static inline void wr_cr0(uint32_t v)
 	__asm volatile("movl %0, %%cr0" : : "r" (v) : "memory");
 }
 
+/* Read cr3. */
+static inline uint32_t rd_cr3(void)
+{
+	uint32_t v;
+	__asm volatile("movl %%cr3, %0" : "=r" (v));
+	return v;
+}
+
 /* Write cr3. */
 static inline void wr_cr3(uint32_t v)
 {
 	__asm volatile("movl %0, %%cr3" : : "r" (v) : "memory");
+}
+
+/* Flush page table caches by reading & writing cr3. */
+static inline void flush_cr3(void)
+{
+	wr_cr3(rd_cr3());
 }
 
 /* Read cr4. */

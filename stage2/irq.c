@@ -31,49 +31,29 @@
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
+#include "acpi.h"
+#include "common.h"
 #include "stage2/stage2.h"
 
-static void rimg_init(bparm_t *bparms, bool init_vga)
+static void process_rsdp(acpi_xsdp_t *rsdp)
 {
-	bparm_t *bp;
-	for (bp = bparms; bp; bp = bp->next) {
-		uint16_t rimg_seg;
-		bdat_pci_dev_t *pd;
-		bool do_init;
-		if (bp->type != BP_PCID)
-			continue;
-		pd = &bp->u->pci_dev;
-		switch (pd->class_if & 0xffff0000UL) {
-		    case 0x03000000:  /* VGA */
-		    case 0x03010000:  /* XGA */
-			do_init = init_vga;
-			break;
-		    default:
-			do_init = !init_vga;
-		}
-		if (!do_init)
-			continue;
-		rimg_seg = pd->rimg_seg;
-		if (!rimg_seg)
-			continue;
-		rm16_call(pd->pci_locn, 0, 0, pd->rimg_rt_seg,
-		    MK_FP16(rimg_seg, 0x0003));
-	}
+	static const char expect_rsdp_sig[8] = "RSD PTR ";
+	if (memcmp(rsdp->signature, expect_rsdp_sig, 8) != 0)
+		hlt();
+	/* TODO */
 }
 
-static void hello(void)
+void irq_init(bparm_t *bparms)
 {
-	extern void hello16(void);
-	rm16_call(0, 0, 0, 0, MK_FP16(rm16_cs, (uint16_t)(uintptr_t)hello16));
-}
-
-void stage2_main(bparm_t *bparms, void *rm16_load, size_t rm16_sz)
-{
-	mem_init(bparms);
-	rm16_init();
-	irq_init(bparms);
-	rimg_init(bparms, true);
-	hello();
-	rimg_init(bparms, false);
-	hlt();
+	bdat_rsdp_t *bd_rsdp;
+	acpi_xsdp_t *rsdp;
+	uint32_t rsdp_sz;
+	bparm_t *bp = bparms;
+	while (bp->type != BP_RSDP)
+		bp = bp->next;
+	bd_rsdp = &bp->u->rsdp;
+	rsdp_sz = bd_rsdp->rsdp_sz;
+	rsdp = mem_va_map(bd_rsdp->rsdp_phy_addr, rsdp_sz, 0);
+	process_rsdp(rsdp);
+	mem_va_unmap(rsdp, rsdp_sz);
 }
