@@ -45,7 +45,7 @@ extern void irq_init(bparm_t *);
 extern void mem_init(bparm_t *);
 extern void *mem_alloc(size_t, size_t, uintptr_t);
 extern void *mem_va_map(uint64_t, size_t, unsigned);
-extern void mem_va_unmap(void *, size_t);
+extern void mem_va_unmap(volatile void *, size_t);
 
 /* rm16.asm functions. */
 
@@ -142,6 +142,19 @@ static inline uint32_t rd_cr4(void)
 static inline void wr_cr4(uint32_t v)
 {
 	__asm volatile("movl %0, %%cr4" : : "r" (v) : "memory");
+}
+
+/* Write a byte to an I/O port. */
+static inline void outp(uint16_t p, uint8_t v)
+{
+	__asm volatile("outb %1, %0" : : "Nd" (p), "a" (v));
+}
+
+/* Write a byte to an I/O port, then add a small wait. */
+static inline void outp_w(uint16_t p, uint8_t v)
+{
+	outp(p, v);
+	__asm volatile("outb %%al, %0" : : "Nd" ((uint16_t)0x80));
 }
 
 #endif

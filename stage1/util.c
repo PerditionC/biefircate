@@ -43,6 +43,22 @@ int memcmp(const void *s1, const void *s2, size_t n)
 	return 0;
 }
 
+void *memmove(void *dest, const void *src, size_t n)
+{
+	unsigned char *d = dest;
+	const unsigned char *s = src;
+	if (d < s) {
+		while (n-- != 0)
+			*d++ = *s++;
+	} else {
+		d += n;
+		s += n;
+		while (n-- != 0)
+			*--d = *--s;
+	}
+	return dest;
+}
+
 __attribute__((noreturn)) static void wait_and_exit(void)
 {
 	Output(u"press a key to exit\r\n");

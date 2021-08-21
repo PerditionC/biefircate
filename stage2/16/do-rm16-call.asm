@@ -96,6 +96,12 @@ hello16:
 	mov	cx, msg.end-msg
 	mov	bp, msg
 	int	0x10
+.wait:
+	mov	ax, 0x0e00|'+'
+	mov	bx, 0x0007
+	int	0x10
+	sti
+	jmp	.wait
 	retf
 
 	section	.rodata

@@ -84,11 +84,12 @@ void acpi_init(acpi_xsdp_t *rsdp)
 	/* Go through the tables in the XSDT. */
 	num_tabs = (sz - sizeof(acpi_header_t)) / sizeof(uint64_t);
 	for (i = 0; i < num_tabs; ++i) {
-		acpi_table_union_t *tab = (acpi_header_t *)xsdt->tables[i];
-		if (memcmp(tab->header->signature, fadt_sig, 4) == 0)
-			acpi_process_fadt(tab->fadt);
-		else if (memcmp(tab->header->signature, madt_sig, 4) == 0)
-			acpi_process_madt(tab->madt);
+		acpi_table_union_t *tab =
+		    (acpi_table_union_t *)xsdt->tables[i];
+		if (memcmp(tab->header.signature, fadt_sig, 4) == 0)
+			acpi_process_fadt(&tab->fadt);
+		else if (memcmp(tab->header.signature, madt_sig, 4) == 0)
+			acpi_process_madt(&tab->madt);
 	}
 	/* Add a boot parameter for the RSDP. */
 	bd_rsdp = bparm_add(BP_RSDP, sizeof(bdat_rsdp_t));

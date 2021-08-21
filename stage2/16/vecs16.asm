@@ -113,6 +113,9 @@ isr16_0x12:
 
 isr16_unimpl:
 	pop	bx
+	mov	al, ~0
+	out	PIC1_DATA, al
+	out	PIC2_DATA, al
 	xor	ax, ax
 	mov	ds, ax
 	mov	ax, [bda.ebda]

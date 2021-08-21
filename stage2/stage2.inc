@@ -30,12 +30,17 @@
 
 %include "common.inc"
 
+; Legacy 8259 programmable interrupt controller (PIC) I/O port numbers.
+PIC1_DATA equ	0x0021
+PIC2_DATA equ	0x00a1
+
 ; Segment selector values for our GDT.
 SEL_CS32 equ	0x0008
 SEL_DS32 equ	0x0010
 SEL_CS16 equ	0x0018
 SEL_DS16_ZERO equ 0x0020
 
+; BIOS data area variables.
 	absolute 0x0400
 bda:
 .com1:	resw	1			; 0x0400

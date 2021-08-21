@@ -503,7 +503,7 @@ void *mem_va_map(uint64_t pa, size_t sz, unsigned pte_flags)
  * correspond exactly to a virtual memory block previously obtained by
  * mem_va_map(...).
  */
-void mem_va_unmap(void *va, size_t sz)
+void mem_va_unmap(volatile void *va, size_t sz)
 {
 	uint32_t vstart, vend, sz_to_unmap;
 	unsigned i, j;
