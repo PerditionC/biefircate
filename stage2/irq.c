@@ -216,7 +216,7 @@ void irq_init(bparm_t *bparms)
 	outp_w(PIC1_DATA, ICW4_X86);		/* ICW4 */
 	outp_w(PIC2_DATA, ICW4_X86);
 	/* Set the IRQ masks. */
-	outp_w(PIC1_DATA, ~(1 << 1));		/* OCW1 */
+	outp_w(PIC1_DATA, ~(1 << 0 | 1 << 1));	/* OCW1 */
 	outp_w(PIC2_DATA, ~0);
 	/* Send EOIs for good measure. */
 	outp_w(PIC1_CMD, OCW2_EOI);		/* OCW2 */

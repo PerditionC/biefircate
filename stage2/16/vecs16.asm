@@ -49,6 +49,11 @@ vecs16:
 	dw	isr16_%1
 %endmacro
 
+%macro	ISR_IRQ	2
+	section	.rodata
+	dw	isr16_irq%2
+%endmacro
+
 %macro	ISR_IRET 1
 	section	.rodata
 	dw	iret16
@@ -68,7 +73,7 @@ NUM_VECS16 equ	($-vecs16)/2
 	ISR_UNIMPL 0x05
 	ISR_UNIMPL 0x06
 	ISR_UNIMPL 0x07
-	ISR_UNIMPL 0x08
+	ISR_IRQ 0x08, 0
 	ISR_UNIMPL 0x09
 	ISR_UNIMPL 0x0a
 	ISR_UNIMPL 0x0b
@@ -92,6 +97,28 @@ NUM_VECS16 equ	($-vecs16)/2
 	ISR_END
 
 	section	.text
+
+isr16_irq0:
+	push	ds
+	push	eax
+	xor	ax, ax
+	mov	ds, ax
+	mov	eax, [bda.timer]
+	inc	eax
+	cmp	eax, 0x1800b0
+	jae	.ovf
+.cont:
+	mov	[bda.timer], eax
+	int	0x1c
+	mov	al, OCW2_EOI
+	out	PIC1_CMD, al
+	pop	eax
+	pop	ds
+	iret
+.ovf:
+	inc	byte [bda.timer_ovf]
+	xor	eax, eax
+	jmp	.cont
 
 isr16_0x11:
 	push	ds

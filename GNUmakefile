@@ -49,7 +49,7 @@ LIBEFI = gnu-efi/x86_64/lib/libefi.a
 LDLIBS := $(LIBEFI) $(LDLIBS)
 
 CFLAGS2 += -mregparm=3 -mrtd -fno-pic -ffreestanding -fbuiltin -O2 -Wall \
-    -fno-stack-protector -MMD
+	   -fno-stack-protector -MMD
 AS2 = nasm
 ASFLAGS2 = -f elf32 -MD $(@:.o=.d)
 CPPFLAGS2 += -I $(LAISRCDIR)/include -I $(conf_Srcdir) $(COMMON_CPPFLAGS)
