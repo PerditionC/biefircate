@@ -66,7 +66,7 @@ SECTIONS
 	}
 
 	. = .;
-	_END16_KIB = . / KIBYTE;
+	_END16_KIB = ABSOLUTE(. / KIBYTE);
 
 	.text 0 : AT(ALIGN(. + 1, CONSTANT(COMMONPAGESIZE))) {
 		_stext16 = .;
