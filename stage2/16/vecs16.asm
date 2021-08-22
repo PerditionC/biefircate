@@ -29,13 +29,11 @@
 
 	bits	16
 
-%define	TO_HEX_DIGIT(v)	((v)>9?(v)-10+'a':(v)+'0')
-
 %macro	ISR_UNIMPL 1
 	section	.text
 isr16_%{1}_unimpl:
 	call	isr16_unimpl
-	db	TO_HEX_DIGIT((%1)>>4), TO_HEX_DIGIT((%1)&0x0f)
+	db	%1
 	section	.rodata
     %if (%1) == 0x00
 	global	vecs16
@@ -98,19 +96,20 @@ NUM_VECS16 equ	($-vecs16)/2
 
 	section	.text
 
+; IRQ 0 (system timer) handler.
 isr16_irq0:
 	push	ds
 	push	eax
 	xor	ax, ax
 	mov	ds, ax
-	mov	eax, [bda.timer]
+	mov	eax, [bda.timer]	; increment timer tick count
 	inc	eax
-	cmp	eax, 0x1800b0
-	jae	.ovf
+	cmp	eax, 0x1800b0		; if 24 hours (or more) since
+	jae	.ovf			; midnight, increment overflow byte
 .cont:
 	mov	[bda.timer], eax
-	int	0x1c
-	mov	al, OCW2_EOI
+	int	0x1c			; invoke user (?) timer tick handler
+	mov	al, OCW2_EOI		; send EOI to first PIC
 	out	PIC1_CMD, al
 	pop	eax
 	pop	ds
@@ -120,6 +119,7 @@ isr16_irq0:
 	xor	eax, eax
 	jmp	.cont
 
+; Handler for int 0x11 (get equipment list).
 isr16_0x11:
 	push	ds
 	xor	ax, ax
@@ -128,6 +128,7 @@ isr16_0x11:
 	pop	ds
 iret16:	iret
 
+; Handler for int 0x12 (get memory size).
 isr16_0x12:
 	push	ds
 	xor	ax, ax
@@ -138,21 +139,30 @@ isr16_0x12:
 
 	extern	_stack16
 
+; Catch-all for unimplemented interrupt service routines.
 isr16_unimpl:
 	pop	bx
-	mov	al, ~0
-	out	PIC1_DATA, al
-	out	PIC2_DATA, al
+	xchg	dx, ax			; save our incoming ax
 	xor	ax, ax
 	mov	ds, ax
-	mov	ax, [bda.ebda]
+	dec	ax			; mask all IRQs --- frob the PICs
+	out	PIC1_DATA, al		; so that even if `int 0x10' uses
+	out	PIC2_DATA, al		; `sti', no IRQs will trigger
+	mov	ax, [bda.ebda]		; switch to our stack
 	mov	ds, ax
 	mov	es, ax
 	mov	ss, ax
 	mov	sp, _stack16
-	mov	ax, [cs:bx]
+	mov	al, [cs:bx]		; plug in the interrupt vector no.
+	call	u8_to_hex
 	mov	[msg_unimpl.num], ax
-	mov	ah, 0x03
+	mov	al, dh			; plug in the incoming ax
+	call	u8_to_hex
+	mov	[msg_unimpl.ax], ax
+	xchg	dx, ax
+	call	u8_to_hex
+	mov	[msg_unimpl.ax+2], ax
+	mov	ah, 0x03		; then really panic
 	xor	bh, bh
 	int	0x10
 	mov	ax, 0x1301
@@ -163,9 +173,26 @@ isr16_unimpl:
 	cli
 	hlt
 
+; Convert an 8-bit binary value in al, to its hexadecimal representation in
+; ASCII in al:ah.
+u8_to_hex:
+	mov	ah, al
+	shr	al, 4
+	and	ah, 0x0f
+	add	al, '0'
+	cmp	al, '9'
+	jbe	.0
+	add	al, 'a'-('9'+1)
+.0:	add	ah, '0'
+	cmp	ah, '9'
+	jbe	.1
+	add	ah, 'a'-('9'+1)
+.1:	ret
+
 	section	.data
 
 msg_unimpl:
 	db	13, 10, "stage2 panic: int 0x"
-.num:	db	"00 unimplemented", 7
+.num:	db	"00 unimplemented (with ax = 0x"
+.ax:	db	"0000)", 7
 .end:
