@@ -34,7 +34,7 @@ endif
 
 GNUEFISRCDIR := '$(abspath $(conf_Srcdir))'/gnu-efi
 LAISRCDIR := '$(abspath $(conf_Srcdir))'/lai
-CFLAGS = -pie -fPIC -ffreestanding -fbuiltin -O2 -Wall -mno-red-zone \
+CFLAGS = -pie -fPIC -ffreestanding -O2 -Wall -mno-red-zone \
 	 -fno-stack-protector -MMD
 AS = nasm
 ASFLAGS = -f win64 -MD $(@:.o=.d)
