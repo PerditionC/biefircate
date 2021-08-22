@@ -229,4 +229,4 @@ run-qemu-xv6: hd-xv6.img xv6.stamp
 	    $(QEMUFLAGSXV6)
 .PHONY: run-qemu
 
--include *.d stage1/*.d stage2/*.d
+-include *.d stage1/*.d stage2/*.d stage2/16/*.d
