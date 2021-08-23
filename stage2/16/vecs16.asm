@@ -49,7 +49,7 @@ vecs16:
 
 %macro	ISR_IRQ	2
 	section	.rodata
-	dw	isr16_irq%2
+	dw	irq%2
 %endmacro
 
 %macro	ISR_IRET 1
@@ -62,6 +62,8 @@ vecs16:
 	global	NUM_VECS16
 NUM_VECS16 equ	($-vecs16)/2
 %endmacro
+
+	extern	irq0, isr16_0x1a
 
 	ISR_UNIMPL 0x00
 	ISR_IRET 0x01
@@ -89,35 +91,12 @@ NUM_VECS16 equ	($-vecs16)/2
 	ISR_UNIMPL 0x17
 	ISR_UNIMPL 0x18
 	ISR_UNIMPL 0x19
-	ISR_UNIMPL 0x1a
+	ISR_IMPL 0x1a
 	ISR_IRET 0x1b
 	ISR_IRET 0x1c
 	ISR_END
 
 	section	.text
-
-; IRQ 0 (system timer) handler.
-isr16_irq0:
-	push	ds
-	push	eax
-	xor	ax, ax
-	mov	ds, ax
-	mov	eax, [bda.timer]	; increment timer tick count
-	inc	eax
-	cmp	eax, 0x1800b0		; if 24 hours (or more) since
-	jae	.ovf			; midnight, increment overflow byte
-.cont:
-	mov	[bda.timer], eax
-	int	0x1c			; invoke user (?) timer tick handler
-	mov	al, OCW2_EOI		; send EOI to first PIC
-	out	PIC1_CMD, al
-	pop	eax
-	pop	ds
-	iret
-.ovf:
-	inc	byte [bda.timer_ovf]
-	xor	eax, eax
-	jmp	.cont
 
 ; Handler for int 0x11 (get equipment list).
 isr16_0x11:

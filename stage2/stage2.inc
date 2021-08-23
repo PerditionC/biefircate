@@ -39,6 +39,38 @@ PIC2_DATA equ	0x00a1
 ; OCW2 bit fields for the PICs.
 OCW2_EOI equ	0x20			; non-specific EOI
 
+; CMOS port numbers.
+PORT_CMOS_IDX equ 0x0070
+PORT_CMOS_DATA equ 0x0071
+
+; CMOS register indices & flags.
+CMOS_RTC_SEC equ 0x00			; real-time clock (RTC) seconds
+CMOS_RTC_SEC_ALRM equ 0x01		; RTC second alarm
+CMOS_RTC_MIN equ 0x02			; RTC minutes
+CMOS_RTC_MIN_ALRM equ 0x03		; RTC minute alarm
+CMOS_RTC_HR equ 0x04			; RTC hours
+CMOS_RTC_HR_ALRM equ 0x05		; RTC hour alarm
+CMOS_RTC_STA_A equ 0x0a			; status register A
+CMOS_RTC_STA_B equ 0x0b			; status register B
+CMOS_RTC_STA_C equ 0x0c			; status register C
+CMOS_RTC_STA_D equ 0x0d			; status register D
+CMOS_DIAG equ	0x0e			; diagnostic status
+CMOS_NMI_DIS equ 0x80			; flag to disable NMIs
+
+; Bit fields in RTC status register A.
+RTC_A_UIP equ	0x80			; update in progress
+
+; Bit fields in RTC status register B.
+RTC_B_DST equ	0x01			; daylight saving time
+
+; Bit fields in CMOS diagnostic status byte.
+DIAG_BAD_BAT equ 0x80			; clock lost power
+DIAG_BAD_CKSUM equ 0x40			; incorrect CMOS checksum
+DIAG_BAD_CLK equ 0x04			; RTC time is invalid
+
+; Other ports.
+PORT_DUMMY equ	0x0080
+
 ; Segment selector values for our GDT.
 SEL_CS32 equ	0x0008
 SEL_DS32 equ	0x0010
