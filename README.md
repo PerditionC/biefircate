@@ -11,7 +11,9 @@ _very experimental_ • _some [developer notes](NOTES.asciidoc) available_
 
 This aims to run x86-16 or x86-32 code from an x86-64 UEFI environment.
 
-Currently the bootloader can also run an unmodified kernel from MIT's [Xv6](https://github.com/mit-pdos/xv6-public) teaching operating system &mdash; bypassing Xv6's own legacy BIOS bootloader &mdash; on a QEMU virtual machine with serial console.  To build and run Xv6, also do these:
+Currently the code tries to bring up any legacy option ROMs it can find, starting with the VGA option ROM.
+
+The bootloader can now also run an unmodified kernel from MIT's [Xv6](https://github.com/mit-pdos/xv6-public) teaching operating system &mdash; bypassing Xv6's own legacy BIOS bootloader &mdash; on a QEMU virtual machine with serial console.  To build and run Xv6, also do these:
 
  7. &nbsp;`make -j4 hd-xv6.img`
  8. &nbsp;`make run-qemu-xv6`
