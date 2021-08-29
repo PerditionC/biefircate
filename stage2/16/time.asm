@@ -27,6 +27,8 @@
 
 %include "stage2/stage2.inc"
 
+	bits	16
+
 	section	.text
 
 ; IRQ 0 (system timer) handler.

@@ -96,6 +96,8 @@ hello16:
 	mov	cx, msg.end-msg
 	mov	bp, msg
 	int	0x10
+	sti
+	jmp	$
 	retf
 
 	section	.rodata
@@ -109,3 +111,7 @@ msg:	db	".:. biefircate ", VERSION, " .:. "
 sp32:	resd	1
 ptpd32:	resd	1
 gdtr:	resb	6
+
+; We need to export the `bda' symbol, which gives the linear address of the
+; BIOS data area, so that C code can use it.  Export it here...
+	global	bda

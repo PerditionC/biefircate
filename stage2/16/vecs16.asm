@@ -29,6 +29,7 @@
 
 	bits	16
 
+; Add an interrupt vector entry for an unimplemented interrupt.
 %macro	ISR_UNIMPL 1
 	section	.text
 isr16_%{1}_unimpl:
@@ -42,21 +43,61 @@ vecs16:
 	dw	isr16_%{1}_unimpl
 %endmacro
 
+; Add an interrupt vector entry for an interrupt implemented in assembly.
 %macro	ISR_IMPL 1
 	section	.rodata
 	dw	isr16_%1
 %endmacro
 
+; Add an interrupt vector entry for an IRQ implemented in assembly.
 %macro	ISR_IRQ	2
 	section	.rodata
 	dw	irq%2
 %endmacro
 
+; Add an interrupt vector entry for an IRQ implemented in C.
+%macro	ISR_IRQ_C 2
+	section	.text
+	extern	irq%2_impl
+irq%2:
+	push	ds			; push segment registers
+	push	es
+	push	fs
+	push	gs
+	push	eax			; push call-used registers
+	push	ecx
+	push	edx
+	mov	eax, esp		; preserve esp's top 16 bits, &
+	and	esp, byte -4		; round esp down to 4-byte boundary
+	push	eax
+	xor	ax, ax			; set up segment registers: point gs
+	mov	gs, ax			; to linear address 0, fs to our
+	mov	fs, [gs:bda.ebda]	; 16-bit data segment (via the
+	mov	ax, ss			; EBDA), & ds & es to the user stack
+	mov	ds, ax
+	mov	es, ax
+	push	byte 0			; call out to C routine; stuff a 0 on
+	call	irq%2_impl		; stack to make ret. addr. 32-bit
+	pop	esp			; restore esp
+	pop	edx			; restore the other registers
+	pop	ecx
+	pop	eax
+	pop	gs
+	pop	fs
+	pop	es
+	pop	ds
+	iret				; return
+	section	.rodata
+	dw	irq%2
+%endmacro
+
+; Add an interrupt vector entry for an ISR which just does an `iret'.
 %macro	ISR_IRET 1
 	section	.rodata
 	dw	iret16
 %endmacro
 
+; Wrap up our table of interrupt vectors.
 %macro	ISR_END 0
 	section	.rodata
 	global	NUM_VECS16
@@ -74,7 +115,7 @@ NUM_VECS16 equ	($-vecs16)/2
 	ISR_UNIMPL 0x06
 	ISR_UNIMPL 0x07
 	ISR_IRQ 0x08, 0
-	ISR_UNIMPL 0x09
+	ISR_IRQ_C 0x09, 1
 	ISR_UNIMPL 0x0a
 	ISR_UNIMPL 0x0b
 	ISR_UNIMPL 0x0c

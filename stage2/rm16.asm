@@ -78,6 +78,12 @@ rm16_init:
 .vecs:	lodsw				; (2) --- see above
 	stosd
 	loop	.vecs
+	mov	ax, bda.def_kb_buf-bda	; initialize IRQ 1 keyboard buffer
+	mov	[bda.kb_buf_start], ax
+	mov	[bda.kb_buf_head], ax
+	mov	[bda.kb_buf_tail], ax
+	mov	al, bda.def_kb_buf_end-bda
+	mov	[bda.kb_buf_end], ax
 	pop	edi
 	pop	esi
 	ret

@@ -72,7 +72,7 @@
 /* Wait for an asynchronous interrupt. */
 static inline void hlt(void)
 {
-	__asm volatile("hlt");
+	__asm volatile("hlt" : : : "memory");
 }
 
 /* Type of a 64-bit pointer. */
