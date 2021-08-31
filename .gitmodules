@@ -10,3 +10,6 @@
 [submodule "lai"]
 	path = lai
 	url = https://github.com/managarm/lai.git
+[submodule "seabiosify"]
+	path = seabiosify
+	url = https://gitlab.com/tkchia/seabiosify.git

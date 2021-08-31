@@ -25,10 +25,13 @@
 ; NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 ; SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+; Interrupt vector table entries.
+
 %include "stage2/stage2.inc"
 
 	bits	16
 
+; Add a vector table entry for an unimplemented interrupt.
 %macro	ISR_UNIMPL 1
 	section	.text
 isr16_%{1}_unimpl:
@@ -42,21 +45,46 @@ vecs16:
 	dw	isr16_%{1}_unimpl
 %endmacro
 
+; Add a vector table entry for a software interrupt implemented in assembly.
 %macro	ISR_IMPL 1
 	section	.rodata
 	dw	isr16_%1
 %endmacro
 
+; Add a vector table entry for an IRQ implemented in assembly.
 %macro	ISR_IRQ	2
 	section	.rodata
 	dw	irq%2
 %endmacro
 
+; Add a vector table entry for an IRQ implemented in C.
+%macro	ISR_IRQ_C 3
+	section	.text
+	extern	%3
+irq%2:
+	push	eax			; save call-used registers
+	push	ecx
+	push	edx
+	mov	eax, esp		; align esp to 4-byte boundary,
+	and	esp, 0xffff&-4		; its top 16 bits, & save old esp
+	push	eax
+	call	dword %3		; call the C routine
+	pop	esp			; restore esp & other registers
+	pop	edx
+	pop	ecx
+	pop	eax
+	iret				; return to interrupted program
+	section	.rodata
+	dw	irq%2
+%endmacro
+
+; Add a vector table entry for an interrupt which does an `iret' on default.
 %macro	ISR_IRET 1
 	section	.rodata
 	dw	iret16
 %endmacro
 
+; End the table of vectors.
 %macro	ISR_END 0
 	section	.rodata
 	global	NUM_VECS16
@@ -74,7 +102,7 @@ NUM_VECS16 equ	($-vecs16)/2
 	ISR_UNIMPL 0x06
 	ISR_UNIMPL 0x07
 	ISR_IRQ 0x08, 0
-	ISR_UNIMPL 0x09
+	ISR_IRQ_C 0x09, 1, handle_09
 	ISR_UNIMPL 0x0a
 	ISR_UNIMPL 0x0b
 	ISR_UNIMPL 0x0c

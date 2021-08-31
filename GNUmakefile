@@ -34,6 +34,7 @@ endif
 
 GNUEFISRCDIR := '$(abspath $(conf_Srcdir))'/gnu-efi
 LAISRCDIR := '$(abspath $(conf_Srcdir))'/lai
+SEABIOSSRCDIR := '$(abspath $(conf_Srcdir))'/seabiosify
 CFLAGS = -pie -fPIC -ffreestanding -O2 -Wall -mno-red-zone \
 	 -fno-stack-protector -MMD
 AS = nasm
@@ -44,8 +45,10 @@ CPPFLAGS += -I $(GNUEFISRCDIR)/inc -I $(GNUEFISRCDIR)/protocol \
 	    -I $(LAISRCDIR)/include \
 	    -I $(conf_Srcdir) $(COMMON_CPPFLAGS)
 LDFLAGS += $(CFLAGS) -nostdlib -ffreestanding -Wl,--entry,efi_main \
-	  -Wl,--subsystem,10 -Wl,--strip-all -Wl,-Map=$(@:.efi=.map)
+	   -Wl,--subsystem,10 -Wl,--strip-all -Wl,-Map=$(@:.efi=.map) \
+	   $(LDEXTRAFLAGS)
 LIBEFI = gnu-efi/x86_64/lib/libefi.a
+SEABIOSIFY16 = seabiosify/out/libseabiosify16.a
 LDLIBS := $(LIBEFI) $(LDLIBS)
 
 CFLAGS2 += -mregparm=3 -mrtd -fno-pic -ffreestanding -fbuiltin -O2 -Wall \
@@ -55,15 +58,17 @@ ASFLAGS2 = -f elf32 -MD $(@:.o=.d)
 CPPFLAGS2 += -I $(LAISRCDIR)/include -I $(conf_Srcdir) $(COMMON_CPPFLAGS)
 LDFLAGS2_ORIG := $(LDFLAGS2)
 LDFLAGS2 += $(CFLAGS2) -static -nostdlib -ffreestanding \
-    -Wl,--strip-all -Wl,-Map=$(basename $@).map -Wl,--build-id=none
+    -Wl,--strip-all -Wl,-Map=$(basename $@).map -Wl,--build-id=none \
+    $(LDEXTRAFLAGS2)
 
 CC3 = $(patsubst -m32,-m16,$(CC2))
-CFLAGS3 = -m16 $(patsubst -m32,-m16,$(CFLAGS2))
+CFLAGS3 = -m16 -flto $(patsubst -m32,-m16,$(CFLAGS2))
 AS3 = $(AS2)
 ASFLAGS3 = $(ASFLAGS2)
 CPPFLAGS3 = $(CPPFLAGS2)
 LDFLAGS3 = $(LDFLAGS2_ORIG) $(CFLAGS3) -static -nostdlib -ffreestanding \
-    -Wl,--strip-debug -Wl,-Map=$(basename $@).map -Wl,--build-id=none
+    -Wl,--strip-debug -Wl,-Map=$(basename $@).map -Wl,--build-id=none \
+    $(LDEXTRAFLAGS3)
 LDLIBS3 = $(LDLIBS2)
 
 QEMUFLAGS = -m 224m -serial stdio $(QEMUEXTRAFLAGS)
@@ -114,7 +119,7 @@ stage2/text16.bin: stage2/16.elf
 	objcopy -I elf32-i386 --dump-section .text=$@ $< /dev/null
 
 stage2/16.elf: stage2/16/head.o stage2/16/do-rm16-call.o stage2/16/time.o \
-    stage2/16/vecs16.o stage2/16/16.ld
+    stage2/16/vecs16.o $(SEABIOSIFY16) stage2/16/16.ld
 	$(CC3) $(LDFLAGS3) -o $@ $(^:%.ld=-T %.ld) $(LDLIBS3)
 
 stage2/16/%.o: stage2/16/%.c
@@ -159,7 +164,25 @@ $(LIBEFI):
 	    -f '$(abspath $(conf_Srcdir))'/gnu-efi/Makefile \
 	    lib inc
 
-xv6.stamp: $(conf_Srcdir)/xv6/Makefile
+$(SEABIOSIFY16): seabiosify.stamp
+
+seabiosify.stamp: seabiosify/Makefile
+ifeq "$(conf_Separate_build_dir)" "yes"
+	$(RM) -r seabiosify
+	mkdir seabiosify
+	ln -s $(SEABIOSSRCDIR)/* seabiosify/ || \
+	    cp $(SEABIOSSRCDIR)/* seabiosify/
+endif
+	(echo 'CONFIG_LIBRARIES=y' && \
+	 echo 'CONFIG_THREADS=n' && \
+	 echo 'CONFIG_USB=n' && \
+	 echo 'CONFIG_SERCON=n' && \
+	 echo 'CONFIG_DEBUG_LEVEL=0') >seabiosify/.config
+	$(MAKE) -C seabiosify olddefconfig
+	$(MAKE) -C seabiosify CC="$(CC2) -DSEG_LOW='get_ebda_seg()'"
+	>$@
+
+xv6.stamp: xv6/Makefile
 ifeq "$(conf_Separate_build_dir)" "yes"
 	$(RM) -r xv6
 	cp -a $(<D) xv6
@@ -213,10 +236,11 @@ clean:
 		fi; \
 	done
 ifeq "$(conf_Separate_build_dir)" "yes"
-	$(RM) -r stage1 stage2 gnu-efi xv6
+	$(RM) -r stage1 stage2 gnu-efi xv6 seabiosify
 else
 	$(MAKE) -C gnu-efi clean
 	$(MAKE) -C xv6 clean
+	$(MAKE) -C seabiosify distclean
 endif
 .PHONY: clean
 
