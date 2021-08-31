@@ -31,6 +31,22 @@
 
 ---
 
+=== Additional references
+
+:fn-abraham-20: footnote:abraham-20[https://github.com/eyalabraham/new-xt-bios.  Retrieved on 28 August 2021.]
+:fn-ibm-86: footnote:ibm-86[International Business Machines Corporation.  IBM: Personal Computer Hardware Reference Library: Technical Reference 6183355, pp. 5-14 et seq.  March 1986.  https://archive.org/details/bitsavers_ibmpcat618ferenceMar86_25829277/page/n245/mode/2up.]
+:fn-oconnor-10: footnote:oconnor-10[O'Connor, Kevin.  SeaBIOS in a virtualized environment.  Proc. Linux Plumbers Conference.  2010.  http://wiki.linuxplumbersconf.org/_media/2010:01-lpc-seabios-20101103.pdf.]
+:fn-seabios-21: footnote:seabios-21[https://git.seabios.org/.  Retrieved on 30 August 2021.]
+
+  * how to correctly interface with PC hardware legacy-style
+  ** IBM's published BIOS source code, e.g. PC AT BIOS listings from 1986,{fn-ibm-86} might be useful
+  ** also potentially useful is Eyal Abraham's `new-xt-bios`,{fn-abraham-20} a rewrite of the BIOS for an (older) PC XT with partially custom hardware
+  ** SeaBIOS{fn-oconnor-10}{fn-seabios-21} is cool, but support for real hardware (vs. emulators) is not quite complete
+  *** where SeaBIOS and IBM's BIOS differ, might want to defer to IBM
+  *** also, SeaBIOS uses a rather Byzantine memory model
+
+---
+
 === Code structure (?)
 
 :fn-intel-21: footnote:intel-21[Intel Corporation.  Intel® 64 and IA-32 Architectures Software Developer's Manual: Volume 3A, pp. 2-17, 4-14—4-19.  June 2021.]
@@ -50,16 +66,11 @@
 
 === Other notes
 
-:fn-abraham-20: footnote:abraham-20[https://github.com/eyalabraham/new-xt-bios.  Retrieved on 28 August 2021.]
-:fn-ibm-86: footnote:ibm-86[International Business Machines Corporation.  IBM: Personal Computer Hardware Reference Library: Technical Reference 6183355, pp. 5-14 et seq.  March 1986.  https://archive.org/details/bitsavers_ibmpcat618ferenceMar86_25829277/page/n245/mode/2up.]
 :fn-intel-97: footnote:intel-97[Intel Corporation.  MultiProcessor Specification: Version 1.4.  May 1997.]
 
   * UEFI stuff
   ** **note:** boot services will be unavailable once bootloader calls `BS->ExitBootServices(, )`
   *** _might_ be possible to implement a BIOS without exiting boot services, but this is non-trivial — UEFI expects to be in control of most system resources, incl. memory, page tables, and IRQs
-  * how to correctly interface with PC hardware legacy-style
-  ** IBM's published BIOS source code, e.g. PC AT BIOS listings from 1986,{fn-ibm-86} might be useful
-  ** also potentially useful is Eyal Abraham's `new-xt-bios`,{fn-abraham-20} a rewrite of the BIOS for an (older) PC XT with partially custom hardware; code is under an MIT License
   * Xv6 will panic if it cannot find MP tables per Intel's (deprecated) MultiProcessor Specification{fn-intel-97}
   ** `biefircate` produces dummy MP tables if `XV6_COMPAT` is defined
   ** other OSes probably do not need MP tables to work
