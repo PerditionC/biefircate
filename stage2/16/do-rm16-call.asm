@@ -96,6 +96,8 @@ hello16:
 	mov	cx, msg.end-msg
 	mov	bp, msg
 	int	0x10
+	sti
+	jmp	$
 	retf
 
 	section	.rodata

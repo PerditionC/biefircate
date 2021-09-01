@@ -48,7 +48,8 @@ LDFLAGS += $(CFLAGS) -nostdlib -ffreestanding -Wl,--entry,efi_main \
 	   -Wl,--subsystem,10 -Wl,--strip-all -Wl,-Map=$(@:.efi=.map) \
 	   $(LDEXTRAFLAGS)
 LIBEFI = gnu-efi/x86_64/lib/libefi.a
-SEABIOSIFY16 = seabiosify/out/libseabiosify16.a
+SEABIOSIFY16LIBS = seabiosify/out/libseabiosify16.a \
+		   seabiosify/out/libseabiosifyromlayout.a
 LDLIBS := $(LIBEFI) $(LDLIBS)
 
 CFLAGS2 += -mregparm=3 -mrtd -fno-pic -ffreestanding -fbuiltin -O2 -Wall \
@@ -118,8 +119,9 @@ stage2/data16.bin: stage2/16.elf
 stage2/text16.bin: stage2/16.elf
 	objcopy -I elf32-i386 --dump-section .text=$@ $< /dev/null
 
-stage2/16.elf: stage2/16/head.o stage2/16/do-rm16-call.o stage2/16/time.o \
-    stage2/16/vecs16.o $(SEABIOSIFY16) stage2/16/16.ld
+stage2/16.elf: stage2/16/head.o stage2/16/do-rm16-call.o \
+    stage2/16/seabios-shim.o stage2/16/time.o stage2/16/vecs16.o \
+    $(SEABIOSIFY16LIBS) stage2/16/16.ld
 	$(CC3) $(LDFLAGS3) -o $@ $(^:%.ld=-T %.ld) $(LDLIBS3)
 
 stage2/16/%.o: stage2/16/%.c
@@ -164,7 +166,7 @@ $(LIBEFI):
 	    -f '$(abspath $(conf_Srcdir))'/gnu-efi/Makefile \
 	    lib inc
 
-$(SEABIOSIFY16): seabiosify.stamp
+$(SEABIOSIFY16LIBS): seabiosify.stamp
 
 seabiosify.stamp: seabiosify/Makefile
 ifeq "$(conf_Separate_build_dir)" "yes"
@@ -177,9 +179,12 @@ endif
 	 echo 'CONFIG_THREADS=n' && \
 	 echo 'CONFIG_USB=n' && \
 	 echo 'CONFIG_SERCON=n' && \
+	 echo 'CONFIG_TCGBIOS=n' && \
 	 echo 'CONFIG_DEBUG_LEVEL=0') >seabiosify/.config
 	$(MAKE) -C seabiosify olddefconfig
-	$(MAKE) -C seabiosify CC="$(CC2) -DSEG_LOW='get_ebda_seg()'"
+	$(MAKE) -C seabiosify out/autoconf.h
+	$(MAKE) -C seabiosify CC="$(CC2) -DSEG_LOW='get_ebda_seg()' \
+					 -DZONELOW_BASE=0"
 	>$@
 
 xv6.stamp: xv6/Makefile

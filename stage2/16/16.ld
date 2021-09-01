@@ -35,8 +35,6 @@ ENTRY(_stext16)
 
 SECTIONS
 {
-	HIDDEN(KIBYTE = 1024);
-
 	/*
 	 * Place read/write initialized data before read-only data, & place
 	 * data before text.  This arrangement more closely mimics the
@@ -45,6 +43,21 @@ SECTIONS
 	 * appearing only further up.
 	 */
 
+	HIDDEN(KIBYTE = 1024);
+
+	.text 0 : AT(ALIGN(. + 1, CONSTANT(COMMONPAGESIZE))) {
+		_stext16 = .;
+
+		*(.text .stub .text.* .gnu.linkonce.t.*)
+		*(.gnu.warning)
+
+		_etext16 = .;
+	}
+}
+INSERT AFTER .data;
+
+SECTIONS
+{
 	.data 0 : {
 		_sdata16 = .;
 
@@ -67,15 +80,6 @@ SECTIONS
 
 	. = .;
 	_END16_KIB = ABSOLUTE(. / KIBYTE);
-
-	.text 0 : AT(ALIGN(. + 1, CONSTANT(COMMONPAGESIZE))) {
-		_stext16 = .;
-
-		*(.text .stub .text.* .gnu.linkonce.t.*)
-		*(.gnu.warning)
-
-		_etext16 = .;
-	}
 
 	/DISCARD/ : {
 		*(.note.GNU-stack .gnu_* .gnu.* .stab* .debug_* .eh_frame
