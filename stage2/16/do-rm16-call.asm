@@ -31,7 +31,7 @@
 
 	bits	16
 
-	extern	_stack16
+	extern	_stack16, ps2_keyboard_setup
 
 	global	rm16_call.cont1, rm16_call.rm_cs16
 rm16_call.cont1:			; on entry eax, ebx, ecx, edx give
@@ -86,6 +86,8 @@ rm16_call.cont3:
 
 	global	hello16
 hello16:
+	xor	eax, eax
+	call	dword ps2_keyboard_setup
 	mov	ax, 0x0003
 	int	0x10
 	mov	ah, 0x03
