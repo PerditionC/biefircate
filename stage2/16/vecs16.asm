@@ -31,6 +31,13 @@
 
 	bits	16
 
+; Begin the table of vectors.
+%macro	ISR_START 0
+	section	.rodata
+	global	vecs16
+vecs16:
+%endmacro
+
 ; Add a vector table entry for an unimplemented interrupt.
 %macro	ISR_UNIMPL 1
 	section	.text
@@ -38,15 +45,54 @@ isr16_%{1}_unimpl:
 	call	isr16_unimpl
 	db	%1
 	section	.rodata
-    %if (%1) == 0x00
-	global	vecs16
-vecs16:
-    %endif
 	dw	isr16_%{1}_unimpl
 %endmacro
 
 ; Add a vector table entry for a software interrupt implemented in assembly.
 %macro	ISR_IMPL 1
+	section	.rodata
+	dw	isr16_%1
+%endmacro
+
+; Add a vector table entry for a software interrupt implemented in C.
+%macro	ISR_IMPL_C 1
+	section	.text
+	extern	isr16_%1_impl
+isr16_%1:
+	push	eax			; save registers as per `struct bregs'
+	push	ecx
+	push	edx
+	push	ebx
+	push	ebp
+	push	esi
+	push	edi
+	push	es
+	push	ds
+	push	fs
+	push	gs
+	mov	ax, ss			; set ds := ss, so C code can access
+	mov	ds, ax			; stack via ds
+	xor	ax, ax			; set gs := 0, fs := our data segment
+	mov	gs, ax
+	mov	fs, word [gs:bda.ebda]
+	mov	eax, esp		; align esp to 4-byte boundary, clear
+	mov	ebx, esp		; its top 16 bits, save the old esp
+	and	esp, 0xffff&-4		; in ebx, & pass the old esp (for
+					; the isr16_regs_t) as a parm. in eax
+	call	dword isr16_%1_impl	; call the C routine
+	mov	esp, ebx		; restore esp & retrieve other
+	pop	gs			; registers
+	pop	fs
+	pop	ds
+	pop	es
+	pop	edi
+	pop	esi
+	pop	ebp
+	pop	ebx
+	pop	edx
+	pop	ecx
+	pop	eax
+	iret				; return to caller (& pop flags)
 	section	.rodata
 	dw	isr16_%1
 %endmacro
@@ -65,11 +111,24 @@ irq%2:
 	push	eax			; save call-used registers
 	push	ecx
 	push	edx
-	mov	eax, esp		; align esp to 4-byte boundary,
+	push	ds			; save segment registers
+	push	es
+	push	fs
+	push	gs
+	mov	ax, ss			; set ds := ss, so C code can access
+	mov	ds, ax			; stack via ds
+	xor	ax, ax			; set gs := 0, fs := our data segment
+	mov	gs, ax
+	mov	fs, word [gs:bda.ebda]
+	mov	eax, esp		; align esp to 4-byte boundary, clear
 	and	esp, 0xffff&-4		; its top 16 bits, & save old esp
 	push	eax
 	call	dword %3		; call the C routine
 	pop	esp			; restore esp & other registers
+	pop	gs
+	pop	fs
+	pop	es
+	pop	ds
 	pop	edx
 	pop	ecx
 	pop	eax
@@ -93,6 +152,7 @@ NUM_VECS16 equ	($-vecs16)/2
 
 	extern	irq0, isr16_0x1a
 
+	ISR_START
 	ISR_UNIMPL 0x00
 	ISR_IRET 0x01
 	ISR_UNIMPL 0x02
@@ -114,7 +174,7 @@ NUM_VECS16 equ	($-vecs16)/2
 	ISR_IMPL 0x12
 	ISR_UNIMPL 0x13
 	ISR_UNIMPL 0x14
-	ISR_UNIMPL 0x15
+	ISR_IMPL_C 0x15
 	ISR_UNIMPL 0x16
 	ISR_UNIMPL 0x17
 	ISR_UNIMPL 0x18

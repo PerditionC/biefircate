@@ -27,62 +27,42 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-/* GNU ld compatible linker script for the 16-bit portion of stage 2. */
+/* Code to override certain SeaBIOS routines with our custom code. */
 
-OUTPUT_FORMAT("elf32-i386", "elf32-i386", "elf32-i386")
-OUTPUT_ARCH(i386)
-ENTRY(_stext16)
+#include <inttypes.h>
 
-SECTIONS
+/* Enable IRQs for a short while. */
+void check_irqs(void)
 {
-	/*
-	 * Place read/write initialized data before read-only data, & place
-	 * data before text.  This arrangement more closely mimics the
-	 * memory layout that will arise at run time, with the EBDA coming
-	 * right above the first block of base memory, & the "BIOS" code
-	 * appearing only further up.
-	 */
-
-	HIDDEN(KIBYTE = 1024);
-
-	.text 0 : AT(ALIGN(. + 1, CONSTANT(COMMONPAGESIZE))) {
-		_stext16 = .;
-
-		*(.text .stub .text.* .data16 .data16.* .gnu.linkonce.t.*)
-		*(.gnu.warning)
-
-		_etext16 = .;
-	}
+	__asm volatile("sti; nop ; nop; rep ; nop; cli; cld" : : : "memory");
 }
-INSERT AFTER .data;
 
-SECTIONS
+/* Say whether we are on SeaBIOS's "extra 16-bit stack". */
+int on_extra_stack(void)
 {
-	.data 0 : {
-		_sdata16 = .;
+	return 0;
+}
 
-		*(.data .data.* .gnu.linkonce.d.*)
+/*
+ * Reset the system.  Here I induce a triple fault to do a true system
+ * reset.
+ */
+void reset(void)
+{
+	extern struct __attribute__((packed)) {
+		uint16_t length;
+		uint32_t addr;
+	} pmode_IDT_info;
+	__asm volatile("lidt %%cs:%0; int3"
+		       : : "g" (pmode_IDT_info) : "memory");
+	__builtin_unreachable();
+}
 
-		. = ALIGN(0x10);
-		*(.rodata .rodata.* .gnu.linkonce.r.*)
-
-		. = ALIGN(0x10);
-		_edata16 = .;
-	}
-
-	.bss : {
-		*(.bss .bss.* .gnu.linkonce.b.*)
-		*(COMMON)
-
-		. = ALIGN(KIBYTE);
-		_end16 = .;
-	}
-
-	. = .;
-	_END16_KIB = ABSOLUTE(. / KIBYTE);
-
-	/DISCARD/ : {
-		*(.note.GNU-stack .gnu_* .gnu.* .stab* .debug_* .eh_frame
-		  .comment .discard.*)
-	}
+/*
+ * Read an integer setting from a ROM configuration "file".  This just
+ * returns the supplied default integer value.
+ */
+uint64_t romfile_loadint(const char *name, uint64_t defval)
+{
+	return defval;
 }

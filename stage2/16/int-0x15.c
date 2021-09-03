@@ -27,42 +27,18 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-/* Code to interface with SeaBIOS routines. */
+/* int 0x15 implementation for real mode. */
 
-#include <inttypes.h>
+#include "stage2/stage2.h"
 
-/* Enable IRQs for a short while. */
-void check_irqs(void)
+void isr16_0x15_impl(isr16_regs_t *ir)
 {
-	__asm volatile("sti; nop ; nop; rep ; nop; cli; cld" : : : "memory");
-}
-
-/* Say whether we are on SeaBIOS's "extra 16-bit stack". */
-int on_extra_stack(void)
-{
-	return 0;
-}
-
-/*
- * Reset the system.  Here I induce a triple fault to do a true system
- * reset.
- */
-void reset(void)
-{
-	extern struct __attribute__((packed)) {
-		uint16_t length;
-		uint32_t addr;
-	} pmode_IDT_info;
-	__asm volatile("lidt %%cs:%0; int3"
-		       : : "g" (pmode_IDT_info) : "memory");
-	__builtin_unreachable();
-}
-
-/*
- * Read an integer setting from a ROM configuration "file".  This just
- * returns the supplied default integer value.
- */
-uint64_t romfile_loadint(const char *name, uint64_t defval)
-{
-	return defval;
+	switch (ir->ah) {
+	    case 0x4f:
+		ir->flags |= EFL_C;
+		break;
+	    default:
+		ir->ah = 0x86;
+		ir->flags |= EFL_C;
+	}
 }

@@ -78,6 +78,20 @@ extern void rm16_call(uint32_t eax, uint32_t edx, uint32_t ecx, uint32_t ebx,
 /* Flags in the cr4 register. */
 #define CR4_PAE		(1UL <<  5)	/* physical address extension (PAE) */
 
+/* Flags in the ... flags register. */
+#define EFL_C		(1U <<  0)	/* carry */
+#define EFL_P		(1U <<  2)	/* parity */
+#define EFL_A		(1U <<  4)	/* auxiliary carry */
+#define EFL_Z		(1U <<  6)	/* zero */
+#define EFL_S		(1U <<  7)	/* sign */
+#define EFL_T		(1U <<  8)	/* trace */
+#define EFL_I		(1U <<  9)	/* interrupt */
+#define EFL_D		(1U << 10)	/* direction */
+#define EFL_O		(1U << 11)	/* overflow */
+
+/* Address spaces when in 16-bit real mode. */
+#define LOWDATA		__seg_fs	/* our 16-bit data segment */
+
 /*
  * Data structure describing a single memory address range.  The front part
  * is in the same format as returned by int 0x15, ax = 0xe820.
@@ -90,10 +104,55 @@ typedef struct __attribute__((packed)) mem_range {
 	uint64_t uefi_attr;
 } mem_range_t;
 
+/*
+ * Data structure for registers passed to & from a 16-bit interrupt service
+ * routine.
+ */
+typedef struct __attribute__((packed)) {
+	uint16_t gs;
+	uint16_t fs;
+	uint16_t ds;
+	uint16_t es;
+	union {
+		uint32_t edi;
+		uint16_t di;
+	};
+	union {
+		uint32_t esi;
+		uint16_t si;
+	};
+	union {
+		uint32_t ebp;
+		uint16_t bp;
+	};
+	union {
+		uint32_t ebx;
+		uint16_t bx;
+		struct { uint8_t bl, bh; };
+	};
+	union {
+		uint32_t edx;
+		uint16_t dx;
+		struct { uint8_t dl, dh; };
+	};
+	union {
+		uint32_t ecx;
+		uint16_t cx;
+		struct { uint8_t cl, ch; };
+	};
+	union {
+		uint32_t eax;
+		uint16_t ax;
+		struct { uint8_t al, ah; };
+	};
+	farptr16_t caller;
+	uint16_t flags;
+} isr16_regs_t;
+
 /* Fashion a far 16-bit pointer from a 16-bit segment & a 16-bit offset. */
-static inline uint32_t MK_FP16(uint16_t seg, uint16_t off)
+static inline farptr16_t MK_FP16(uint16_t seg, uint16_t off)
 {
-	return (uint32_t)seg << 16 | off;
+	return (farptr16_t)seg << 16 | off;
 }
 
 /* Read cr0. */

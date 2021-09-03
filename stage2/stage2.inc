@@ -97,7 +97,8 @@ bda:
 .kb_keypad: resb 1			; 0x0419 --- Alt-nnn keypad workspace
 .kb_buf_head: resw 1			; 0x041a --- head in kbd. buf. queue
 .kb_buf_tail: resw 1			; 0x041c --- tail in kbd. buf. queue
-.kb_buf: resw	16			; 0x041e --- default keyboard buffer
+.def_kb_buf: resw 16			; 0x041e --- default keyboard buffer
+.def_kb_buf_end:
 .fd_recalib: resb 1			; 0x043e --- floppy recalibrate status
 .fd_motor: resb	1			; 0x043f --- floppy motor status
 .fd_countdown: resb 1			; 0x0440 --- floppy motor turn-off
@@ -130,5 +131,17 @@ bda:
 .reset_flag: resw 1			; 0x0472 --- POST reset flag
 .hd_error: resb	1			; 0x0474 --- fixed disk last op. stat.
 .hd_cnt: resb	1			; 0x0475 --- no. of fixed disk drives
+.hd_ctl: resb	1			; 0x0476 --- fixed disk ctl. byte
+.hd_port_off: resb 1			; 0x0477 --- fixed disk I/O port off.
+.lpt1_cntdn: resb 1			; 0x0478 --- par. dev. 1 timeout cnt.
+.lpt2_cntdn: resb 1			; 0x0479 --- par. dev. 2 timeout cnt.
+.lpt3_cntdn: resb 1			; 0x047a --- par. dev. 3 timeout cnt.
+.flags_0x4b: resb 1			; 0x047b --- int 0x4b flags
+.com1_cntdn: resb 1			; 0x047c --- ser. dev. 1 timeout cnt.
+.com2_cntdn: resb 1			; 0x047d --- ser. dev. 2 timeout cnt.
+.com3_cntdn: resb 1			; 0x047e --- ser. dev. 3 timeout cnt.
+.com4_cntdn: resb 1			; 0x047f --- ser. dev. 4 timeout cnt.
+.kb_buf_start: resw 1			; 0x0480 --- kbd. buf. start offset
+.kb_buf_end: resw 1			; 0x0482 --- kbd. buf. start offset
 
 %endif

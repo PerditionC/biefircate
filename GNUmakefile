@@ -52,8 +52,8 @@ SEABIOSIFY16LIBS = seabiosify/out/libseabiosify16.a \
 		   seabiosify/out/libseabiosifyromlayout.a
 LDLIBS := $(LIBEFI) $(LDLIBS)
 
-CFLAGS2 += -mregparm=3 -mrtd -fno-pic -ffreestanding -fbuiltin -O2 -Wall \
-	   -fno-stack-protector -MMD
+CFLAGS2 += -mregparm=3 -mrtd -mpreferred-stack-boundary=2 -fno-pic \
+	   -ffreestanding -fbuiltin -O2 -Wall -fno-stack-protector -MMD
 AS2 = nasm
 ASFLAGS2 = -f elf32 -MD $(@:.o=.d)
 CPPFLAGS2 += -I $(LAISRCDIR)/include -I $(conf_Srcdir) $(COMMON_CPPFLAGS)
@@ -120,8 +120,8 @@ stage2/text16.bin: stage2/16.elf
 	objcopy -I elf32-i386 --dump-section .text=$@ $< /dev/null
 
 stage2/16.elf: stage2/16/head.o stage2/16/do-rm16-call.o \
-    stage2/16/seabios-shim.o stage2/16/time.o stage2/16/vecs16.o \
-    $(SEABIOSIFY16LIBS) stage2/16/16.ld
+    stage2/16/int-0x15.o stage2/16/sbios-override.o stage2/16/time.o \
+    stage2/16/vecs16.o $(SEABIOSIFY16LIBS) stage2/16/16.ld
 	$(CC3) $(LDFLAGS3) -o $@ $(^:%.ld=-T %.ld) $(LDLIBS3)
 
 stage2/16/%.o: stage2/16/%.c
