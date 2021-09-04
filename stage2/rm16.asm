@@ -89,7 +89,7 @@ rm16_init:
 	ret
 
 	align	16
-	global	rm16_call
+	global	rm16_call, rm16_call.fin1
 rm16_call:
 	push	ebx
 	push	esi
@@ -99,8 +99,8 @@ rm16_call:
 	mov	ebx, [esp+5*4+4]
 	lea	edi, [esp+5*4+4+4]
 	cli
-	call	SEL_CS16:rm16_call.cont1
-	mov	si, SEL_DS32
+	jmp	SEL_CS16:rm16_call.cont1
+.fin1:	mov	si, SEL_DS32
 	mov	ds, si
 	mov	es, si
 	mov	ss, si
@@ -115,11 +115,19 @@ rm16_call:
 
 	align	4
 data16_load:
+%ifndef PASS1
 	incbin	"stage2/data16.bin"
+%else
+	incbin	"stage2/data16.pass1.bin"
+%endif
 	align	4, db 0
 .end:
 text16_load:
+%ifndef PASS1
 	incbin	"stage2/text16.bin"
+%else
+	incbin	"stage2/text16.pass1.bin"
+%endif
 	align	4
 .end:
 

@@ -45,7 +45,8 @@ static unsigned num_mem_ranges = 0, max_mem_ranges = 0,
 		num_unused_va_ranges = 0, max_unused_va_ranges = 0;
 static mem_range_t *mem_ranges;
 static va_range_t *unused_va_ranges;
-static uint64_t *pdpt = NULL;
+
+uint64_t *pdpt = NULL;
 
 static void shellsort(mem_range_t *mrs, unsigned nmr)
 {

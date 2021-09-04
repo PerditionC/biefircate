@@ -31,7 +31,7 @@
 
 	bits	16
 
-	extern	_stack16, ps2_keyboard_setup
+	extern	_stack16, rm16_call.fin1, ps2_keyboard_setup
 
 	global	rm16_call.cont1, rm16_call.rm_cs16
 rm16_call.cont1:			; on entry eax, ebx, ecx, edx give
@@ -79,10 +79,7 @@ rm16_call.cont2:
 	mov	esi, cr0
 	or	esi, CR0_PG|CR0_PE
 	mov	cr0, esi
-	jmp	short rm16_call.cont3
-rm16_call.cont3:
-	add	esp, 8
-	jmp	far dword [esp-8]
+	jmp	SEL_CS32:dword rm16_call.fin1
 
 	global	hello16
 hello16:

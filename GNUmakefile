@@ -57,8 +57,7 @@ ASFLAGS2 = -f elf32 -MD $(@:.o=.d)
 CPPFLAGS2 += -I $(LAISRCDIR)/include -I $(conf_Srcdir) $(COMMON_CPPFLAGS)
 LDFLAGS2_ORIG := $(LDFLAGS2)
 LDFLAGS2 += $(CFLAGS2) -static -nostdlib -ffreestanding \
-    -Wl,--strip-all -Wl,-Map=$(basename $@).map -Wl,--build-id=none \
-    $(LDEXTRAFLAGS2)
+    -Wl,-Map=$(basename $@).map -Wl,--build-id=none $(LDEXTRAFLAGS2)
 
 CC3 = $(patsubst -m32,-m16,$(CC2))
 CFLAGS3 = -m16 -flto $(patsubst -m32,-m16,$(CFLAGS2))
@@ -81,6 +80,7 @@ else
 STAGE1 = stage1.efi
 endif
 STAGE2 = stage2.sys
+STAGE2_PASS1 = stage2.pass1.sys
 LEGACY_MBR = legacy-mbr.bin
 
 default: $(STAGE1) $(STAGE2) hd.img romdumper.efi
@@ -113,17 +113,41 @@ romdumper.o: romdumper.c $(LIBEFI)
 stage1/main.o romdumper.o : CPPFLAGS += -DVERSION='"$(conf_Pkg_ver)"'
 stage2/16/do-rm16-call.o : CPPFLAGS3 += -DVERSION='"$(conf_Pkg_ver)"'
 
+# We want the 32-bit component to have access to symbol addresses from the
+# 16-bit component, & we also want the 16-bit component to have access to
+# symbol addresses from the 32-bit component.
+#
+# To do this, link both the 16-bit component & 32-bit component twice.
+#   * In the first pass, we get the text & data sizes for the 16-bit
+#     component, & the symbol addresses for both components.
+#   * These pieces of information can then be fed to a second-pass link.
+#
+# This two-pass method should work, as long as the symbol addresses do not
+# move around between passes.  -- tkchia 20210904
+
+stage2/data16.pass1.bin: stage2/16.pass1.elf
+	objcopy -I elf32-i386 --dump-section .data=$@ $< /dev/null
+
+stage2/text16.pass1.bin: stage2/16.pass1.elf
+	objcopy -I elf32-i386 --dump-section .text=$@ $< /dev/null
+
 stage2/data16.bin: stage2/16.elf
 	objcopy -I elf32-i386 --dump-section .data=$@ $< /dev/null
 
 stage2/text16.bin: stage2/16.elf
 	objcopy -I elf32-i386 --dump-section .text=$@ $< /dev/null
 
-stage2/16.elf: stage2/16/head.o stage2/16/do-rm16-call.o \
+OBJS2_16 = stage2/16/head.o stage2/16/do-rm16-call.o \
     stage2/16/int-0x15.o stage2/16/sbios-override.o stage2/16/time.o \
-    stage2/16/vecs16.o $(SEABIOSIFY16LIBS) stage2/16/16.ld
-	$(CC3) $(LDFLAGS3) -o $@ \
-	    $(patsubst %.ld,-T %.ld,$(filter-out %.a,$^)) $(LDLIBS3)
+    stage2/16/vecs16.o $(SEABIOSIFY16LIBS)
+
+stage2/16.pass1.elf: stage2/16/16.ld $(OBJS2_16) $(SEABIOSIFY16LIBS)
+	$(CC3) $(LDFLAGS3) -o $@ -Wl,--unresolved-symbols=ignore-all \
+	    -T $< $(OBJS2_16) $(LDLIBS3)
+
+stage2/16.elf: stage2/16/16.ld $(OBJS2_16) $(SEABIOSIFY16LIBS) $(STAGE2_PASS1)
+	$(CC3) $(LDFLAGS3) -o $@ -Wl,--just-symbols=$(STAGE2_PASS1) \
+	    -T $< $(OBJS2_16) $(LDLIBS3)
 
 stage2/16/%.o: stage2/16/%.c
 	mkdir -p $(@D)
@@ -133,13 +157,18 @@ stage2/16/%.o: stage2/16/%.asm
 	mkdir -p $(@D)
 	$(AS3) $(ASFLAGS3) $(CPPFLAGS3) -o $@ $<
 
-$(STAGE2): stage2/start.o stage2/clib.o stage2/irq.o stage2/main.o \
-    stage2/mem.o stage2/rm16.o stage2/stage2.ld stage2/16.elf
-	$(CC2) $(LDFLAGS2) -o $@ \
-	    $(filter-out %.ld %.elf, $^) \
-	    $(patsubst %.ld,-T %.ld,$(filter %.ld,$^)) \
-	    $(patsubst %.elf,-Xlinker --just-symbols=%.elf,$(filter %.elf,$^))\
-	    $(LDLIBS2)
+OBJS2_32_COMMON = stage2/start.o stage2/clib.o stage2/irq.o stage2/main.o \
+    stage2/mem.o
+OBJS2_32_PASS1 = $(OBJS2_32_COMMON) stage2/rm16.pass1.o
+OBJS2_32 = $(OBJS2_32_COMMON) stage2/rm16.o
+
+$(STAGE2_PASS1): stage2/stage2.ld $(OBJS2_32_PASS1)
+	$(CC2) $(LDFLAGS2) -o $@ -T $< $(OBJS2_32_PASS1) \
+	    -Wl,--unresolved-symbols=ignore-all $(LDLIBS2)
+
+$(STAGE2): stage2/stage2.ld $(OBJS2_32) stage2/16.pass1.elf
+	$(CC2) $(LDFLAGS2) -Wl,--strip-all -o $@ -T $< $(OBJS2_32) \
+	    -Wl,--just-symbols=stage2/16.pass1.elf $(LDLIBS2)
 
 stage2/%.o: stage2/%.c
 	mkdir -p $(@D)
@@ -150,9 +179,16 @@ stage2/%.s: stage2/%.c
 	mkdir -p $(@D)
 	$(CC2) $(CFLAGS2) $(CPPFLAGS2) -S -dA -o $@ $<
 
-stage2/%.o: stage2/%.asm stage2/data16.bin stage2/text16.bin
+stage2/%.o: stage2/%.asm
 	mkdir -p $(@D)
 	$(AS2) $(ASFLAGS2) $(CPPFLAGS2) -o $@ $<
+
+stage2/rm16.pass1.o: stage2/rm16.asm stage2/data16.pass1.bin \
+    stage2/text16.pass1.bin
+	mkdir -p $(@D)
+	$(AS2) $(ASFLAGS2) $(CPPFLAGS2) -DPASS1 -o $@ $<
+
+stage2/rm16.o: stage2/rm16.asm stage2/data16.bin stage2/text16.bin
 
 # gnu-efi's Make.defaults has a bit of a bug in its setting of $(GCCVERSION)
 # & $(GCCMINOR): if $(CC) -dumpversion says something like `10-win32' it
