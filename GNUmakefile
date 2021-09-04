@@ -111,7 +111,7 @@ romdumper.o: romdumper.c $(LIBEFI)
 	$(CC) $(CFLAGS) $(CPPFLAGS) -c -o $@ $<
 
 stage1/main.o romdumper.o : CPPFLAGS += -DVERSION='"$(conf_Pkg_ver)"'
-stage2/16/do-rm16-call.o : CPPFLAGS3 += -DVERSION='"$(conf_Pkg_ver)"'
+stage2/16/do-rm16.o : CPPFLAGS3 += -DVERSION='"$(conf_Pkg_ver)"'
 
 # We want the 32-bit component to have access to symbol addresses from the
 # 16-bit component, & we also want the 16-bit component to have access to
@@ -137,9 +137,9 @@ stage2/data16.bin: stage2/16.elf
 stage2/text16.bin: stage2/16.elf
 	objcopy -I elf32-i386 --dump-section .text=$@ $< /dev/null
 
-OBJS2_16 = stage2/16/head.o stage2/16/do-rm16-call.o \
-    stage2/16/int-0x15.o stage2/16/sbios-override.o stage2/16/time.o \
-    stage2/16/vecs16.o $(SEABIOSIFY16LIBS)
+OBJS2_16 = stage2/16/head.o stage2/16/do-rm16.o stage2/16/int-0x15.o \
+    stage2/16/sbios-override.o stage2/16/time.o stage2/16/vecs16.o \
+    $(SEABIOSIFY16LIBS)
 
 stage2/16.pass1.elf: stage2/16/16.ld $(OBJS2_16) $(SEABIOSIFY16LIBS)
 	$(CC3) $(LDFLAGS3) -o $@ -Wl,--unresolved-symbols=ignore-all \

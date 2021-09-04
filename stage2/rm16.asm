@@ -123,6 +123,7 @@ rm16_call:
 	ret	8
 
 	align	4
+	global	data16_load
 data16_load:
 %ifndef PASS1
 	incbin	"stage2/data16.bin"

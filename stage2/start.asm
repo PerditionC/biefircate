@@ -37,14 +37,14 @@
 
 VGA_INIT_SEG equ 0x1000
 
-	extern	mem_init, stage2_main, rm16
+	extern	mem_init, stage2_main, rm16, gdtr_load_time
 
 	global	_start
 _start:
 	cli
 	cld
 	mov	esp, starting_stack
-	lgdt	[gdtr]
+	lgdt	[gdtr_load_time]
 	lidt	[idtrrm]
 	jmp	SEL_CS32:.cont
 .cont:
@@ -59,14 +59,12 @@ _start:
 
 	section .rodata
 
-gdtr:	dw	gdt_end-gdt-1
-	dd	gdt
 idtrrm:	dw	0x100*4-1
 	dd	0
 
 	section	.data
 
-	global	gdt_desc_cs16
+	global	gdt, gdt_desc_cs16, GDT_SZ
 
 	align	8
 gdt	equ	$-8
@@ -89,7 +87,7 @@ gdt_desc_cs16:
 %endif
 	dq	0x008f92000000ffff	; 16-bit protected mode data seg.
 					; pointing to linear address zero
-gdt_end:
+GDT_SZ	equ	$-gdt
 
 	section	.bss
 

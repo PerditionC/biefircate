@@ -57,6 +57,17 @@ SECTIONS
 		. = ALIGN(0x10);
 	} :text
 
+	/*
+	 * The GDTR value is placed in the 16-bit portion --- it needs to be
+	 * accessible from 16-bit real mode code, so placing it there is
+	 * more convenient.  However, the 32-bit initialization code needs
+	 * to load the GDTR before the 16-bit code is copied to its run-time
+	 * location in base memory.  To get around this, calculate the load
+	 * address of the GDTR value before it is copied to base memory.
+	 */
+	PROVIDE(gdtr_load_time =
+		    DEFINED(gdtr) ? gdtr - _sdata16 + data16_load : 0);
+
 	.bss : {
 		*(.bss .bss.* .gnu.linkonce.b.*)
 		*(COMMON)

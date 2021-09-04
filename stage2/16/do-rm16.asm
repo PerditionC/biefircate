@@ -63,7 +63,6 @@ rm16_call.save_old_stack:
 	xor	si, si
 	mov	fs, si
 	mov	gs, si
-	sgdt	[gdtr]			; save our GDTR
 	mov	esi, cr4		; turn off cr4.PAE in case some 3rd-
 	and	si, byte ~CR4_PAE	; -party code wants to set up its
 	mov	cr4, esi		; own page tables at some point...
@@ -111,10 +110,12 @@ hello16:
 
 	section	.rodata
 
+	extern	gdt, GDT_SZ
+
+	global	gdtr
+gdtr:	dw	GDT_SZ-1
+	dd	gdt
+
 msg:	db	".:. biefircate ", VERSION, " .:. "
 	db	"hello world from int 0x10", 13, 10
 .end:
-
-	section	.bss
-
-gdtr:	resb	6
