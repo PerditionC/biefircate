@@ -48,8 +48,6 @@ LDFLAGS += $(CFLAGS) -nostdlib -ffreestanding -Wl,--entry,efi_main \
 	   -Wl,--subsystem,10 -Wl,--strip-all -Wl,-Map=$(@:.efi=.map) \
 	   $(LDEXTRAFLAGS)
 LIBEFI = gnu-efi/x86_64/lib/libefi.a
-SEABIOSIFY16LIBS = seabiosify/out/libseabiosify16.a \
-		   seabiosify/out/libseabiosifyromlayout.a
 LDLIBS := $(LIBEFI) $(LDLIBS)
 
 CFLAGS2 += -mregparm=3 -mrtd -mpreferred-stack-boundary=2 -fno-pic \
@@ -70,7 +68,9 @@ CPPFLAGS3 = $(CPPFLAGS2)
 LDFLAGS3 = $(LDFLAGS2_ORIG) $(CFLAGS3) -static -nostdlib -ffreestanding \
     -Wl,--strip-debug -Wl,-Map=$(basename $@).map -Wl,--build-id=none \
     $(LDEXTRAFLAGS3)
-LDLIBS3 = $(LDLIBS2)
+SEABIOSIFY16LIBS = seabiosify/out/libseabiosify16.a \
+		   seabiosify/out/libseabiosifyromlayout.a
+LDLIBS3 = $(SEABIOSIFY16LIBS) $(SEABIOSIFY16LIBS) $(LDLIBS2)
 
 QEMUFLAGS = -m 224m -serial stdio $(QEMUEXTRAFLAGS)
 QEMUFLAGSXV6 = -hdb xv6/fs.img $(QEMUFLAGS)
@@ -122,7 +122,8 @@ stage2/text16.bin: stage2/16.elf
 stage2/16.elf: stage2/16/head.o stage2/16/do-rm16-call.o \
     stage2/16/int-0x15.o stage2/16/sbios-override.o stage2/16/time.o \
     stage2/16/vecs16.o $(SEABIOSIFY16LIBS) stage2/16/16.ld
-	$(CC3) $(LDFLAGS3) -o $@ $(^:%.ld=-T %.ld) $(LDLIBS3)
+	$(CC3) $(LDFLAGS3) -o $@ \
+	    $(patsubst %.ld,-T %.ld,$(filter-out %.a,$^)) $(LDLIBS3)
 
 stage2/16/%.o: stage2/16/%.c
 	mkdir -p $(@D)
@@ -176,6 +177,7 @@ ifeq "$(conf_Separate_build_dir)" "yes"
 	    cp $(SEABIOSSRCDIR)/* seabiosify/
 endif
 	(echo 'CONFIG_LIBRARIES=y' && \
+	 echo 'CONFIG_ENTRY_EXTRASTACK=n' && \
 	 echo 'CONFIG_THREADS=n' && \
 	 echo 'CONFIG_USB=n' && \
 	 echo 'CONFIG_SERCON=n' && \

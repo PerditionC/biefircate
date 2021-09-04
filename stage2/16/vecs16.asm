@@ -97,6 +97,43 @@ isr16_%1:
 	dw	isr16_%1
 %endmacro
 
+; Add a vector table entry for a software interrupt implemented in C in
+; SeaBIOS.
+%macro	ISR_IMPL_SBIOS 2
+	section	.text
+	extern	%2
+isr16_%1:
+	push	eax			; save registers as per `struct bregs'
+	push	ecx
+	push	edx
+	push	ebx
+	push	ebp
+	push	esi
+	push	edi
+	push	es
+	push	ds
+	mov	ax, ss			; set ds := ss, so C code can access
+	mov	ds, ax			; stack via ds
+	mov	eax, esp		; align esp to 4-byte boundary, clear
+	mov	ebx, esp		; its top 16 bits, save the old esp
+	and	esp, 0xffff&-4		; in ebx, & pass the old esp (for
+					; the isr16_regs_t) as a parm. in eax
+	call	dword %2		; call the C routine
+	mov	esp, ebx		; restore esp & retrieve other
+	pop	ds			; registers
+	pop	es
+	pop	edi
+	pop	esi
+	pop	ebp
+	pop	ebx
+	pop	edx
+	pop	ecx
+	pop	eax
+	iret				; return to caller (& pop flags)
+	section	.rodata
+	dw	isr16_%1
+%endmacro
+
 ; Add a vector table entry for an IRQ implemented in assembly.
 %macro	ISR_IRQ	2
 	section	.rodata
@@ -175,7 +212,7 @@ NUM_VECS16 equ	($-vecs16)/2
 	ISR_UNIMPL 0x13
 	ISR_UNIMPL 0x14
 	ISR_IMPL_C 0x15
-	ISR_UNIMPL 0x16
+	ISR_IMPL_SBIOS 0x16, handle_16
 	ISR_UNIMPL 0x17
 	ISR_UNIMPL 0x18
 	ISR_UNIMPL 0x19
