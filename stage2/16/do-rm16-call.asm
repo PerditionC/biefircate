@@ -51,12 +51,15 @@ rm16_call.rm_cs16 equ $-2
 rm16_call.cont2:
 	mov	si, [bda.ebda]		; really set up segments
 	mov	ds, si
-	mov	[sp32], esp		; store the protected-mode esp & cr3
-	mov	esp, cr3
-	mov	[ptpd32], esp
-	mov	ss, si
-	mov	esp, _stack16
 	mov	es, si
+	mov	esi, esp
+	cmp	esi, BMEM_MAX_ADDR	; if stack resides in base memory,
+	jna	rm16_call.exist_stack	; then use it --- (1)
+	push	ds			; otherwise switch to a base memory
+	pop	ss			; stack
+	mov	esp, _stack16
+rm16_call.save_old_stack:
+	push	esi			; save old esp
 	xor	si, si
 	mov	fs, si
 	mov	gs, si
@@ -66,20 +69,29 @@ rm16_call.cont2:
 	mov	cr4, esi		; own page tables at some point...
 	call	far word [fs:edi]	; call the callee
 	cli
-	xor	si, si			; restore the 32-bit stack & also
-	mov	ss, si			; restore our GDTR, esp, & cr3
-	mov	ds, [ss:bda.ebda]
-	mov	esp, [sp32]
-	mov	esi, [ptpd32]
-	mov	cr3, esi
+	pop	esp			; restore the 32-bit esp
+	xor	si, si
+	mov	ss, si
+	mov	ds, [ss:bda.ebda]	; restore our GDTR
 	lgdt	[gdtr]
-	mov	esi, cr4		; return to 32-bit protected mode
-	or	si, byte CR4_PAE	; with PAE paging
-	mov	cr4, esi
-	mov	esi, cr0
-	or	esi, CR0_PG|CR0_PE
-	mov	cr0, esi
+	mov	eax, cr0		; return to 32-bit protected mode;
+	or	al, CR0_PE		; eax := cr0
+	mov	cr0, eax
 	jmp	SEL_CS32:dword rm16_call.fin1
+
+rm16_call.exist_stack:			; (1) --- if stack resides in first
+	cmp	esi, 0x10000		; 64 KiB, just use ss := 0
+	jna	rm16_call.low_low_stack
+	shr	esp, 4			; otherwise, set ss to 64 KiB above
+	sub	sp, 0x1000		; the current esp, then set esp := 0
+	mov	ss, sp
+	xor	sp, sp
+	jmp	rm16_call.save_old_stack
+rm16_call.low_low_stack:
+	xor	sp, sp
+	mov	ss, sp
+	movzx	esp, si
+	jmp	rm16_call.save_old_stack
 
 	global	hello16
 hello16:
@@ -105,6 +117,4 @@ msg:	db	".:. biefircate ", VERSION, " .:. "
 
 	section	.bss
 
-sp32:	resd	1
-ptpd32:	resd	1
 gdtr:	resb	6

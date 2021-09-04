@@ -35,6 +35,7 @@
 
 	extern	mem_alloc, _stext16, _etext16, _sdata16, _end16, gdt_desc_cs16
 	extern	rm16_call.cont1, rm16_call.rm_cs16, vecs16, NUM_VECS16
+	extern	pdpt
 
 	global	rm16_init
 rm16_init:
@@ -88,6 +89,7 @@ rm16_init:
 	pop	esi
 	ret
 
+; Call a 16-bit real mode routine from 32-bit protected mode.
 	align	16
 	global	rm16_call, rm16_call.fin1
 rm16_call:
@@ -100,14 +102,21 @@ rm16_call:
 	lea	edi, [esp+5*4+4+4]
 	cli
 	jmp	SEL_CS16:rm16_call.cont1
-.fin1:	mov	si, SEL_DS32
-	mov	ds, si
-	mov	es, si
-	mov	ss, si
+.fin1:	mov	si, SEL_DS32		; we are now back in protected
+	mov	ds, si			; mode, but paging is not yet
+	mov	es, si			; enabled; set up segment registers
+	mov	ss, si			; first
 	mov	fs, si
 	mov	gs, si
-	popfd
-	pop	ebp
+	mov	esi, cr4		; enable PAE
+	or	esi, byte CR4_PAE
+	mov	cr4, esi
+	mov	esi, [pdpt]		; load cr3 with the PDPT address
+	mov	cr3, esi
+	or	eax, CR0_PG		; re-enable paging (eax already holds
+	mov	cr0, eax		; cr0 value)
+	popfd				; pop call-saved registers & return
+	pop	ebp			; to caller
 	pop	edi
 	pop	esi
 	pop	ebx

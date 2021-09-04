@@ -41,4 +41,7 @@ CR4_PAE	equ	(1 <<  5)
 MSR_EFER equ	0xc0000080
 EFER_LME equ	(1 <<  8)
 
+; End of base memory.
+BMEM_MAX_ADDR equ 0x100000
+
 %endif
