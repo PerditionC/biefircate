@@ -45,7 +45,8 @@ SECTIONS
 
 	HIDDEN(KIBYTE = 1024);
 
-	.text 0 : AT(ALIGN(. + 1, CONSTANT(COMMONPAGESIZE))) {
+	.text 0 : AT(ALIGN(SIZEOF(.data) + SIZEOF(.bss) + 1,
+	    CONSTANT(COMMONPAGESIZE))) {
 		_stext16 = .;
 
 		*(.text .stub .text.* .data16 .data16.* .gnu.linkonce.t.*)
@@ -70,7 +71,7 @@ SECTIONS
 		_edata16 = .;
 	}
 
-	.bss : {
+	.bss ADDR(.data) + SIZEOF(.data) : {
 		*(.bss .bss.* .gnu.linkonce.b.*)
 		*(COMMON)
 
