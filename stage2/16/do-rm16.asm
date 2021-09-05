@@ -41,6 +41,7 @@ rm16_call.cont1:			; on entry eax, ebx, ecx, edx give
 	mov	si, SEL_DS16_ZERO	; prime segment descriptor caches
 	mov	ds, si			; with 16-bit properties
 	mov	es, si
+	mov	ss, si
 	mov	fs, si
 	mov	gs, si
 	mov	esi, cr0		; switch to real mode without paging
