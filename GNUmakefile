@@ -138,8 +138,8 @@ stage2/text16.bin: stage2/16.elf
 	objcopy -I elf32-i386 --dump-section .text=$@ $< /dev/null
 
 OBJS2_16 = stage2/16/head.o stage2/16/do-rm16.o stage2/16/int-0x15.o \
-    stage2/16/sbios-override.o stage2/16/time.o stage2/16/vecs16.o \
-    $(SEABIOSIFY16LIBS)
+    stage2/16/run16.o stage2/16/sbios-override.o stage2/16/time.o \
+    stage2/16/vecs16.o $(SEABIOSIFY16LIBS)
 
 stage2/16.pass1.elf: stage2/16/16.ld $(OBJS2_16) $(SEABIOSIFY16LIBS)
 	$(CC3) $(LDFLAGS3) -o $@ -Wl,--unresolved-symbols=ignore-all \

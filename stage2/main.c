@@ -67,6 +67,12 @@ static void hello(void)
 	rm16_call(0, 0, 0, 0, MK_FP16(rm16_cs, (uint16_t)(uintptr_t)hello16));
 }
 
+static void run(void)
+{
+	extern void run16(void);
+	rm16_call(0, 0, 0, 0, MK_FP16(rm16_cs, (uint16_t)(uintptr_t)run16));
+}
+
 void stage2_main(bparm_t *bparms, void *rm16_load, size_t rm16_sz)
 {
 	mem_init(bparms);
@@ -75,5 +81,6 @@ void stage2_main(bparm_t *bparms, void *rm16_load, size_t rm16_sz)
 	rimg_init(bparms, true);
 	hello();
 	rimg_init(bparms, false);
+	run();
 	hlt();
 }

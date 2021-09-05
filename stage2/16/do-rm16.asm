@@ -56,8 +56,8 @@ rm16_call.cont2:
 	mov	esi, esp
 	cmp	esi, BMEM_MAX_ADDR	; if stack resides in base memory,
 	jna	rm16_call.exist_stack	; then use it --- (1)
-	push	ds			; otherwise switch to a base memory
-	pop	ss			; stack
+	mov	sp, ds			; otherwise switch to a base memory
+	mov	ss, sp			; stack
 	mov	esp, _stack16
 rm16_call.save_old_stack:
 	push	esi			; save old esp
@@ -95,8 +95,6 @@ rm16_call.low_low_stack:
 
 	global	hello16
 hello16:
-	xor	eax, eax
-	call	dword ps2_keyboard_setup
 	mov	ax, 0x0003
 	int	0x10
 	mov	ah, 0x03
@@ -107,6 +105,8 @@ hello16:
 	mov	cx, msg.end-msg
 	mov	bp, msg
 	int	0x10
+	xor	eax, eax
+	call	dword ps2_keyboard_setup
 	retf
 
 	section	.rodata
