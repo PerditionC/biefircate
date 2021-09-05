@@ -31,6 +31,12 @@
 
 #include <inttypes.h>
 
+/* Call a 32-bit protected mode routine from 16-bit real mode.  FIXME. */
+uint32_t __call32(void *func, uint32_t eax, uint32_t err_ret)
+{
+	return err_ret;
+}
+
 /* Enable IRQs for a short while. */
 void check_irqs(void)
 {
