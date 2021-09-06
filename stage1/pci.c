@@ -107,7 +107,7 @@ const rimg_pcir_t *rimg_find_pcir(const void *rimg, uint64_t rom_sz)
 	if (pcir_off > rimg_sz - PCIR_MIN_SZ || pcir_sz > rimg_sz - pcir_off)
 		return NULL;
 	if (compute_cksum(rimg, rimg_sz) != 0)
-		return NULL;
+		warn("ROM image has bad checksum; using anyway");
 	return pcir;
 }
 
