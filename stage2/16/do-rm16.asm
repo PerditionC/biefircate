@@ -31,7 +31,7 @@
 
 	bits	16
 
-	extern	_stack16, rm16_call.fin1, ps2_keyboard_setup
+	extern	StackPos, rm16_call.fin1, ps2_keyboard_setup, zonelow_seg_var
 
 	global	rm16_call.cont1, rm16_call.rm_cs16
 rm16_call.cont1:			; on entry eax, ebx, ecx, edx give
@@ -50,7 +50,7 @@ rm16_call.cont1:			; on entry eax, ebx, ecx, edx give
 	jmp	0:rm16_call.cont2
 rm16_call.rm_cs16 equ $-2
 rm16_call.cont2:
-	mov	si, [bda.ebda]		; really set up segments
+	mov	si, [cs:zonelow_seg_var] ; really set up segments
 	mov	ds, si
 	mov	es, si
 	mov	esi, esp
@@ -58,7 +58,7 @@ rm16_call.cont2:
 	jna	rm16_call.exist_stack	; then use it --- (1)
 	mov	sp, ds			; otherwise switch to a base memory
 	mov	ss, sp			; stack
-	mov	esp, _stack16
+	mov	esp, [StackPos]
 rm16_call.save_old_stack:
 	push	esi			; save old esp
 	xor	si, si
@@ -70,9 +70,7 @@ rm16_call.save_old_stack:
 	call	far word [fs:edi]	; call the callee
 	cli
 	pop	esp			; restore the 32-bit esp
-	xor	si, si
-	mov	ss, si
-	mov	ds, [ss:bda.ebda]	; restore our GDTR
+	mov	ds, [cs:zonelow_seg_var] ; restore our GDTR
 	lgdt	[gdtr]
 	mov	eax, cr0		; return to 32-bit protected mode;
 	or	al, CR0_PE		; eax := cr0
@@ -105,8 +103,6 @@ hello16:
 	mov	cx, msg.end-msg
 	mov	bp, msg
 	int	0x10
-	xor	eax, eax
-	call	dword ps2_keyboard_setup
 	retf
 
 	section	.rodata

@@ -31,6 +31,8 @@
 
 	bits	16
 
+	extern	zonelow_seg_var, StackPos
+
 ; Begin the table of vectors.
 %macro	ISR_START 0
 	section	.rodata
@@ -74,7 +76,7 @@ isr16_%1:
 	mov	ds, ax			; stack via ds
 	xor	ax, ax			; set gs := 0, fs := our data segment
 	mov	gs, ax
-	mov	fs, word [gs:bda.ebda]
+	mov	fs, word [cs:zonelow_seg_var]
 	mov	eax, esp		; align esp to 4-byte boundary, clear
 	mov	ebx, esp		; its top 16 bits, save the old esp
 	and	esp, 0xffff&-4		; in ebx, & pass the old esp (for
@@ -156,7 +158,7 @@ irq%2:
 	mov	ds, ax			; stack via ds
 	xor	ax, ax			; set gs := 0, fs := our data segment
 	mov	gs, ax
-	mov	fs, word [gs:bda.ebda]
+	mov	fs, word [cs:zonelow_seg_var]
 	mov	eax, esp		; align esp to 4-byte boundary, clear
 	and	esp, 0xffff&-4		; its top 16 bits, & save old esp
 	push	eax
@@ -247,16 +249,14 @@ isr16_0x12:
 isr16_unimpl:
 	pop	bx
 	xchg	dx, ax			; save our incoming ax
-	xor	ax, ax
-	mov	ds, ax
-	dec	ax			; mask all IRQs --- frob the PICs
+	mov	al, ~0			; mask all IRQs --- frob the PICs
 	out	PIC1_DATA, al		; so that even if `int 0x10' uses
 	out	PIC2_DATA, al		; `sti', no IRQs will trigger
-	mov	ax, [bda.ebda]		; switch to our stack
+	mov	ax, [cs:zonelow_seg_var] ; switch to our stack
 	mov	ds, ax
 	mov	es, ax
 	mov	ss, ax
-	mov	sp, _stack16
+	mov	esp, [StackPos]
 	mov	al, [cs:bx]		; plug in the interrupt vector no.
 	call	u8_to_hex
 	mov	[msg_unimpl.num], ax

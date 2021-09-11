@@ -27,9 +27,15 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-/* Code to override certain SeaBIOS routines with our custom code. */
+/* Code to override certain 16-bit SeaBIOS routines with our custom code. */
 
 #include <inttypes.h>
+
+/* Return the offset of the "f-segment" from GLOBAL_SEGREG. */
+uint32_t __attribute__((const)) get_global_offset(void)
+{
+	return 0;
+}
 
 /* Call a 32-bit protected mode routine from 16-bit real mode.  FIXME. */
 uint32_t __call32(void *func, uint32_t eax, uint32_t err_ret)

@@ -54,6 +54,11 @@ extern void rm16_init(void);
 extern void rm16_call(uint32_t eax, uint32_t edx, uint32_t ecx, uint32_t ebx,
 		      farptr16_t callee);
 
+/* SeaBIOSify functions. */
+
+extern void extra_stack_init(void);
+extern void ps2_keyboard_setup(void *);
+
 /* Macros, inline functions, & other definitions. */
 
 #define XM32_MAX_ADDR	0x100000000ULL	/* end of 32-bit extended memory,

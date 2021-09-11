@@ -33,6 +33,14 @@
 #include <string.h>
 #include "stage2/stage2.h"
 
+int ScreenAndDebug = 0;
+
+static void sbios_init(void)
+{
+	extra_stack_init();
+	ps2_keyboard_setup(NULL);
+}
+
 static void rimg_init(bparm_t *bparms, bool init_vga)
 {
 	bparm_t *bp;
@@ -78,6 +86,7 @@ void stage2_main(bparm_t *bparms, void *rm16_load, size_t rm16_sz)
 	mem_init(bparms);
 	rm16_init();
 	irq_init(bparms);
+	sbios_init();
 	rimg_init(bparms, true);
 	hello();
 	rimg_init(bparms, false);

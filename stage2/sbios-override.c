@@ -27,55 +27,13 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-/* GNU ld compatible linker script for stage 2. */
+/* Code to override certain 32-bit SeaBIOS routines with our custom code. */
 
-OUTPUT_FORMAT("elf32-i386", "elf32-i386", "elf32-i386")
-OUTPUT_ARCH(i386)
-ENTRY(_start)
+#include <inttypes.h>
+#include "stage2/stage2.h"
 
-PHDRS
+/* Return the offset of the "f-segment" from GLOBAL_SEGREG. */
+uint32_t __attribute__((const)) get_global_offset(void)
 {
-	text PT_LOAD FILEHDR PHDRS;
-}
-
-SECTIONS
-{
-	. = 0x301000 + SIZEOF_HEADERS;
-
-	.text : {
-		*(.text .stub .text.* .gnu.linkonce.t.*)
-		*(.gnu.warning)
-		PROVIDE(_etext = .);
-
-		. = ALIGN(0x10);
-		*(.rodata .rodata.* .gnu.linkonce.r.*)
-
-		. = ALIGN(0x10);
-		*(.data .data.* .gnu.linkonce.d.*)
-		PROVIDE(_edata = .);
-
-		. = ALIGN(0x10);
-	} :text
-
-	/*
-	 * The GDTR value is placed in the 16-bit portion --- it needs to be
-	 * accessible from 16-bit real mode code, so placing it there is
-	 * more convenient.  However, the 32-bit initialization code needs
-	 * to load the GDTR before the 16-bit code is copied to its run-time
-	 * location in base memory.  To get around this, calculate the load
-	 * address of the GDTR value before it is copied to base memory.
-	 */
-	PROVIDE(gdtr_load_time =
-		    DEFINED(gdtr) ? gdtr - _sdata16 + data16_load : 0);
-
-	.bss : {
-		*(.bss .bss.* .gnu.linkonce.b.*)
-		*(COMMON)
-		PROVIDE(_end = .);
-	} :text
-
-	/DISCARD/ : {
-		*(.note.GNU-stack .gnu_* .gnu.* .stab* .debug_* .eh_frame
-		  .discard.* .comment)
-	}
+	return (uint32_t)rm16_cs * PARA_SIZE;
 }

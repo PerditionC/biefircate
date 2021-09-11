@@ -51,25 +51,32 @@ LIBEFI = gnu-efi/x86_64/lib/libefi.a
 LDLIBS := $(LIBEFI) $(LDLIBS)
 
 CFLAGS2 += -mregparm=3 -mrtd -mpreferred-stack-boundary=2 -fno-pic \
-	   -ffreestanding -fbuiltin -O2 -Wall -fno-stack-protector -MMD
+	   -ffreestanding -flto -fbuiltin -O2 -Wall -fno-stack-protector -MMD \
+	   -frandom-seed='$(conf_Pkg_name)'
 AS2 = nasm
 ASFLAGS2 = -f elf32 -MD $(@:.o=.d)
 CPPFLAGS2 += -I $(LAISRCDIR)/include -I $(conf_Srcdir) $(COMMON_CPPFLAGS)
 LDFLAGS2_ORIG := $(LDFLAGS2)
 LDFLAGS2 += $(CFLAGS2) -static -nostdlib -ffreestanding \
     -Wl,-Map=$(basename $@).map -Wl,--build-id=none $(LDEXTRAFLAGS2)
+SEABIOSIFY32LIBS = seabiosify/out/libseabiosify32flat.a
+LDLIBS2_ORIG := $(LDLIBS2)
+LDLIBS2 += $(SEABIOSIFY32LIBS)
+OBJCOPY2 = objcopy -I elf32-i386
 
 CC3 = $(patsubst -m32,-m16,$(CC2))
-CFLAGS3 = -m16 -flto $(patsubst -m32,-m16,$(CFLAGS2))
+CFLAGS3 = -m16 $(patsubst -m32,-m16,$(CFLAGS2))
 AS3 = $(AS2)
 ASFLAGS3 = $(ASFLAGS2)
 CPPFLAGS3 = $(CPPFLAGS2)
+LOWVARS = ExtraStack Ps2ctr ShiftTSC StackPos TimerKHz TimerLast TimerPort
 LDFLAGS3 = $(LDFLAGS2_ORIG) $(CFLAGS3) -static -nostdlib -ffreestanding \
     -Wl,--strip-debug -Wl,-Map=$(basename $@).map -Wl,--build-id=none \
-    $(LDEXTRAFLAGS3)
+    $(LOWVARS:%=-u %) $(LDEXTRAFLAGS3)
 SEABIOSIFY16LIBS = seabiosify/out/libseabiosify16.a \
 		   seabiosify/out/libseabiosifyromlayout.a
-LDLIBS3 = $(SEABIOSIFY16LIBS) $(SEABIOSIFY16LIBS) $(LDLIBS2)
+LDLIBS3 = $(SEABIOSIFY16LIBS) $(SEABIOSIFY16LIBS) $(LDLIBS2_ORIG)
+OBJCOPY3 = $(OBJCOPY2)
 
 QEMUFLAGS = -m 224m -serial stdio $(QEMUEXTRAFLAGS)
 QEMUFLAGSXV6 = -hdb xv6/fs.img $(QEMUFLAGS)
@@ -126,19 +133,19 @@ stage2/16/do-rm16.o : CPPFLAGS3 += -DVERSION='"$(conf_Pkg_ver)"'
 # move around between passes.  -- tkchia 20210904
 
 stage2/data16.pass1.bin: stage2/16.pass1.elf
-	objcopy -I elf32-i386 --dump-section .data=$@ $< /dev/null
+	$(OBJCOPY3) --dump-section .data=$@ $< /dev/null
 
 stage2/text16.pass1.bin: stage2/16.pass1.elf
-	objcopy -I elf32-i386 --dump-section .text=$@ $< /dev/null
+	$(OBJCOPY3) --dump-section .text=$@ $< /dev/null
 
 stage2/data16.bin: stage2/16.elf
-	objcopy -I elf32-i386 --dump-section .data=$@ $< /dev/null
+	$(OBJCOPY3) --dump-section .data=$@ $< /dev/null
 
 stage2/text16.bin: stage2/16.elf
-	objcopy -I elf32-i386 --dump-section .text=$@ $< /dev/null
+	$(OBJCOPY3) --dump-section .text=$@ $< /dev/null
 
-OBJS2_16 = stage2/16/head.o stage2/16/do-rm16.o stage2/16/int-0x15.o \
-    stage2/16/run16.o stage2/16/sbios-override.o stage2/16/time.o \
+OBJS2_16 = stage2/16/do-rm16.o stage2/16/int-0x15.o \
+    stage2/16/run16.o stage2/16/sbios-override16.o stage2/16/time.o \
     stage2/16/vecs16.o $(SEABIOSIFY16LIBS)
 
 stage2/16.pass1.elf: stage2/16/16.ld $(OBJS2_16) $(SEABIOSIFY16LIBS)
@@ -158,15 +165,19 @@ stage2/16/%.o: stage2/16/%.asm
 	$(AS3) $(ASFLAGS3) $(CPPFLAGS3) -o $@ $<
 
 OBJS2_32_COMMON = stage2/start.o stage2/clib.o stage2/irq.o stage2/main.o \
-    stage2/mem.o
+    stage2/mem.o stage2/sbios-override.o
 OBJS2_32_PASS1 = $(OBJS2_32_COMMON) stage2/rm16.pass1.o
 OBJS2_32 = $(OBJS2_32_COMMON) stage2/rm16.o
 
-$(STAGE2_PASS1): stage2/stage2.ld $(OBJS2_32_PASS1)
-	$(CC2) $(LDFLAGS2) -o $@ -T $< $(OBJS2_32_PASS1) \
-	    -Wl,--unresolved-symbols=ignore-all $(LDLIBS2)
+$(STAGE2_PASS1): stage2/stage2.ld $(OBJS2_32_PASS1) $(SEABIOSIFY32LIBS)
+	$(CC2) $(LDFLAGS2) -o $@.tmp -T $< $(OBJS2_32_PASS1) \
+	    -Wl,--unresolved-symbols=ignore-all \
+	    $(LOWVARS:%=-Wl,--defsym=%=0xbeef) $(LDLIBS2)
+	$(OBJCOPY2) $(LOWVARS:%=--localize-symbol=%) $@.tmp $@
+	$(RM) $@.tmp
 
-$(STAGE2): stage2/stage2.ld $(OBJS2_32) stage2/16.pass1.elf
+$(STAGE2): stage2/stage2.ld $(OBJS2_32) stage2/16.pass1.elf \
+    $(SEABIOSIFY32LIBS)
 	$(CC2) $(LDFLAGS2) -Wl,--strip-all -o $@ -T $< $(OBJS2_32) \
 	    -Wl,--just-symbols=stage2/16.pass1.elf $(LDLIBS2)
 
@@ -203,7 +214,7 @@ $(LIBEFI):
 	    -f '$(abspath $(conf_Srcdir))'/gnu-efi/Makefile \
 	    lib inc
 
-$(SEABIOSIFY16LIBS): seabiosify.stamp
+$(SEABIOSIFY16LIBS) $(SEABIOSIFY32LIBS): seabiosify.stamp
 
 seabiosify.stamp: seabiosify/Makefile
 ifeq "$(conf_Separate_build_dir)" "yes"
@@ -218,7 +229,10 @@ endif
 	 echo 'CONFIG_USB=n' && \
 	 echo 'CONFIG_SERCON=n' && \
 	 echo 'CONFIG_TCGBIOS=n' && \
-	 echo 'CONFIG_DEBUG_LEVEL=0') >seabiosify/.config
+	 echo 'CONFIG_DEBUG_LEVEL=0' && \
+	 echo 'CONFIG_MALLOC_BOOTTIME_MOVABLE=y' && \
+	 echo 'CONFIG_VARLOW_IN_LIB16=y' && \
+	 echo 'CONFIG_VARFSEG_IN_LIB16=y') >seabiosify/.config
 	$(MAKE) -C seabiosify olddefconfig
 	$(MAKE) -C seabiosify out/autoconf.h
 	$(MAKE) -C seabiosify CC="$(CC2) -DSEG_LOW='get_ebda_seg()' \

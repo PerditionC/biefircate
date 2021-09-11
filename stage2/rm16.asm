@@ -34,8 +34,8 @@
 	section	.text
 
 	extern	mem_alloc, _stext16, _etext16, _sdata16, _end16, gdt_desc_cs16
-	extern	rm16_call.cont1, rm16_call.rm_cs16, vecs16, NUM_VECS16
-	extern	pdpt
+	extern	rm16_call.cont1, rm16_call.rm_cs16, vecs16, NUM_VECS16, pdpt
+	extern	zonelow_seg_var
 
 	global	rm16_init
 rm16_init:
@@ -55,18 +55,20 @@ rm16_init:
 	mov	[rm16_cs], cx
 	mov	[eax+rm16_call.rm_cs16], cx
 	push	ecx			; (1) --- see below
+	push	eax			; (2) --- see below
 	mov	eax, _end16		; allocate base memory for the real-
 	mov	edx, KIBYTE		; -mode data
 	mov	ecx, BMEM_MAX_ADDR
 	call	mem_alloc
-	mov	edx, eax		; initialize the EBDA pointer
-	shr	edx, 4
-	mov	[bda.ebda], dx
+	pop	ecx			; (2)
+	mov	edx, eax		; initialize zonelow_seg_var to
+	shr	edx, 4			; point to our 16-bit data segment
+	mov	[ecx+zonelow_seg_var], dx
 	mov	esi, data16_load	; copy out the 16-bit initialized data
 	lea	edi, [eax+_sdata16]
 	mov	ecx, (data16_load.end-data16_load)/4
 	rep movsd
-	lea	esi, [eax+vecs16]	; (2) --- see below
+	lea	esi, [eax+vecs16]	; (3) --- see below
 	lea	ecx, [eax+_end16+3]	; blank out the uninitialized data
 	sub	ecx, edi
 	shr	ecx, 2
@@ -76,7 +78,7 @@ rm16_init:
 	mov	cl, NUM_VECS16		; before calling option ROMs
 	pop	eax			; (1) --- see above
 	shl	eax, 16
-.vecs:	lodsw				; (2) --- see above
+.vecs:	lodsw				; (3) --- see above
 	stosd
 	loop	.vecs
 	mov	ax, bda.def_kb_buf-bda	; initialize IRQ 1 keyboard buffer

@@ -36,14 +36,9 @@ ENTRY(_stext16)
 SECTIONS
 {
 	/*
-	 * Place read/write initialized data before read-only data, & place
-	 * data before text.  This arrangement more closely mimics the
-	 * memory layout that will arise at run time, with the EBDA coming
-	 * right above the first block of base memory, & the "BIOS" code
-	 * appearing only further up.
+	 * Place data before text.  This arrangement more closely mimics
+	 * the memory layout that will arise at run time.
 	 */
-
-	HIDDEN(KIBYTE = 1024);
 
 	.text 0 : AT(ALIGN(SIZEOF(.data) + SIZEOF(.bss) + 1,
 	    CONSTANT(COMMONPAGESIZE))) {
@@ -62,10 +57,10 @@ SECTIONS
 	.data 0 : {
 		_sdata16 = .;
 
-		*(.data .data.* .gnu.linkonce.d.*)
+		*(.rodata .rodata.* .gnu.linkonce.r.*)
 
 		. = ALIGN(0x10);
-		*(.rodata .rodata.* .gnu.linkonce.r.*)
+		*(.data .data.* .gnu.linkonce.d.*)
 
 		. = ALIGN(0x10);
 		_edata16 = .;
@@ -75,12 +70,11 @@ SECTIONS
 		*(.bss .bss.* .gnu.linkonce.b.*)
 		*(COMMON)
 
-		. = ALIGN(KIBYTE);
+		. = ALIGN(0x10);
 		_end16 = .;
 	}
 
-	. = .;
-	_END16_KIB = ABSOLUTE(. / KIBYTE);
+	PROVIDE(_zonelow_seg = 0);
 
 	/DISCARD/ : {
 		*(.note.GNU-stack .gnu_* .gnu.* .stab* .debug_* .eh_frame
