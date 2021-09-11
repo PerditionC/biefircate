@@ -44,4 +44,29 @@ EFER_LME equ	(1 <<  8)
 ; End of base memory.
 BMEM_MAX_ADDR equ 0x100000
 
+; Fabricate a 32-bit magic number from 4 characters.
+%define MAGIC32(a, b, c, d) \
+	(((a) & 0xff)	    | \
+	 ((b) & 0xff) <<  8 | \
+	 ((c) & 0xff) << 16 | \
+	 ((d) & 0xff) << 24)
+
+; Node type for linked list of boot parameters.  See bparm.h.
+	struc	bparm_t
+.next:	resd	1
+	resd	1
+.type:	resd	1
+.size:	resd	1
+.u:
+	endstruc
+
+; "BMEM" boot data.  See bparm.h.
+	struc	bdat_bmem_t
+.boottime_bmem_bot_seg: resw 1
+.runtime_bmem_top_seg: resw 1
+	endstruc
+
+; Types of boot parameters in our boot protocol.
+BP_BMEM equ	MAGIC32('B', 'M', 'E', 'M')
+
 %endif

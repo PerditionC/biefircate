@@ -29,14 +29,6 @@
 
 	section	.text
 
-%define MAGIC32(a, b, c, d) \
-	(((a) & 0xff)	    | \
-	 ((b) & 0xff) <<  8 | \
-	 ((c) & 0xff) << 16 | \
-	 ((d) & 0xff) << 24)
-
-VGA_INIT_SEG equ 0x1000
-
 	extern	mem_init, stage2_main, rm16, gdtr_load_time
 
 	global	_start

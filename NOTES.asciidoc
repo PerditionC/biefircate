@@ -48,7 +48,8 @@
   *** uses link-time optimization (LTO) (upstream SeaBIOS uses whole-program optimization)
   *** **note:** `biefircate` 's memory model is different from stock SeaBIOS's
   **** 32-bit code goes into extended memory (stock SeaBIOS: all code is in base memory)
-  **** accesses from 32-bit code to `VARFSEG`, `VARLOW` vars. must go through macros (stock SeaBIOS: no need)
+  **** `VARFSEG`, `VARLOW` memory locations are fixed only at boot time (SeaBIOS: fixed at compile time)
+  **** accesses from 32-bit code to `VARFSEG`, `VARLOW` vars. must go through macros (SeaBIOS: no need)
   ** calling convention for stage 2 is `-mregparm=3 -mrtd -mpreferred-stack-boundary=2`
   *** when calling non-variadic function: first few arguments go in `eax`, `edx`, `ecx`; callee pops any stack arguments
   *** `esp` is assumed to be 2² = 4 byte aligned

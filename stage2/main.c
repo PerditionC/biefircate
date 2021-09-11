@@ -33,8 +33,6 @@
 #include <string.h>
 #include "stage2/stage2.h"
 
-int ScreenAndDebug = 0;
-
 static void sbios_init(void)
 {
 	extra_stack_init();

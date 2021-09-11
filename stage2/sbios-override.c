@@ -32,6 +32,8 @@
 #include <inttypes.h>
 #include "stage2/stage2.h"
 
+int ScreenAndDebug = 0;
+
 /* Return the offset of the "f-segment" from GLOBAL_SEGREG. */
 uint32_t __attribute__((const)) get_global_offset(void)
 {
