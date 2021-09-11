@@ -235,8 +235,7 @@ endif
 	 echo 'CONFIG_VARFSEG_IN_LIB16=y') >seabiosify/.config
 	$(MAKE) -C seabiosify olddefconfig
 	$(MAKE) -C seabiosify out/autoconf.h
-	$(MAKE) -C seabiosify CC="$(CC2) -DSEG_LOW='get_ebda_seg()' \
-					 -DZONELOW_BASE=0"
+	$(MAKE) -C seabiosify CC="$(CC2) -DZONELOW_BASE=0 -DGLOBAL_SEGREG=CS"
 	>$@
 
 xv6.stamp: xv6/Makefile
