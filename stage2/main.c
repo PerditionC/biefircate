@@ -37,6 +37,7 @@ static void sbios_init(void)
 {
 	extra_stack_init();
 	ps2_keyboard_setup(NULL);
+	usb_setup();
 }
 
 static void rimg_init(bparm_t *bparms, bool init_vga)

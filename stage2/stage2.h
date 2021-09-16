@@ -58,6 +58,7 @@ extern void rm16_call(uint32_t eax, uint32_t edx, uint32_t ecx, uint32_t ebx,
 
 extern void extra_stack_init(void);
 extern void ps2_keyboard_setup(void *);
+extern void usb_setup(void);
 
 /* Macros, inline functions, & other definitions. */
 

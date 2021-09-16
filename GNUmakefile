@@ -226,7 +226,16 @@ endif
 	(echo 'CONFIG_LIBRARIES=y' && \
 	 echo 'CONFIG_ENTRY_EXTRASTACK=n' && \
 	 echo 'CONFIG_THREADS=n' && \
-	 echo 'CONFIG_USB=n' && \
+	 echo 'CONFIG_USB=y' && \
+	 echo 'CONFIG_USB_UHCI=n' && \
+	 echo 'CONFIG_USB_OHCI=n' && \
+	 echo 'CONFIG_USB_EHCI=n' && \
+	 echo 'CONFIG_USB_XHCI=n' && \
+	 echo 'CONFIG_USB_MSC=n' && \
+	 echo 'CONFIG_USB_UAS=n' && \
+	 echo 'CONFIG_USB_HUB=n' && \
+	 echo 'CONFIG_USB_KEYBOARD=n' && \
+	 echo 'CONFIG_USB_MOUSE=n' && \
 	 echo 'CONFIG_SERCON=n' && \
 	 echo 'CONFIG_TCGBIOS=n' && \
 	 echo 'CONFIG_DEBUG_LEVEL=0' && \
