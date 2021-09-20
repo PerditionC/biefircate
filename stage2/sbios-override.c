@@ -39,3 +39,12 @@ uint32_t __attribute__((const)) get_global_offset(void)
 {
 	return (uint32_t)rm16_cs * PARA_SIZE;
 }
+
+/*
+ * Read an integer setting from a ROM configuration "file".  This just
+ * returns the supplied default integer value.
+ */
+uint64_t romfile_loadint(const char *name, uint64_t defval)
+{
+	return defval;
+}
