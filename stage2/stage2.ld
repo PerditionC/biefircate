@@ -76,6 +76,6 @@ SECTIONS
 
 	/DISCARD/ : {
 		*(.note.GNU-stack .gnu_* .gnu.* .stab* .debug_* .eh_frame
-		  .discard.* .comment)
+		  .discard.* .fixedaddr.* .comment)
 	}
 }
