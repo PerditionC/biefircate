@@ -239,7 +239,8 @@ endif
 	 echo 'CONFIG_SERCON=n' && \
 	 echo 'CONFIG_TCGBIOS=n' && \
 	 echo 'CONFIG_DEBUG_LEVEL=0' && \
-	 echo 'CONFIG_MALLOC_BOOTTIME_MOVABLE=y' && \
+	 echo 'CONFIG_MALLOC_LOW_BOOTTIME_MOVABLE=y' && \
+	 echo 'CONFIG_MALLOC_ROUTINES=n' && \
 	 echo 'CONFIG_VARLOW_IN_LIB16=y' && \
 	 echo 'CONFIG_VARFSEG_IN_LIB16=y') >seabiosify/.config
 	$(MAKE) -C seabiosify olddefconfig
