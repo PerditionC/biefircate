@@ -10,3 +10,4 @@ config.cache
 *.bin
 *.elf
 *~
+/stage2/seabiosify

@@ -48,23 +48,7 @@ LDFLAGS += $(CFLAGS) -nostdlib -ffreestanding -Wl,--entry,efi_main \
 LIBEFI = gnu-efi/x86_64/lib/libefi.a
 LDLIBS := $(LIBEFI) $(LDLIBS)
 
-CFLAGS2 += -mregparm=3 -mrtd -fno-jump-tables -fno-pic \
-	   -ffreestanding -fbuiltin -O2 -Wall -fno-stack-protector -MMD
 AS2 = nasm
-ASFLAGS2 = -f elf32 -MD $(@:.o=.d)
-CPPFLAGS2 += -I $(LAISRCDIR)/include -I $(conf_Srcdir) $(COMMON_CPPFLAGS)
-LDFLAGS2_ORIG := $(LDFLAGS2)
-LDFLAGS2 += $(CFLAGS2) -static -nostdlib -ffreestanding \
-    -Wl,--strip-all -Wl,-Map=$(basename $@).map -Wl,--build-id=none
-
-CC3 = $(patsubst -m32,-m16,$(CC2))
-CFLAGS3 = -m16 $(patsubst -m32,-m16,$(CFLAGS2))
-AS3 = $(AS2)
-ASFLAGS3 = $(ASFLAGS2)
-CPPFLAGS3 = $(CPPFLAGS2)
-LDFLAGS3 = $(LDFLAGS2_ORIG) $(CFLAGS3) -static -nostdlib -ffreestanding \
-    -Wl,--strip-debug -Wl,-Map=$(basename $@).map -Wl,--build-id=none
-LDLIBS3 = $(LDLIBS2)
 
 QEMUFLAGS = -m 224m -serial stdio $(QEMUEXTRAFLAGS)
 QEMUFLAGSXV6 = -hdb xv6/fs.img $(QEMUFLAGS)
@@ -105,46 +89,19 @@ romdumper.o: romdumper.c $(LIBEFI)
 	$(CC) $(CFLAGS) $(CPPFLAGS) -c -o $@ $<
 
 stage1/main.o romdumper.o : CPPFLAGS += -DVERSION='"$(conf_Pkg_ver)"'
-stage2/16/do-rm16-call.o : CPPFLAGS3 += -DVERSION='"$(conf_Pkg_ver)"'
 
-stage2/data16.bin: stage2/16.elf
-	objcopy -I elf32-i386 --dump-section .data=$@ $< /dev/null
+stage2.sys: stage2/seabiosify/out/rom.o
+	cp $< $@.tmp
+	mv $@.tmp $@
 
-stage2/text16.bin: stage2/16.elf
-	objcopy -I elf32-i386 --dump-section .text=$@ $< /dev/null
+stage2/seabiosify/out/rom.o : BUILD = $(dir $(@D))
 
-stage2/16.elf: stage2/16/head.o stage2/16/do-rm16-call.o stage2/16/kb.o \
-    stage2/16/time.o stage2/16/vecs16.o stage2/16/16.ld
-	$(CC3) $(LDFLAGS3) -o $@ $(^:%.ld=-T %.ld) $(LDLIBS3)
-
-stage2/16/%.o: stage2/16/%.c
-	mkdir -p $(@D)
-	$(CC3) $(CFLAGS3) $(CPPFLAGS3) -c -o $@ $<
-
-stage2/16/%.o: stage2/16/%.asm
-	mkdir -p $(@D)
-	$(AS3) $(ASFLAGS3) $(CPPFLAGS3) -o $@ $<
-
-$(STAGE2): stage2/start.o stage2/clib.o stage2/irq.o stage2/main.o \
-    stage2/mem.o stage2/rm16.o stage2/stage2.ld stage2/16.elf
-	$(CC2) $(LDFLAGS2) -o $@ \
-	    $(filter-out %.ld %.elf, $^) \
-	    $(patsubst %.ld,-T %.ld,$(filter %.ld,$^)) \
-	    $(patsubst %.elf,-Xlinker --just-symbols=%.elf,$(filter %.elf,$^))\
-	    $(LDLIBS2)
-
-stage2/%.o: stage2/%.c
-	mkdir -p $(@D)
-	$(CC2) $(CFLAGS2) $(CPPFLAGS2) -c -o $@ $<
-
-# For debugging.
-stage2/%.s: stage2/%.c
-	mkdir -p $(@D)
-	$(CC2) $(CFLAGS2) $(CPPFLAGS2) -S -dA -o $@ $<
-
-stage2/%.o: stage2/%.asm stage2/data16.bin stage2/text16.bin
-	mkdir -p $(@D)
-	$(AS2) $(ASFLAGS2) $(CPPFLAGS2) -o $@ $<
+stage2/seabiosify/out/rom.o: seabiosify dot.config.seabiosify
+	$(RM) -r $(BUILD)
+	cp -a $< $(BUILD)
+	cp $(filter-out $<,$^) $(BUILD)/.config
+	$(MAKE) -C $(BUILD) olddefconfig
+	$(MAKE) -C $(BUILD)
 
 # gnu-efi's Make.defaults has a bit of a bug in its setting of $(GCCVERSION)
 # & $(GCCMINOR): if $(CC) -dumpversion says something like `10-win32' it
